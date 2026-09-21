@@ -1,0 +1,278 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens — design-standard.md §3.
+   --------------------------------------------------------------------------- */
+@theme {
+  --color-canvas: #faf9f6;
+  --color-surface: #ffffff;
+  --color-navy-900: #17324d;
+  --color-navy-700: #425b70;
+  --color-teal-600: #5b9b98;
+  --color-teal-100: #e7f3f2;
+  --color-slate-600: #667789;
+  --color-line: #ebeae4;
+  --color-danger-700: #b75b55;
+  --color-danger-100: #fbeae8;
+  --color-focus: #0d6efd;
+  /* Extension: teal-600 is only ~3.3:1 on white, too low for small text.
+     Use teal-800 for teal *text* so it clears WCAG AA; teal-600 stays for fills. */
+  --color-teal-800: #2f6b68;
+  --color-desk: #ece9e1;
+
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+
+  --font-sans:
+    var(--font-dm-sans), "PingFang SC", "Microsoft YaHei", "Noto Sans SC",
+    system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(23 50 77 / 0.05), 0 4px 16px rgb(23 50 77 / 0.05);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-navy-900);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Keyboard focus must always be visible (design-standard §7). */
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* ---------------------------------------------------------------------------
+   Companion orb — three layered circles + soft halo.
+   Only transform and opacity animate. Static under reduced motion.
+   --------------------------------------------------------------------------- */
+.orb {
+  --orb-size: 176px;
+  position: relative;
+  width: var(--orb-size);
+  height: var(--orb-size);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.orb--sm {
+  --orb-size: 112px;
+}
+.orb > span {
+  position: absolute;
+  border-radius: 999px;
+}
+.orb-halo {
+  inset: -18%;
+  background: radial-gradient(circle, rgb(91 155 152 / 0.28), rgb(91 155 152 / 0) 68%);
+  opacity: 0.7;
+}
+.orb-ring {
+  inset: 6%;
+  border: 2px solid rgb(91 155 152 / 0.45);
+  opacity: 0;
+}
+.orb-layer--outer {
+  inset: 0;
+  background: rgb(91 155 152 / 0.2);
+}
+.orb-layer--mid {
+  inset: 14%;
+  background: rgb(91 155 152 / 0.4);
+}
+.orb-layer--core {
+  inset: 28%;
+  background: linear-gradient(160deg, #6fb0ad, #4a8683);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: 0 6px 20px rgb(74 134 131 / 0.35);
+}
+.orb-icon {
+  animation: fade-in 250ms ease-out both;
+}
+.orb-focus {
+  inset: -4%;
+  border: 3px dashed rgb(23 50 77 / 0.55);
+  opacity: 0.9;
+  border-radius: 28% !important;
+}
+
+/* Idle: slow breathing, 4.4s */
+.orb[data-state="idle"] .orb-layer--outer {
+  animation: orb-breathe 4.4s ease-in-out infinite;
+}
+.orb[data-state="idle"] .orb-layer--mid {
+  animation: orb-breathe 4.4s ease-in-out 0.4s infinite;
+}
+.orb[data-state="idle"] .orb-halo {
+  animation: orb-halo 4.4s ease-in-out infinite;
+}
+
+/* Listening: gentle expanding rings */
+.orb[data-state="listening"] .orb-ring--1 {
+  animation: orb-ring 4s ease-out infinite;
+}
+.orb[data-state="listening"] .orb-ring--2 {
+  animation: orb-ring 4s ease-out 2s infinite;
+}
+.orb[data-state="listening"] .orb-layer--outer {
+  animation: orb-breathe 4.8s ease-in-out infinite;
+}
+
+/* Speaking: alternating ring opacity */
+.orb[data-state="speaking"] .orb-ring--1 {
+  transform: scale(1.12);
+  animation: orb-alt 2.6s ease-in-out infinite;
+}
+.orb[data-state="speaking"] .orb-ring--2 {
+  transform: scale(1.3);
+  animation: orb-alt 2.6s ease-in-out 1.3s infinite;
+}
+
+/* Camera: focus frame + slow breathing */
+.orb[data-state="camera"] .orb-layer--outer {
+  animation: orb-breathe 4.8s ease-in-out infinite;
+}
+
+/* Matched: restrained glow */
+.orb[data-state="matched"] .orb-halo {
+  background: radial-gradient(circle, rgb(91 155 152 / 0.5), rgb(91 155 152 / 0) 70%);
+  animation: orb-halo 4.8s ease-in-out infinite;
+}
+
+/* Safety: stable, no alarm motion. Calmer, slightly desaturated. */
+.orb[data-state="safety"] .orb-layer--core {
+  background: linear-gradient(160deg, #7ea5a3, #5f8785);
+}
+.orb[data-state="safety"] .orb-halo {
+  opacity: 0.4;
+}
+
+@keyframes orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+@keyframes orb-halo {
+  0%,
+  100% {
+    transform: scale(0.96);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.85;
+  }
+}
+@keyframes orb-ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+}
+@keyframes orb-alt {
+  0%,
+  100% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Camera guidance — one slow scan line (decorative, not proof of recognition).
+   --------------------------------------------------------------------------- */
+.scan-line {
+  animation: scan 3.6s ease-in-out infinite alternate;
+}
+@keyframes scan {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(100cqh - 2px));
+  }
+}
+
+.fade-in {
+  animation: fade-in 250ms ease-out both;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Sheets (native <dialog>): keyboard + Escape + focus restore for free.
+   --------------------------------------------------------------------------- */
+dialog.sheet {
+  width: min(430px, 100%);
+  max-width: 100%;
+  margin: auto auto 0;
+  border: 0;
+  padding: 0;
+  background: var(--color-surface);
+  color: var(--color-navy-900);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: 0 -8px 40px rgb(23 50 77 / 0.2);
+}
+dialog.sheet::backdrop {
+  background: rgb(23 50 77 / 0.4);
+}
+@media (min-width: 768px) {
+  dialog.sheet {
+    margin: auto;
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* Reduced motion: static orb, static scan line, no entrance motion. */
+@media (prefers-reduced-motion: reduce) {
+  .orb *,
+  .scan-line,
+  .fade-in,
+  .orb-icon {
+    animation: none !important;
+    transition: none !important;
+  }
+  .orb[data-state="listening"] .orb-ring--1,
+  .orb[data-state="speaking"] .orb-ring--1 {
+    opacity: 0.35;
+    transform: scale(1.18);
+  }
+  .orb[data-state="listening"] .orb-ring--2,
+  .orb[data-state="speaking"] .orb-ring--2 {
+    opacity: 0.18;
+    transform: scale(1.4);
+  }
+  .scan-line {
+    transform: translateY(calc(50cqh - 1px));
+  }
+}

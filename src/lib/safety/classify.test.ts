@@ -1,0 +1,85 @@
+import { describe, expect, it } from "vitest";
+import { classifySafety } from "./classify";
+import { buildEscalation } from "./escalation";
+
+describe("safety classifier", () => {
+  it.each([
+    "I have severe chest pain",
+    "I am having trouble breathing",
+    "I can't breathe",
+    "I nearly fainted this morning",
+    "I think I took an overdose",
+    "my grandson swallowed poison",
+    "I had a severe allergic reaction",
+    "there is swelling in my face",
+    "I want to die",
+    "I feel suicidal",
+    "我胸痛",
+    "我呼吸困难",
+    "我想自杀",
+  ])("urgent-risk: %s", (text) => {
+    expect(classifySafety(text)).toEqual({ level: "urgent", reason: "urgent-risk" });
+  });
+
+  it.each([
+    "Should I stop taking it?",
+    "should I double the dose",
+    "I missed a dose, what now?",
+    "Can I take this with paracetamol?",
+    "Is this safe if I am pregnant?",
+    "Is this dangerous?",
+    "Can you diagnose me?",
+    "我漏服了一次怎么办",
+    "我可以停药吗",
+  ])("unsupported medical question: %s", (text) => {
+    expect(classifySafety(text).level).toBe("unsupported");
+  });
+
+  it("flags side-effect questions as adverse-effect", () => {
+    expect(classifySafety("What are the side effects?")).toEqual({
+      level: "unsupported",
+      reason: "adverse-effect-question",
+    });
+  });
+
+  it("urgent language always wins over an unsupported match", () => {
+    expect(classifySafety("I missed a dose and now I have chest pain").level).toBe("urgent");
+  });
+
+  it.each(["What is this for?", "When do I take it?", "Hello", "", "show me the label"])(
+    "ordinary message is not flagged: %j",
+    (text) => {
+      expect(classifySafety(text)).toEqual({ level: "none" });
+    },
+  );
+});
+
+describe("escalation view", () => {
+  it("normal uncertainty offers only labelled demo human actions (plus try-again after a label route)", () => {
+    const view = buildEscalation("record-mismatch", true);
+    expect(view.urgent).toBe(false);
+    expect(view.actions.map((a) => a.id)).toEqual([
+      "try-again",
+      "pharmacy-demo",
+      "trusted-helper-demo",
+      "clinic-demo",
+    ]);
+    // No action other than "try again" pretends to be implemented.
+    expect(view.actions.filter((a) => a.implemented).map((a) => a.id)).toEqual(["try-again"]);
+  });
+
+  it("does not offer 'Try another photo' before the label route was chosen or for non-label reasons", () => {
+    expect(buildEscalation("record-mismatch", false).actions.map((a) => a.id)).not.toContain("try-again");
+    expect(buildEscalation("unsupported-medical-question", true).actions.map((a) => a.id)).not.toContain(
+      "try-again",
+    );
+  });
+
+  it("urgent escalation is flagged, has no try-again, and no implemented (real) actions", () => {
+    const view = buildEscalation("urgent-risk", true);
+    expect(view.urgent).toBe(true);
+    expect(view.headingKey).toBe("urgentHeading");
+    expect(view.actions.some((a) => a.id === "try-again")).toBe(false);
+    expect(view.actions.every((a) => !a.implemented)).toBe(true);
+  });
+});
