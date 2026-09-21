@@ -1,5 +1,7 @@
 import type { CopyKey } from "@/lib/content/translations";
-import { matchLabelInput } from "@/lib/matching/match-record";
+import type { LabelAnalysis } from "@/lib/api/schemas";
+import { metforminRecord } from "@/lib/content/demo-record";
+import { candidateDisplayFor, candidateIdFor, matchLabelInput } from "@/lib/matching/match-record";
 import type { HelpActionId } from "@/lib/safety/escalation";
 import type {
   AuditEvent,
@@ -19,6 +21,7 @@ import { routeMessage } from "./intent";
 // (reference-equal), so callers/tests can detect a blocked transition.
 
 export type CameraMode = "preview" | "fallback";
+export type CameraIssue = "denied" | "unavailable";
 
 export type Session = {
   persona: Persona;
@@ -34,6 +37,8 @@ export type Session = {
   /** True once `Show medicine` was chosen inside the active call. */
   labelRouteSelected: boolean;
   cameraMode: CameraMode | null;
+  /** Why the live camera is not in use (drives the fallback wording). */
+  cameraIssue: CameraIssue | null;
   pendingLabel: LabelInput | null;
   candidate: CandidateDisplay | null;
   matchStatus: MatchStatus | null;
@@ -52,8 +57,11 @@ export type SessionEvent =
   | { type: "USER_MESSAGE"; text: string }
   | { type: "SELECT_ROUTE"; route: ContextualActionId }
   | { type: "CAMERA_CONSENT"; granted: boolean }
+  | { type: "CAMERA_FAILED"; issue: CameraIssue }
   | { type: "SUBMIT_LABEL"; input: LabelInput }
-  | { type: "RESOLVE_ANALYSIS" }
+  | { type: "RESOLVE_ANALYSIS" } // deterministic demo/typed inputs (local)
+  | { type: "ANALYSIS_RESULT"; analysis: LabelAnalysis } // image inputs (server-validated)
+  | { type: "ANALYSIS_FAILED" }
   | {
       type: "CONFIRM_MATCH";
       candidateId: string;
@@ -86,6 +94,7 @@ export function createInitialSession(): Session {
     contextualActions: [],
     labelRouteSelected: false,
     cameraMode: null,
+    cameraIssue: null,
     pendingLabel: null,
     candidate: null,
     matchStatus: null,
@@ -235,6 +244,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           contextualActions: [],
           labelRouteSelected: false,
           cameraMode: null,
+          cameraIssue: null,
           pendingLabel: null,
           candidate: null,
           matchStatus: null,
@@ -324,35 +334,127 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       // CAMERA_PERMISSION is only reachable via SELECT_ROUTE("show-medicine").
       if (s.state !== "camera-permission" || !s.labelRouteSelected) return s;
       if (event.granted) {
-        return withAudit({ ...s, state: "camera-guidance", cameraMode: "preview" }, ctx, {
-          eventType: "camera-consent-granted",
-          summary: "Camera step accepted (demo view — no camera activated)",
-          details: { cameraActivated: false },
-        });
+        return withAudit(
+          { ...s, state: "camera-guidance", cameraMode: "preview", cameraIssue: null },
+          ctx,
+          {
+            eventType: "camera-consent-granted",
+            summary: "Camera consent given (local preview only)",
+            details: { consent: true },
+          },
+        );
       }
       // Denial is never a dead end: typed/demo-label fallback opens.
-      return withAudit({ ...s, state: "camera-guidance", cameraMode: "fallback" }, ctx, {
+      return withAudit({ ...s, state: "camera-guidance", cameraMode: "fallback", cameraIssue: null }, ctx, {
         eventType: "camera-consent-declined",
         summary: "Camera declined; demo-label fallback offered",
         route: "local-fallback",
       });
     }
 
+    case "CAMERA_FAILED": {
+      // Only meaningful while a live preview was expected.
+      if (s.state !== "camera-guidance" || s.cameraMode !== "preview") return s;
+      return withAudit({ ...s, cameraMode: "fallback", cameraIssue: event.issue }, ctx, {
+        eventType: "service-fallback-used",
+        summary:
+          event.issue === "denied"
+            ? "Camera blocked by the browser; fallback options offered"
+            : "No camera available; fallback options offered",
+        actor: "system",
+        route: "local-fallback",
+        details: { issue: event.issue },
+      });
+    }
+
     case "SUBMIT_LABEL": {
       if (s.state !== "camera-guidance") return s;
-      return withAudit({ ...s, state: "analyzing", pendingLabel: event.input }, ctx, {
+      const input = event.input;
+      return withAudit({ ...s, state: "analyzing", pendingLabel: input }, ctx, {
         eventType: "label-submitted",
         summary: "Label submitted for checking",
-        route: event.input.mode === "demo" ? "deterministic-demo" : "typed-input",
+        route:
+          input.mode === "demo"
+            ? "deterministic-demo"
+            : input.mode === "typed"
+              ? "typed-input"
+              : "claude-vision",
+        // Never the typed text or image content — only the input mode/source.
         details: {
-          mode: event.input.mode,
-          asset: event.input.mode === "demo" ? event.input.demoAssetId : null,
+          mode: input.mode,
+          detail:
+            input.mode === "demo"
+              ? input.demoAssetId
+              : input.mode === "image"
+                ? input.source
+                : null,
         },
       });
     }
 
+    case "ANALYSIS_RESULT": {
+      if (s.state !== "analyzing" || s.pendingLabel?.mode !== "image") return s;
+      const a = event.analysis;
+      const routeAudit = { route: "claude-vision" as const, actor: "system" as const };
+
+      if (a.outcome === "candidate") {
+        // Trust nothing but the candidate id: display text comes from the LOCAL record.
+        if (a.candidate?.candidateId !== candidateIdFor(metforminRecord)) {
+          return reduceSession(s, { type: "ANALYSIS_FAILED" }, ctx);
+        }
+        const display = candidateDisplayFor(metforminRecord);
+        return withAudit(
+          { ...s, pendingLabel: null, state: "confirm-match", candidate: display, matchStatus: "possible" },
+          ctx,
+          {
+            eventType: "label-analysis-complete",
+            summary: "Label check complete: possible match found",
+            validationStatus: "passed",
+            details: { outcome: "candidate" },
+            ...routeAudit,
+          },
+          {
+            eventType: "candidate-presented",
+            summary: `Possible match presented: ${display.medicineName}`,
+            validationStatus: "passed",
+            ...routeAudit,
+          },
+        );
+      }
+
+      const outcome = a.outcome === "no-match" || a.outcome === "ambiguous" ? a.outcome : "unreadable";
+      const reason: SafetyReason =
+        outcome === "unreadable"
+          ? "unreadable-label"
+          : outcome === "ambiguous"
+            ? "multiple-candidates"
+            : "record-mismatch";
+      const analysed = withAudit({ ...s, pendingLabel: null }, ctx, {
+        eventType: "label-analysis-complete",
+        summary: `Label check complete: ${outcome}. Instructions blocked`,
+        validationStatus: "blocked",
+        details: { outcome, reasonCode: a.reasonCode ?? null },
+        ...routeAudit,
+      });
+      return enterSafety(analysed, ctx, reason, { candidate: null, matchStatus: outcome });
+    }
+
+    case "ANALYSIS_FAILED": {
+      // Service/network/validation failure: block instructions, offer fallbacks.
+      if (s.state !== "analyzing") return s;
+      const failed = withAudit({ ...s, pendingLabel: null }, ctx, {
+        eventType: "service-fallback-used",
+        summary: "Photo could not be read; local fallback options offered. Instructions blocked",
+        actor: "system",
+        route: "local-fallback",
+        validationStatus: "blocked",
+      });
+      return enterSafety(failed, ctx, "service-failure", { candidate: null, matchStatus: null });
+    }
+
     case "RESOLVE_ANALYSIS": {
-      if (s.state !== "analyzing" || !s.pendingLabel) return s;
+      // Images are resolved only by ANALYSIS_RESULT (server-validated), never locally.
+      if (s.state !== "analyzing" || !s.pendingLabel || s.pendingLabel.mode === "image") return s;
       const result = matchLabelInput(s.pendingLabel);
       const cleared: Partial<Session> = { pendingLabel: null };
 
@@ -459,6 +561,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         contextualActions: [],
         labelRouteSelected: false,
         cameraMode: null,
+        cameraIssue: null,
         candidate: null,
         matchStatus: null, // a new medicine must pass the confirmation gate again
         explainStep: 0,

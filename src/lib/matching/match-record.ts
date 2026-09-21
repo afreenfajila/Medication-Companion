@@ -1,6 +1,7 @@
 import { extractionForDemoAsset } from "@/lib/content/fixtures";
 import { metforminRecord, patient, recordSource } from "@/lib/content/demo-record";
 import type {
+  CandidateDisplay,
   ExtractedIdentity,
   LabelExtraction,
   LabelInput,
@@ -20,6 +21,19 @@ const THRESHOLD_POINTS = 80;
 
 export function candidateIdFor(record: MedicationRecord): string {
   return `cand_${record.id}`;
+}
+
+/** The only source of candidate display text: the local record, never model or server output. */
+export function candidateDisplayFor(record: MedicationRecord = metforminRecord): CandidateDisplay {
+  return {
+    candidateId: candidateIdFor(record),
+    status: "possible",
+    patientName: patient.displayName,
+    medicineName: record.identity.displayName,
+    strength: record.identity.strength,
+    dosageForm: record.identity.dosageForm,
+    recordSource: recordSource.displayLabel,
+  };
 }
 
 function isPresent(v: string | null | undefined): v is string {
@@ -118,21 +132,15 @@ export function matchLabel(
     candidateRecordId: record.id,
     matchedFields: matched,
     mismatchedFields: mismatched,
-    display: {
-      candidateId: candidateIdFor(record),
-      status: "possible",
-      patientName: patient.displayName,
-      medicineName: record.identity.displayName,
-      strength: record.identity.strength,
-      dosageForm: record.identity.dosageForm,
-      recordSource: recordSource.displayLabel,
-    },
+    display: candidateDisplayFor(record),
   };
 }
 
 /** Turns any label input mode into an extraction the matcher understands. */
 export function extractionFromInput(input: LabelInput): LabelExtraction {
   if (input.mode === "demo") return extractionForDemoAsset(input.demoAssetId);
+  // Images are read server-side (/api/label/analyze); there is no local extraction for them.
+  if (input.mode === "image") return { status: "unreadable", extracted: {} };
   return {
     status: "readable",
     extracted: {
