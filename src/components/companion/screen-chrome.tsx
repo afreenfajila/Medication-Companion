@@ -5,11 +5,12 @@ import { TrustBadge } from "@/components/ui/notices";
 export type T = (key: CopyKey) => string;
 
 /** App name + trust badge. Present on every primary-user state (design-standard §4). */
-export function ScreenHeader({ t }: { t: T }) {
+export function ScreenHeader({ t, control }: { t: T; control?: React.ReactNode }) {
   return (
     <header className="flex flex-col items-center gap-2 px-6 pb-2 pt-6 text-center">
       <p className="text-[17px] font-bold tracking-tight">{t("appName")}</p>
       <TrustBadge label={t("trustBadge")} />
+      {control}
     </header>
   );
 }

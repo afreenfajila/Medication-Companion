@@ -20,12 +20,62 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
+
+const analysisEnvelope = (data: unknown) => ({ ok: true, data, requestId: "req_test" });
+const candidate = {
+  outcome: "candidate",
+  userMessage: "I found a possible match. Please check the name on the label.",
+  nextState: "confirm-match",
+  candidate: {
+    candidateId: "cand_med_metformin_500_demo",
+    patientName: "Mei Ling Tan",
+    medicineName: "Metformin 500 mg",
+    strength: "500 mg",
+    dosageForm: "tablet",
+    sourceLabel: "BrightCare Pharmacy — demo record",
+    matchStatus: "possible",
+  },
+};
+
+/** fetch stub: sample PNGs load; /api/label/analyze answers with the given body/status. */
+function stubFetch(analyze: { status?: number; body: unknown } | "network-error") {
+  const fn = vi.fn(async (url: string, init?: unknown) => {
+    void init;
+    if (String(url).startsWith("/samples/")) {
+      return {
+        ok: true,
+        blob: async () => new Blob([new Uint8Array([137, 80, 78, 71, 1, 2])], { type: "image/png" }),
+      };
+    }
+    if (analyze === "network-error") throw new TypeError("network down");
+    return { ok: (analyze.status ?? 200) < 400, status: analyze.status ?? 200, json: async () => analyze.body };
+  });
+  vi.stubGlobal("fetch", fn);
+  return fn;
+}
+
+const flush = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(1000);
+  });
 
 const send = (text: string) => {
   fireEvent.change(screen.getByLabelText(/type your question/i), { target: { value: text } });
   fireEvent.submit(screen.getByLabelText(/type your question/i).closest("form")!);
 };
+
+/** Start a call and open the camera-guidance screen (no camera in jsdom → fallback). */
+function toGuidance(consent: "grant" | "decline" = "grant") {
+  fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+  send("What is this for?");
+  fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+  fireEvent.click(
+    screen.getByRole("button", { name: consent === "grant" ? /yes, switch camera/i : /not now/i }),
+  );
+}
 
 describe("landing (01-start-call)", () => {
   it("exposes exactly one prominent primary CTA: Call with companion", () => {
@@ -113,16 +163,14 @@ describe("in-call flow", () => {
     expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("blocks instructions for a non-matching label and offers demo-labelled human help", () => {
+  it("typed-label fallback: a mismatching strength blocks instructions and offers demo-labelled human help", async () => {
     render(<CompanionExperience />);
-    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
-    send("What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i })); // decline camera → fallback
-    fireEvent.click(screen.getByRole("button", { name: /different medicine — demo/i }));
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
+    toGuidance("decline");
+    fireEvent.click(screen.getByRole("button", { name: /type the label details/i }));
+    fireEvent.change(screen.getByLabelText(/medicine name/i), { target: { value: "Metformin" } });
+    fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "850 mg" } });
+    fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
+    await flush();
 
     expect(screen.getByText("I’m not sure enough to explain this safely.")).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
@@ -132,6 +180,148 @@ describe("in-call flow", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Check with pharmacy — demo" }));
     expect(screen.getByText(/no call or message was sent/i)).toBeInTheDocument();
+  });
+
+  it("typed-label fallback: validates required fields, then a correct label reaches a possible match", async () => {
+    render(<CompanionExperience />);
+    toGuidance("decline");
+    fireEvent.click(screen.getByRole("button", { name: /type the label details/i }));
+    fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/medicine name and strength/i);
+
+    fireEvent.change(screen.getByLabelText(/medicine name/i), { target: { value: "metformin" } });
+    fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500mg" } });
+    fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
+    await flush();
+    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
+  });
+
+  it("camera unavailable (jsdom) → explained fallback, and the demo label still completes the flow", async () => {
+    render(<CompanionExperience />);
+    toGuidance("grant");
+    expect(screen.getByText("I couldn’t find a camera.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /take photo of label/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    await flush();
+    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+  });
+
+  it("mock upload: a sample photo is POSTed to the real analyze route and shows a possible match", async () => {
+    const fetchFn = stubFetch({ body: analysisEnvelope(candidate) });
+    render(<CompanionExperience />);
+    toGuidance("decline");
+    fireEvent.click(screen.getByRole("button", { name: /upload a photo — demo/i }));
+    expect(screen.getByText(/not saved by default/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /clear label photo/i }));
+    await flush();
+
+    const call = fetchFn.mock.calls.find(([u]) => u === "/api/label/analyze");
+    expect(call).toBeDefined();
+    const init = call![1] as { method: string; body: FormData };
+    expect(init.method).toBe("POST");
+    expect(init.body.get("inputMode")).toBe("image");
+    expect(init.body.get("image")).toBeInstanceOf(Blob);
+    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
+    // Only the sample list + analyze route were fetched — no other network use.
+    expect(
+      fetchFn.mock.calls.every(([u]) => String(u).startsWith("/samples/") || u === "/api/label/analyze"),
+    ).toBe(true);
+  });
+
+  it("mock upload: an unreadable answer blocks instructions", async () => {
+    stubFetch({
+      body: analysisEnvelope({
+        outcome: "unreadable",
+        userMessage: "x",
+        nextState: "safety",
+        reasonCode: "low-confidence",
+      }),
+    });
+    render(<CompanionExperience />);
+    toGuidance("decline");
+    fireEvent.click(screen.getByRole("button", { name: /upload a photo — demo/i }));
+    fireEvent.click(screen.getByRole("button", { name: /blurry label photo/i }));
+    await flush();
+    expect(screen.getByText("I’m not sure enough to explain this safely.")).toBeInTheDocument();
+    expect(screen.getByText("I couldn’t read the label clearly.")).toBeInTheDocument();
+    expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
+  });
+
+  it.each([
+    [
+      "AI unavailable (503 envelope)",
+      {
+        status: 503,
+        body: {
+          ok: false,
+          error: { code: "ai_unavailable", message: "m", safeNextAction: "type_label" },
+          requestId: "r",
+        },
+      },
+    ],
+    ["network error", "network-error"],
+    ["malformed response", { body: { hello: "world" } }],
+  ] as const)(
+    "mock upload: %s → safe fallback, never an explanation, and the demo label still works",
+    async (_n, analyze) => {
+      stubFetch(analyze as Parameters<typeof stubFetch>[0]);
+      render(<CompanionExperience />);
+      toGuidance("decline");
+      fireEvent.click(screen.getByRole("button", { name: /upload a photo — demo/i }));
+      fireEvent.click(screen.getByRole("button", { name: /clear label photo/i }));
+      await flush();
+      expect(screen.getByText("I’m not sure enough to explain this safely.")).toBeInTheDocument();
+      expect(screen.getByText(/I couldn’t read that photo/)).toBeInTheDocument();
+      expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Try another photo" }));
+      fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+      await flush();
+      expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    },
+  );
+
+  it("does not request the camera until the user consents, and requests video only (no microphone)", async () => {
+    const stop = vi.fn();
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop }] }));
+    vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia } });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    send("What is this for?");
+    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    expect(screen.getByText("I need to see the writing clearly.")).toBeInTheDocument();
+    expect(getUserMedia).not.toHaveBeenCalled(); // explained first, nothing activated
+
+    fireEvent.click(screen.getByRole("button", { name: /yes, switch camera/i }));
+    await flush();
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(getUserMedia).toHaveBeenCalledWith({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false,
+    });
+    expect(screen.getByRole("button", { name: /take photo of label/i })).toBeEnabled();
+    expect(stop).not.toHaveBeenCalled();
+
+    // Leaving the screen (here: using the demo label) stops the camera.
+    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    expect(stop).toHaveBeenCalled();
+  });
+
+  it("camera permission denied by the browser → explained fallback, no dead end", async () => {
+    const getUserMedia = vi.fn(async () => {
+      throw Object.assign(new Error("denied"), { name: "NotAllowedError" });
+    });
+    vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia } });
+    render(<CompanionExperience />);
+    toGuidance("grant");
+    await flush();
+    expect(screen.getByText("The camera is off.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /use demo label/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /upload a photo — demo/i })).toBeInTheDocument();
   });
 
   it("End call returns to the quiet landing state", () => {

@@ -126,6 +126,13 @@ export type DemoAssetId =
 export type LabelInput =
   | { mode: "demo"; demoAssetId: DemoAssetId }
   | {
+      // Metadata only: the pixels live in memory for one request and are never stored in session state.
+      mode: "image";
+      source: "sample" | "camera";
+      mimeType: "image/jpeg" | "image/png" | "image/webp";
+      byteSize: number;
+    }
+  | {
       mode: "typed";
       patientName?: string;
       medicineName?: string;

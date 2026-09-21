@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CallFooter } from "@/components/ui/call-footer";
+import { SoundToggle } from "@/components/ui/sound-toggle";
 import { PhoneShell, ScreenBody } from "@/components/ui/shell";
 import { resolveExplanation } from "@/lib/content/explanation";
+import { requestLabelAnalysis } from "@/lib/label/analyze-client";
+import { clearPendingImage, peekPendingImage } from "@/lib/label/pending-image";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { dispatch, useSession } from "@/lib/session/session-store";
 import { guardRequestedState, pathForState } from "@/lib/session/state-machine";
+import { speakableText } from "@/lib/voice/speakable";
+import { getVoiceProvider, useVoiceCapabilities } from "@/lib/voice/use-voice";
 import { AnalyzingScreen, CameraGuidanceScreen, CameraPermissionScreen } from "./camera-screens";
 import { CompleteScreen } from "./complete-screen";
 import { ConfirmScreen } from "./confirm-screen";
@@ -28,6 +33,12 @@ export function CompanionExperience() {
   const language = session.language;
   const t = useCallback((key: CopyKey) => translate(language, key), [language]);
   const mainRef = useRef<HTMLElement>(null);
+
+  // Spoken replies: OFF until the user turns sound on, and only during an active call.
+  const caps = useVoiceCapabilities();
+  const [soundOn, setSoundOn] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const sound = soundOn && session.callActive && caps.synthesis;
   const previousState = useRef(session.state);
 
   // Keep the URL a reflection of the session, never the other way round.
@@ -38,12 +49,33 @@ export function CompanionExperience() {
     }
   }, [session]);
 
-  // Deterministic "checking" beat, then the guarded RESOLVE_ANALYSIS transition.
+  // Analysis. Demo/typed labels resolve locally after a short beat. Image labels go
+  // to /api/label/analyze (real Claude vision + deterministic matching); any failure
+  // routes to the safe fallback, never to an explanation.
+  const pendingMode = session.pendingLabel?.mode ?? null;
+  const sessionId = session.sessionId;
   useEffect(() => {
-    if (session.state !== "analyzing") return;
+    if (session.state !== "analyzing") {
+      clearPendingImage();
+      return;
+    }
+    if (pendingMode === "image") {
+      const image = peekPendingImage();
+      if (!image) {
+        dispatch({ type: "ANALYSIS_FAILED" });
+        return;
+      }
+      const controller = new AbortController();
+      requestLabelAnalysis(image, sessionId, controller.signal).then((analysis) => {
+        if (controller.signal.aborted) return;
+        clearPendingImage();
+        dispatch(analysis ? { type: "ANALYSIS_RESULT", analysis } : { type: "ANALYSIS_FAILED" });
+      });
+      return () => controller.abort();
+    }
     const id = window.setTimeout(() => dispatch({ type: "RESOLVE_ANALYSIS" }), ANALYSIS_DELAY_MS);
     return () => window.clearTimeout(id);
-  }, [session.state]);
+  }, [session.state, pendingMode, sessionId]);
 
   // Move focus to the new screen when the state changes (screen-reader friendly).
   useEffect(() => {
@@ -55,6 +87,26 @@ export function CompanionExperience() {
 
   const explanation = resolveExplanation(session, language);
 
+  // Exactly the approved on-screen wording; explanation text only with a confirmed match.
+  const spoken = speakableText(session, t, explanation);
+
+  useEffect(() => {
+    const provider = getVoiceProvider();
+    if (!provider) return;
+    return provider.onSpeakingChange(setSpeaking);
+  }, []);
+
+  useEffect(() => {
+    const provider = getVoiceProvider();
+    if (!provider) return;
+    if (!sound || !spoken) {
+      provider.stopSpeaking();
+      return;
+    }
+    provider.speak(spoken, language);
+    return () => provider.stopSpeaking();
+  }, [sound, spoken, language, session.repeatCount]);
+
   let screen: React.ReactNode;
   switch (session.state) {
     case "listening":
@@ -62,6 +114,7 @@ export function CompanionExperience() {
         <ListeningScreen
           t={t}
           session={session}
+          speaking={speaking}
           onSend={(text) => dispatch({ type: "USER_MESSAGE", text })}
           onSelectRoute={(route) => dispatch({ type: "SELECT_ROUTE", route })}
         />
@@ -81,9 +134,9 @@ export function CompanionExperience() {
         <CameraGuidanceScreen
           t={t}
           mode={session.cameraMode ?? "fallback"}
-          onSubmitDemo={(demoAssetId) =>
-            dispatch({ type: "SUBMIT_LABEL", input: { mode: "demo", demoAssetId } })
-          }
+          issue={session.cameraIssue}
+          onSubmit={(input) => dispatch({ type: "SUBMIT_LABEL", input })}
+          onCameraFailed={(issue) => dispatch({ type: "CAMERA_FAILED", issue })}
         />
       );
       break;
@@ -150,7 +203,18 @@ export function CompanionExperience() {
   return (
     <PhoneShell>
       <div lang={language} className="flex min-h-0 flex-1 flex-col">
-        <ScreenHeader t={t} />
+        <ScreenHeader
+          t={t}
+          control={
+            session.callActive && caps.synthesis ? (
+              <SoundToggle
+                on={sound}
+                onToggle={() => setSoundOn((v) => !v)}
+                labels={{ on: t("soundOn"), off: t("soundOff"), group: t("soundLabel") }}
+              />
+            ) : undefined
+          }
+        />
         <ScreenBody>
           <main
             ref={mainRef}
