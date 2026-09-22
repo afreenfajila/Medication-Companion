@@ -20,6 +20,7 @@ export interface RecognitionLike {
   start(): void;
   stop(): void;
 }
+<<<<<<< HEAD
 export interface VoiceLike {
   name: string;
   lang: string;
@@ -30,6 +31,11 @@ interface UtteranceLike {
   lang: string;
   rate: number;
   voice?: VoiceLike | null;
+=======
+interface UtteranceLike {
+  lang: string;
+  rate: number;
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   onstart: (() => void) | null;
   onend: (() => void) | null;
   onerror: (() => void) | null;
@@ -37,16 +43,21 @@ interface UtteranceLike {
 export type VoiceEnv = {
   SpeechRecognition?: new () => RecognitionLike;
   webkitSpeechRecognition?: new () => RecognitionLike;
+<<<<<<< HEAD
   speechSynthesis?: {
     speak(u: UtteranceLike): void;
     cancel(): void;
     getVoices?(): VoiceLike[];
   };
+=======
+  speechSynthesis?: { speak(u: UtteranceLike): void; cancel(): void };
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   SpeechSynthesisUtterance?: new (text: string) => UtteranceLike;
 };
 
 export const SPEECH_LANG: Record<UiLanguage, string> = { en: "en-US", "zh-Hans": "zh-CN" };
 
+<<<<<<< HEAD
 // Voices that are novelty/robotic or known-poor; never chosen if anything else exists.
 const AVOID = /espeak|albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|fred|junior|kathy|princess|ralph/i;
 // Neural / network / premium voices sound far more natural than the OS default.
@@ -78,6 +89,8 @@ export function pickVoice(voices: readonly VoiceLike[], language: UiLanguage): V
   return [...candidates].sort((a, b) => score(b) - score(a))[0];
 }
 
+=======
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
 const ERROR_MAP: Record<string, VoiceErrorCode> = {
   "not-allowed": "permission-denied",
   "service-not-allowed": "permission-denied",
@@ -194,8 +207,11 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
     const utterance = new Utterance(text);
     utterance.lang = SPEECH_LANG[language];
     utterance.rate = 0.95; // calm and unhurried
+<<<<<<< HEAD
     const voice = pickVoice(synth.getVoices?.() ?? [], language);
     if (voice) utterance.voice = voice;
+=======
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
     const done = () => {
       if (this.utterance === utterance) {
         this.utterance = null;

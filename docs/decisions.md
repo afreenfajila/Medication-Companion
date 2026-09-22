@@ -92,6 +92,7 @@ the `VoiceProvider` interface in `src/lib/voice/provider.ts` is the seam it will
 - **Unsupported browsers** (e.g. Firefox has no SpeechRecognition): mic button hidden, plain-language note,
   typing unchanged. Speech synthesis absent: no sound control.
 - **Not verified with a real microphone/speaker** — the Web Speech API is exercised through fakes only. Try it in Chrome.
+<<<<<<< HEAD
 
 ---
 
@@ -112,3 +113,5 @@ the `VoiceProvider` interface in `src/lib/voice/provider.ts` is the seam it will
 - **`npm run check:bundle`** scans `.next/static` for key patterns, secret variable names and the Anthropic SDK (site-contract §15 step 6).
 - **Not done:** Vercel deployment itself (needs your account), Gemini Live, Supabase, real-device screen-reader and
   keyboard passes (see `docs/demo-script.md`).
+=======
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a

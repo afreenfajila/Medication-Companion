@@ -53,6 +53,7 @@ const en = {
   typeLabel: "Type your question",
   typePlaceholder: "For example: What is this medicine for?",
   send: "Send",
+<<<<<<< HEAD
   voiceListeningNow: "I’m listening… please speak now.",
   voiceSpeaking: "Speaking…",
   voiceMicOn: "Mic on",
@@ -62,6 +63,11 @@ const en = {
     "I’m still here. Tap “Mic on” when you’re ready to talk, or type instead.",
   voiceDidntCatch:
     "Sorry, I didn’t catch that. Please say it again, or use the buttons.",
+=======
+  voiceTapToSpeak: "Tap to speak",
+  voiceStop: "Stop listening",
+  voiceListeningNow: "I’m listening… please speak now.",
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   voicePrivacy:
     "Your browser may send your voice to its own speech service to turn it into text. Typing works the same way.",
   voiceUnsupported: "Voice input isn’t available in this browser. Typing works the same way.",
@@ -71,8 +77,14 @@ const en = {
   voiceNoMic: "I couldn’t find a microphone. You can keep typing.",
   voiceNetwork: "The voice service couldn’t be reached. You can keep typing.",
   voiceUnknown: "Voice didn’t work this time. You can keep typing.",
+<<<<<<< HEAD
   voiceCallStart: "Start voice call",
   voiceCallOn: "Voice call on",
+=======
+  soundOn: "Sound on",
+  soundOff: "Sound off",
+  soundLabel: "Read replies aloud",
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   anotherMedicineGuide: "Of course. Tell me what you would like to check next.",
 
   // Camera
@@ -243,6 +255,7 @@ const zhHans: Copy = {
   typeLabel: "输入您的问题",
   typePlaceholder: "例如：这个药是做什么用的？",
   send: "发送",
+<<<<<<< HEAD
   voiceListeningNow: "我在听…请说话。",
   voiceSpeaking: "正在说话…",
   voiceMicOn: "麦克风已开",
@@ -250,6 +263,11 @@ const zhHans: Copy = {
   voiceMicLabel: "麦克风",
   voicePaused: "我还在这里。准备好说话时，请点“麦克风已开”，或改用输入文字。",
   voiceDidntCatch: "抱歉，我没听清楚。请再说一遍，或使用按钮。",
+=======
+  voiceTapToSpeak: "点击说话",
+  voiceStop: "停止聆听",
+  voiceListeningNow: "我在听…请说话。",
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   voicePrivacy:
     "您的浏览器可能会把您的声音发送到它自己的语音服务，转换成文字。输入文字的效果相同。",
   voiceUnsupported: "此浏览器不支持语音输入。输入文字的效果相同。",
@@ -258,8 +276,14 @@ const zhHans: Copy = {
   voiceNoMic: "我找不到麦克风。您可以继续输入文字。",
   voiceNetwork: "无法连接语音服务。您可以继续输入文字。",
   voiceUnknown: "这次语音没有成功。您可以继续输入文字。",
+<<<<<<< HEAD
   voiceCallStart: "开始语音通话",
   voiceCallOn: "语音通话中",
+=======
+  soundOn: "声音已开",
+  soundOff: "声音已关",
+  soundLabel: "朗读回复",
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   anotherMedicineGuide: "好的。请告诉我接下来想查看什么。",
 
   cameraPermissionLabel: "摄像头权限",

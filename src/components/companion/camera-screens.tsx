@@ -2,13 +2,20 @@
 
 import { Camera, FileImage, ScanLine, SwitchCamera } from "lucide-react";
 import Image from "next/image";
+<<<<<<< HEAD
 import { useEffect, useRef, useState } from "react";
+=======
+import { useRef, useState } from "react";
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
 import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
 import { CameraPreview } from "@/components/ui/camera-preview";
 import { CompanionOrb } from "@/components/ui/companion-orb";
 import { samplePhotos } from "@/lib/content/samples";
 import { setPendingImage } from "@/lib/label/pending-image";
+<<<<<<< HEAD
 import { registerVoiceAction } from "@/lib/voice/actions";
+=======
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
 import { validateImage } from "@/lib/label/image-validation";
 import type { CameraIssue, CameraMode } from "@/lib/session/state-machine";
 import type { LabelInput } from "@/types/content";
@@ -114,6 +121,7 @@ export function CameraGuidanceScreen({
     );
   };
 
+<<<<<<< HEAD
   // A spoken "take a photo" runs exactly the button's handler (only while the camera is live).
   const captureRef = useRef(capture);
   useEffect(() => {
@@ -125,6 +133,8 @@ export function CameraGuidanceScreen({
     return () => registerVoiceAction("capture", null);
   }, [preview, live]);
 
+=======
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   const chooseSample = async (src: string) => {
     setError(null);
     setBusy(true);
@@ -225,7 +235,11 @@ export function CameraGuidanceScreen({
       )}
 
       {error && (
+<<<<<<< HEAD
         <p role="alert" className="text-center text-base font-medium text-danger-800">
+=======
+        <p role="alert" className="text-center text-base font-medium text-danger-700">
+>>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
           {error}
         </p>
       )}
