@@ -92,3 +92,23 @@ the `VoiceProvider` interface in `src/lib/voice/provider.ts` is the seam it will
 - **Unsupported browsers** (e.g. Firefox has no SpeechRecognition): mic button hidden, plain-language note,
   typing unchanged. Speech synthesis absent: no sound control.
 - **Not verified with a real microphone/speaker** — the Web Speech API is exercised through fakes only. Try it in Chrome.
+
+---
+
+# Decisions (Phase 6, polish and deployment prep)
+
+- **Contrast audit found real failures** (measured, now regression-tested against the actual tokens in
+  `globals.css`): white on teal-600 badge 3.19:1, danger-700 on warning surface 3.89:1 and on canvas 4.30:1.
+  Fixed with `--color-danger-800` (#943E38, 6.0:1) for small red text and a teal-800 badge. danger-700/teal-600 remain for borders/fills.
+- **axe-core** runs over every companion state (14), each sheet, the typed/sample panels and all pages. It found
+  one real issue: the listening screen had no `h1` (added a visually-hidden one). Colour contrast is covered by the token test
+  because jsdom has no layout.
+- **`/about` was wrong** after Phases 3–5 ("no AI, camera, or microphone"). Rewritten to describe Claude label reading,
+  the non-AI matcher, local camera preview, browser speech and what is (not) stored.
+- **Error boundaries:** `error.tsx`, `global-error.tsx`, `not-found.tsx` use calm wording and show no medicine content.
+  No `loading.tsx`: pages are static, and the analysing screen is the loading state.
+- **Security headers:** nosniff, X-Frame-Options DENY, Referrer-Policy, Permissions-Policy (camera/mic same-origin only).
+  A CSP was deliberately not added: Next's inline bootstrap scripts need nonces, which would force every page dynamic.
+- **`npm run check:bundle`** scans `.next/static` for key patterns, secret variable names and the Anthropic SDK (site-contract §15 step 6).
+- **Not done:** Vercel deployment itself (needs your account), Gemini Live, Supabase, real-device screen-reader and
+  keyboard passes (see `docs/demo-script.md`).

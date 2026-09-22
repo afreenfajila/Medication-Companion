@@ -1,0 +1,143 @@
+import { classifySafety } from "@/lib/safety/classify";
+import type { SessionEvent } from "@/lib/session/state-machine";
+import type { CompanionState, ContextualActionId } from "@/types/content";
+
+/**
+ * Deterministic interpretation of a SPOKEN utterance for hands-free calls.
+ * No model is involved. It only ever produces the same events the buttons
+ * produce, so every reducer guard still applies. Anything ambiguous returns
+ * `unclear` (the companion asks again) — it never guesses a gate decision.
+ */
+export type VoiceIntent =
+  | { kind: "event"; event: SessionEvent }
+  | { kind: "ui"; action: "capture" }
+  | { kind: "message"; text: string }
+  | { kind: "unclear" };
+
+export type CommandContext = {
+  state: CompanionState;
+  contextualActions: readonly ContextualActionId[];
+  candidateId: string | null;
+  explainStep: 0 | 1 | 2;
+  cameraLive: boolean;
+};
+
+const normalise = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/[.,!?;:"()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const wordCount = (n: string) => (n === "" ? 0 : n.split(" ").length);
+
+// --- vocabulary (English + Simplified Chinese) -------------------------------
+const HEDGE = /\b(not sure|unsure|don't know|do not know|maybe|i guess|perhaps|hmm|can't tell|cannot tell)\b|不确定|不知道|不太确定|也许|可能/;
+const NEGATIVE = /\b(no|nope|nah|not now|not really|wrong|incorrect|try again|that's not|it's not|isn't|not my|not the|later)\b|不是|不要|不对|不行|不好|没有|现在不|再试/;
+const AFFIRM = /\b(yes|yeah|yep|yup|sure|ok|okay|please|correct|right|absolutely|of course|go ahead|alright|that's it|that is it|that's right|this is my medicine)\b|是的|没错|好的|可以|对|好|行/;
+
+const END_CALL = /\b(end (the |this )?call|hang up|goodbye|bye( bye)?)\b|结束通话|挂断|再见/;
+const GET_HELP = /\b(get help|i need help|talk to (a |the |my )?(person|human|pharmacist|doctor)|speak to (a |the |my )?(person|human|pharmacist|doctor))\b|寻求帮助|找药剂师|需要帮助/;
+const REPEAT = /\b(repeat|say (that |it )?again|pardon|come again|one more time)\b|重复|再说一遍/;
+const TO_CHINESE = /\b(chinese|mandarin)\b|中文|华语|普通话/;
+const TO_ENGLISH = /\benglish\b|英文|英语/;
+
+const TAKE_PHOTO = /\b(take (a |the )?(photo|picture|pic)|capture|snap( it)?|scan( it)?)\b|拍照|拍下/;
+const USE_DEMO = /\b(demo( label)?|sample label)\b|示范标签/;
+const NEXT = /\b(next|continue|go on|keep going|carry on|go ahead)\b|下一步|继续/;
+const BACK = /\b(back|previous|go back)\b|上一步|返回/;
+const UNDERSTOOD = /\b(i understand|understood|got it|thank(s| you)|that's all|makes sense|all clear)\b|明白|谢谢|懂了/;
+const TRY_AGAIN = /\b((try|another|new).*(photo|picture|again|label)|again)\b|再拍|再试/;
+const BACK_TO_CALL = /\b(back to (the )?(conversation|call)|carry on|continue (the )?(call|conversation)|talk (to you )?more)\b|回到对话/;
+const ANOTHER_MEDICINE = /\b(another|other|new|different|next)( medicine| one)?\b|另一种|另一个/;
+
+/** A bare yes/no is only trusted in a short utterance ("ok what is this for" is a question). */
+const isShort = (n: string) => wordCount(n) <= 5;
+
+export function interpretUtterance(text: string, ctx: CommandContext): VoiceIntent {
+  const raw = text.trim();
+  const n = normalise(raw);
+  if (!n) return { kind: "unclear" };
+
+  // 1. Safety always comes first, in every state. The reducer routes these to the safety screen.
+  if (classifySafety(raw).level !== "none") return { kind: "message", text: raw };
+
+  // 2. Global call controls.
+  if (END_CALL.test(n)) return { kind: "event", event: { type: "END_CALL" } };
+  if (GET_HELP.test(n)) return { kind: "event", event: { type: "GET_HELP" } };
+  if (REPEAT.test(n)) return { kind: "event", event: { type: "REPEAT" } };
+  if (TO_CHINESE.test(n)) return { kind: "event", event: { type: "SET_LANGUAGE", language: "zh-Hans" } };
+  if (TO_ENGLISH.test(n)) return { kind: "event", event: { type: "SET_LANGUAGE", language: "en" } };
+
+  // 3. The current screen's decision.
+  const hedge = HEDGE.test(n);
+  const negative = NEGATIVE.test(n);
+  const affirm = AFFIRM.test(n);
+
+  switch (ctx.state) {
+    case "listening": {
+      const offered = ctx.contextualActions;
+      // Explicit requests ("I want to show the medicine", "my schedule") are routed by the
+      // reducer itself, so typed and spoken input behave identically.
+      // A bare "yes" answers a single offered question (unambiguous only when ONE action is offered).
+      if (offered.length === 1 && offered[0] === "show-medicine" && affirm && !negative && !hedge && isShort(n)) {
+        return { kind: "event", event: { type: "SELECT_ROUTE", route: "show-medicine" } };
+      }
+      return { kind: "message", text: raw };
+    }
+
+    case "camera-permission":
+      if (hedge) return { kind: "unclear" };
+      if (negative && !affirm) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: false } };
+      if (affirm && !negative && isShort(n)) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: true } };
+      return { kind: "unclear" };
+
+    case "camera-guidance":
+      if (TAKE_PHOTO.test(n) && ctx.cameraLive) return { kind: "ui", action: "capture" };
+      if (USE_DEMO.test(n)) {
+        return {
+          kind: "event",
+          event: { type: "SUBMIT_LABEL", input: { mode: "demo", demoAssetId: "sample_metformin_label" } },
+        };
+      }
+      return { kind: "unclear" };
+
+    case "confirm-match": {
+      const id = ctx.candidateId;
+      if (!id) return { kind: "unclear" };
+      // Hedging beats everything: "yes, but I'm not sure" must NOT confirm a medicine.
+      if (hedge) return { kind: "event", event: { type: "CONFIRM_MATCH", candidateId: id, decision: "unsure" } };
+      if (negative && affirm) return { kind: "unclear" }; // contradictory
+      if (negative) return { kind: "event", event: { type: "CONFIRM_MATCH", candidateId: id, decision: "denied" } };
+      if (affirm && isShort(n)) return { kind: "event", event: { type: "CONFIRM_MATCH", candidateId: id, decision: "confirmed" } };
+      return { kind: "unclear" };
+    }
+
+    case "explain": {
+      if (BACK.test(n) && ctx.explainStep > 0) return { kind: "event", event: { type: "EXPLAIN_STEP", direction: "back" } };
+      if (ctx.explainStep === 2) {
+        if (UNDERSTOOD.test(n) || (affirm && !negative && isShort(n))) return { kind: "event", event: { type: "UNDERSTOOD" } };
+        return { kind: "unclear" };
+      }
+      if (NEXT.test(n) || UNDERSTOOD.test(n) || (affirm && !negative && isShort(n))) {
+        return { kind: "event", event: { type: "EXPLAIN_STEP", direction: "next" } };
+      }
+      return { kind: "unclear" };
+    }
+
+    case "safety":
+      if (TRY_AGAIN.test(n)) return { kind: "event", event: { type: "TRY_ANOTHER_LABEL" } };
+      if (BACK_TO_CALL.test(n)) return { kind: "event", event: { type: "RETURN_TO_CALL" } };
+      return { kind: "unclear" };
+
+    case "complete":
+      if (ANOTHER_MEDICINE.test(n) || (affirm && !negative && isShort(n))) {
+        return { kind: "event", event: { type: "NEW_MEDICINE" } };
+      }
+      return { kind: "unclear" };
+
+    default:
+      return { kind: "unclear" };
+  }
+}

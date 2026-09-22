@@ -21,7 +21,7 @@ const CHIP_STYLE: Record<StatusChip, { icon: React.ReactNode; className: string 
   },
   "Needs help": {
     icon: <LifeBuoy className="h-4 w-4" aria-hidden="true" />,
-    className: "bg-danger-100 text-danger-700",
+    className: "bg-danger-100 text-danger-800",
   },
   Pending: {
     icon: <Clock className="h-4 w-4" aria-hidden="true" />,

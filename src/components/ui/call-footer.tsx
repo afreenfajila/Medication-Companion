@@ -35,7 +35,7 @@ export function CallFooter({
       <button
         type="button"
         onClick={onEnd}
-        className={cn(base, "bg-danger-100 text-danger-700 hover:bg-[#f6dcd9]")}
+        className={cn(base, "bg-danger-100 text-danger-800 hover:bg-[#f6dcd9]")}
       >
         <PhoneOff className="h-5 w-5" aria-hidden="true" />
         <span>{labels.end}</span>

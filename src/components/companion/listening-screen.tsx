@@ -1,26 +1,13 @@
 "use client";
 
-import { Mic, Send, Square } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
-import { CompanionOrb } from "@/components/ui/companion-orb";
+import { Send } from "lucide-react";
+import { useId, useState } from "react";
+import { CompanionOrb, type OrbState } from "@/components/ui/companion-orb";
 import { ContextualChoiceGroup } from "@/components/ui/contextual-choice-group";
-import { DemoNotice } from "@/components/ui/notices";
 import { TranscriptCard } from "@/components/ui/transcript-card";
 import type { Session } from "@/lib/session/state-machine";
-import { getVoiceProvider, useVoiceCapabilities } from "@/lib/voice/use-voice";
-import { VoiceError, type VoiceErrorCode } from "@/lib/voice/provider";
 import type { ContextualActionId } from "@/types/content";
-import type { CopyKey } from "@/lib/content/translations";
 import type { T } from "./screen-chrome";
-
-const VOICE_ERROR_KEY: Record<VoiceErrorCode, CopyKey> = {
-  "permission-denied": "voiceDenied",
-  "no-speech": "voiceNoSpeech",
-  "no-microphone": "voiceNoMic",
-  network: "voiceNetwork",
-  unsupported: "voiceUnsupported",
-  unknown: "voiceUnknown",
-};
 
 /**
  * 02-companion-listening. The transcript, the companion's single response, and
@@ -30,61 +17,18 @@ const VOICE_ERROR_KEY: Record<VoiceErrorCode, CopyKey> = {
 export function ListeningScreen({
   t,
   session,
-  speaking,
+  orbState,
   onSend,
   onSelectRoute,
 }: {
   t: T;
   session: Session;
-  speaking: boolean;
+  orbState: OrbState;
   onSend: (text: string) => void;
   onSelectRoute: (route: ContextualActionId) => void;
 }) {
   const [draft, setDraft] = useState("");
   const inputId = useId();
-
-  // Voice input. A spoken transcript takes exactly the same path as typed text
-  // (onSend → USER_MESSAGE → safety classifier first). Nothing starts until the tap.
-  const caps = useVoiceCapabilities();
-  const [recording, setRecording] = useState(false);
-  const [interim, setInterim] = useState("");
-  const [voiceError, setVoiceError] = useState<VoiceErrorCode | null>(null);
-  const sendRef = useRef(onSend);
-  useEffect(() => {
-    sendRef.current = onSend;
-  });
-  useEffect(() => {
-    const provider = getVoiceProvider();
-    if (!provider) return;
-    const offs = [
-      provider.onListeningChange(setRecording),
-      provider.onInterim(setInterim),
-      provider.onTranscript((text) => {
-        setInterim("");
-        setVoiceError(null);
-        sendRef.current(text.slice(0, 300));
-      }),
-      provider.onError((error) => {
-        setInterim("");
-        setVoiceError(error instanceof VoiceError ? error.code : "unknown");
-      }),
-    ];
-    return () => {
-      offs.forEach((off) => off());
-      provider.stopListening();
-    };
-  }, []);
-
-  const toggleMic = () => {
-    const provider = getVoiceProvider();
-    if (!provider) return;
-    if (recording) {
-      provider.stopListening();
-    } else {
-      setVoiceError(null);
-      provider.startListening(session.language);
-    }
-  };
 
   const choices = session.contextualActions.map((id) => ({
     id,
@@ -93,20 +37,12 @@ export function ListeningScreen({
 
   return (
     <div className="flex flex-1 flex-col gap-4 py-2">
+      <h1 className="sr-only">{t("callWithCompanion")}</h1>
       <div className="flex flex-col items-center gap-1">
-        <CompanionOrb size="sm" state={recording ? "listening" : speaking ? "speaking" : "idle"} />
-        <p role="status" className="min-h-6 text-base font-medium text-navy-700">
-          {recording ? t("voiceListeningNow") : ""}
-        </p>
+        <CompanionOrb size="sm" state={orbState} />
       </div>
 
-      {interim && (
-        <TranscriptCard speaker="user" label={t("youSay")}>
-          {interim}
-        </TranscriptCard>
-      )}
-
-      {!interim && session.userText && (
+      {session.userText && (
         <TranscriptCard
           key={`u-${session.userText}`}
           speaker="user"
@@ -140,23 +76,7 @@ export function ListeningScreen({
           setDraft("");
         }}
       >
-        {caps.recognition && (
-          <button
-            type="button"
-            data-variant="secondary"
-            aria-pressed={recording}
-            onClick={toggleMic}
-            className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-pill border border-teal-600/30 bg-teal-100 px-6 text-lg font-bold hover:bg-[#d7ebe9]"
-          >
-            {recording ? (
-              <Square className="h-5 w-5" aria-hidden="true" />
-            ) : (
-              <Mic className="h-5 w-5" aria-hidden="true" />
-            )}
-            <span>{recording ? t("voiceStop") : t("voiceTapToSpeak")}</span>
-          </button>
-        )}
-        <label htmlFor={inputId} className="mt-1 text-sm font-bold text-navy-700">
+        <label htmlFor={inputId} className="text-sm font-bold text-navy-700">
           {t("typeLabel")}
         </label>
         <div className="flex items-stretch gap-2">
@@ -179,14 +99,6 @@ export function ListeningScreen({
             <span>{t("send")}</span>
           </button>
         </div>
-        {voiceError && (
-          <p role="status" className="text-base font-medium text-danger-700">
-            {t(VOICE_ERROR_KEY[voiceError])}
-          </p>
-        )}
-        <DemoNotice role="note">
-          {caps.recognition ? t("voicePrivacy") : t("voiceUnsupported")}
-        </DemoNotice>
       </form>
     </div>
   );

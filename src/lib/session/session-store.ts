@@ -118,6 +118,12 @@ export const sessionStore = {
     persist(prev, next);
     listeners.forEach((l) => l());
   },
+  /** Test helper: render a specific, already-valid session. */
+  setForTest(session: Session): void {
+    current = session;
+    hydrated = true;
+    listeners.forEach((l) => l());
+  },
   /** Test helper. */
   reset(): void {
     current = createInitialSession();

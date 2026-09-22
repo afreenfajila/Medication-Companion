@@ -1,8 +1,10 @@
 import type { RecognitionLike, VoiceEnv } from "@/lib/voice/browser-voice";
 
 /** Controllable fakes for the Web Speech API. */
-export function createFakeSpeech(opts: { recognition?: boolean; synthesis?: boolean } = {}) {
-  const { recognition = true, synthesis = true } = opts;
+export function createFakeSpeech(
+  opts: { recognition?: boolean; synthesis?: boolean; voices?: Array<Record<string, unknown>> } = {},
+) {
+  const { recognition = true, synthesis = true, voices = [] } = opts;
 
   const recognitions: FakeRecognition[] = [];
   class FakeRecognition implements RecognitionLike {
@@ -40,12 +42,14 @@ export function createFakeSpeech(opts: { recognition?: boolean; synthesis?: bool
   class FakeUtterance {
     lang = "";
     rate = 1;
+    voice: unknown = null;
     onstart: (() => void) | null = null;
     onend: (() => void) | null = null;
     onerror: (() => void) | null = null;
     constructor(readonly text: string) {}
   }
   const synth = {
+    getVoices: () => voices,
     speak: (u: FakeUtterance) => {
       utterances.push(u);
       u.onstart?.();

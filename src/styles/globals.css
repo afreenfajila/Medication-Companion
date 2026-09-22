@@ -18,6 +18,9 @@
   /* Extension: teal-600 is only ~3.3:1 on white, too low for small text.
      Use teal-800 for teal *text* so it clears WCAG AA; teal-600 stays for fills. */
   --color-teal-800: #2f6b68;
+  /* Extension: danger-700 is 3.9:1 on the warning surface and 4.3:1 on canvas — below AA for small
+     text. Use danger-800 for red *text*; danger-700 stays for borders and non-text emphasis. */
+  --color-danger-800: #943e38;
   --color-desk: #ece9e1;
 
   --radius-sm: 12px;

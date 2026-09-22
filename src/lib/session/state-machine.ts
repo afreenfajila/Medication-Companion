@@ -203,6 +203,43 @@ function enterExplain(s: Session, ctx: ReduceContext, step: 0 | 1): Session {
   );
 }
 
+/**
+ * Applies a chosen route (button tap OR the person saying it). Both are an explicit
+ * choice made inside an active call, so both may open the camera-permission step.
+ */
+function applyRoute(
+  s: Session,
+  ctx: ReduceContext,
+  route: ContextualActionId,
+  via: "button" | "message",
+): Session {
+  const audit: AuditInput = {
+    eventType: "route-selected",
+    summary:
+      route === "show-medicine" ? "Chose “Show medicine”" : "Chose “Ask about my schedule”",
+    details: { route, via },
+  };
+  if (route === "show-medicine") {
+    return withAudit(
+      { ...s, state: "camera-permission", labelRouteSelected: true, contextualActions: [] },
+      ctx,
+      audit,
+    );
+  }
+  // ask-schedule: only a confirmed record may authorise schedule content.
+  if (isMatchConfirmed(s)) {
+    return enterExplain(withAudit(s, ctx, audit), ctx, 1);
+  }
+  if (s.matchStatus === "possible" && s.candidate) {
+    return withAudit({ ...s, state: "confirm-match", contextualActions: [] }, ctx, audit);
+  }
+  return withAudit(
+    { ...s, assistantKey: "scheduleNeedsRecord", contextualActions: ["show-medicine"] },
+    ctx,
+    audit,
+  );
+}
+
 // ---- Reducer ----------------------------------------------------------------
 
 export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContext): Session {
@@ -266,12 +303,32 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       if (routed.intent === "urgent-risk") {
         return enterSafety({ ...s, userText: text }, ctx, "urgent-risk");
       }
+
+      // Unsupported medical questions and human-help requests also leave the normal path
+      // from any active state, so a spoken "should I stop taking it?" is never ignored.
+      if (routed.safetyReason && s.state !== "listening") {
+        if (s.state === "start" || s.state === "safety" || s.state === "analyzing") return s;
+        const keep = s.matchStatus === "confirmed";
+        return enterSafety(
+          { ...s, userText: text },
+          ctx,
+          routed.safetyReason,
+          {
+            candidate: keep ? s.candidate : null,
+            matchStatus: keep ? s.matchStatus : null,
+            pendingLabel: null,
+          },
+          { intent: routed.intent },
+        );
+      }
       if (s.state !== "listening") return s;
 
       const base: Session = { ...s, userText: text };
       if (routed.safetyReason) {
         return enterSafety(base, ctx, routed.safetyReason, {}, { intent: routed.intent });
       }
+      // "I want to show the medicine" / "my schedule": saying it is the choice.
+      if (routed.route) return applyRoute(base, ctx, routed.route, "message");
       if (routed.toExplain && isMatchConfirmed(base)) {
         return enterExplain(base, ctx, 1);
       }
@@ -298,36 +355,10 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
     }
 
     case "SELECT_ROUTE": {
-      // Contextual actions must have been offered during this active call.
+      // Button path: the action must have been offered during this active call.
       if (!s.callActive || s.state !== "listening") return s;
       if (!s.contextualActions.includes(event.route)) return s;
-      const audit: AuditInput = {
-        eventType: "route-selected",
-        summary:
-          event.route === "show-medicine"
-            ? "Chose “Show medicine”"
-            : "Chose “Ask about my schedule”",
-        details: { route: event.route },
-      };
-      if (event.route === "show-medicine") {
-        return withAudit(
-          { ...s, state: "camera-permission", labelRouteSelected: true, contextualActions: [] },
-          ctx,
-          audit,
-        );
-      }
-      // ask-schedule: only a confirmed record may authorise schedule content.
-      if (isMatchConfirmed(s)) {
-        return enterExplain(withAudit(s, ctx, audit), ctx, 1);
-      }
-      if (s.matchStatus === "possible" && s.candidate) {
-        return withAudit({ ...s, state: "confirm-match", contextualActions: [] }, ctx, audit);
-      }
-      return withAudit(
-        { ...s, assistantKey: "scheduleNeedsRecord", contextualActions: ["show-medicine"] },
-        ctx,
-        audit,
-      );
+      return applyRoute(s, ctx, event.route, "button");
     }
 
     case "CAMERA_CONSENT": {

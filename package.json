@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:bundle"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
@@ -28,6 +30,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6",
+    "axe-core": "^4.13.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "jsdom": "^30",

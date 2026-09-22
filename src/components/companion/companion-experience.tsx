@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CallFooter } from "@/components/ui/call-footer";
-import { SoundToggle } from "@/components/ui/sound-toggle";
 import { PhoneShell, ScreenBody } from "@/components/ui/shell";
 import { resolveExplanation } from "@/lib/content/explanation";
+import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { requestLabelAnalysis } from "@/lib/label/analyze-client";
 import { clearPendingImage, peekPendingImage } from "@/lib/label/pending-image";
-import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { dispatch, useSession } from "@/lib/session/session-store";
 import { guardRequestedState, pathForState } from "@/lib/session/state-machine";
 import { speakableText } from "@/lib/voice/speakable";
@@ -20,6 +19,9 @@ import { ListeningScreen } from "./listening-screen";
 import { SafetyScreen } from "./safety-screen";
 import { DisclosureFooter, ScreenHeader } from "./screen-chrome";
 import { StartScreen } from "./start-screen";
+import { useVoiceConversation } from "./use-conversation";
+import { VoiceBar } from "./voice-bar";
+import { VoiceCallToggle } from "./voice-call-toggle";
 
 const ANALYSIS_DELAY_MS = 900;
 
@@ -33,12 +35,6 @@ export function CompanionExperience() {
   const language = session.language;
   const t = useCallback((key: CopyKey) => translate(language, key), [language]);
   const mainRef = useRef<HTMLElement>(null);
-
-  // Spoken replies: OFF until the user turns sound on, and only during an active call.
-  const caps = useVoiceCapabilities();
-  const [soundOn, setSoundOn] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
-  const sound = soundOn && session.callActive && caps.synthesis;
   const previousState = useRef(session.state);
 
   // Keep the URL a reflection of the session, never the other way round.
@@ -90,6 +86,27 @@ export function CompanionExperience() {
   // Exactly the approved on-screen wording; explanation text only with a confirmed match.
   const spoken = speakableText(session, t, explanation);
 
+  // One "Voice call" control turns BOTH ears (recognition) and mouth (synthesis) on
+  // together, like answering a call — no further taps needed for a normal turn.
+  // It is off by default; nothing about the mic or speaker starts until this tap.
+  const caps = useVoiceCapabilities();
+  const [voiceCallOn, setVoiceCallOn] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  // Recognition is what makes it a two-way "call" (spoken replies alone are just
+  // a read-aloud toggle, which isn't offered as its own control in this build).
+  const voiceAvailable = caps.recognition;
+  const active = voiceCallOn && session.callActive;
+  const canSpeak = active && caps.synthesis;
+
+  // "Next call starts quiet again": derived state, not an effect (React's
+  // documented "adjusting state when a prop changes" pattern) — reset
+  // synchronously during render when a new call begins.
+  const [seenCallCount, setSeenCallCount] = useState(session.callCount);
+  if (seenCallCount !== session.callCount) {
+    setSeenCallCount(session.callCount);
+    if (voiceCallOn) setVoiceCallOn(false);
+  }
+
   useEffect(() => {
     const provider = getVoiceProvider();
     if (!provider) return;
@@ -99,13 +116,23 @@ export function CompanionExperience() {
   useEffect(() => {
     const provider = getVoiceProvider();
     if (!provider) return;
-    if (!sound || !spoken) {
+    if (!canSpeak || !spoken) {
       provider.stopSpeaking();
       return;
     }
     provider.speak(spoken, language);
     return () => provider.stopSpeaking();
-  }, [sound, spoken, language, session.repeatCount]);
+  }, [canSpeak, spoken, language, session.repeatCount]);
+
+  const conversation = useVoiceConversation({
+    session,
+    soundActive: active,
+    speaking: speaking && canSpeak,
+    cameraLive: session.cameraMode === "preview",
+    speakNotice: (text) => canSpeak && getVoiceProvider()?.speak(text, language),
+    t,
+  });
+  const showVoiceBar = active && caps.recognition && session.callActive && session.state !== "start";
 
   let screen: React.ReactNode;
   switch (session.state) {
@@ -114,7 +141,7 @@ export function CompanionExperience() {
         <ListeningScreen
           t={t}
           session={session}
-          speaking={speaking}
+          orbState={speaking ? "speaking" : conversation.listening ? "listening" : "idle"}
           onSend={(text) => dispatch({ type: "USER_MESSAGE", text })}
           onSelectRoute={(route) => dispatch({ type: "SELECT_ROUTE", route })}
         />
@@ -206,12 +233,8 @@ export function CompanionExperience() {
         <ScreenHeader
           t={t}
           control={
-            session.callActive && caps.synthesis ? (
-              <SoundToggle
-                on={sound}
-                onToggle={() => setSoundOn((v) => !v)}
-                labels={{ on: t("soundOn"), off: t("soundOff"), group: t("soundLabel") }}
-              />
+            session.callActive && voiceAvailable ? (
+              <VoiceCallToggle on={voiceCallOn} onToggle={() => setVoiceCallOn((v) => !v)} t={t} />
             ) : undefined
           }
         />
@@ -225,6 +248,7 @@ export function CompanionExperience() {
             {screen}
           </main>
         </ScreenBody>
+        {showVoiceBar && <VoiceBar view={conversation} t={t} />}
         {session.callActive && (
           <CallFooter
             labels={{

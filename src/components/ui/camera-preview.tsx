@@ -56,7 +56,7 @@ export function CameraPreview({
           <span className="rounded-pill bg-navy-900/70 px-3 py-1 text-[13px] font-medium text-white">
             {statusLabel}
           </span>
-          <span className="rounded-pill bg-teal-600 px-3 py-1 text-[13px] font-bold text-white">
+          <span className="rounded-pill bg-teal-800 px-3 py-1 text-[13px] font-bold text-white">
             {badgeLabel}
           </span>
         </div>

@@ -32,7 +32,7 @@ export function SafetyCard({
         urgent ? "border-2 border-danger-700" : "border border-danger-700/25",
       )}
     >
-      <div className="flex items-center gap-2 text-[13px] font-bold text-danger-700">
+      <div className="flex items-center gap-2 text-[13px] font-bold text-danger-800">
         <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
         <span>{label}</span>
       </div>

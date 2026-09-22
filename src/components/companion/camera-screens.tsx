@@ -2,12 +2,13 @@
 
 import { Camera, FileImage, ScanLine, SwitchCamera } from "lucide-react";
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
 import { CameraPreview } from "@/components/ui/camera-preview";
 import { CompanionOrb } from "@/components/ui/companion-orb";
 import { samplePhotos } from "@/lib/content/samples";
 import { setPendingImage } from "@/lib/label/pending-image";
+import { registerVoiceAction } from "@/lib/voice/actions";
 import { validateImage } from "@/lib/label/image-validation";
 import type { CameraIssue, CameraMode } from "@/lib/session/state-machine";
 import type { LabelInput } from "@/types/content";
@@ -113,6 +114,17 @@ export function CameraGuidanceScreen({
     );
   };
 
+  // A spoken "take a photo" runs exactly the button's handler (only while the camera is live).
+  const captureRef = useRef(capture);
+  useEffect(() => {
+    captureRef.current = capture;
+  });
+  useEffect(() => {
+    if (!preview || !live) return;
+    registerVoiceAction("capture", () => captureRef.current());
+    return () => registerVoiceAction("capture", null);
+  }, [preview, live]);
+
   const chooseSample = async (src: string) => {
     setError(null);
     setBusy(true);
@@ -213,7 +225,7 @@ export function CameraGuidanceScreen({
       )}
 
       {error && (
-        <p role="alert" className="text-center text-base font-medium text-danger-700">
+        <p role="alert" className="text-center text-base font-medium text-danger-800">
           {error}
         </p>
       )}

@@ -20,9 +20,16 @@ export interface RecognitionLike {
   start(): void;
   stop(): void;
 }
+export interface VoiceLike {
+  name: string;
+  lang: string;
+  localService?: boolean;
+  default?: boolean;
+}
 interface UtteranceLike {
   lang: string;
   rate: number;
+  voice?: VoiceLike | null;
   onstart: (() => void) | null;
   onend: (() => void) | null;
   onerror: (() => void) | null;
@@ -30,11 +37,46 @@ interface UtteranceLike {
 export type VoiceEnv = {
   SpeechRecognition?: new () => RecognitionLike;
   webkitSpeechRecognition?: new () => RecognitionLike;
-  speechSynthesis?: { speak(u: UtteranceLike): void; cancel(): void };
+  speechSynthesis?: {
+    speak(u: UtteranceLike): void;
+    cancel(): void;
+    getVoices?(): VoiceLike[];
+  };
   SpeechSynthesisUtterance?: new (text: string) => UtteranceLike;
 };
 
 export const SPEECH_LANG: Record<UiLanguage, string> = { en: "en-US", "zh-Hans": "zh-CN" };
+
+// Voices that are novelty/robotic or known-poor; never chosen if anything else exists.
+const AVOID = /espeak|albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|fred|junior|kathy|princess|ralph/i;
+// Neural / network / premium voices sound far more natural than the OS default.
+const NATURAL = /natural|neural|online|premium|enhanced|siri|wavenet|studio/i;
+const KNOWN_GOOD =
+  /google|samantha|ava\b|allison|susan|serena|karen|moira|daniel|xiaoxiao|yunxi|xiaoyi|tingting|meijia|sinji|hanhan|huihui|yaoyao/i;
+
+/**
+ * Picks the most natural installed voice for a language. Browsers default to a
+ * basic local voice; neural/premium/Google/Apple voices, when present, are
+ * chosen instead. Returns null when no voice matches (the engine's default is used).
+ */
+export function pickVoice(voices: readonly VoiceLike[], language: UiLanguage): VoiceLike | null {
+  const want = SPEECH_LANG[language].toLowerCase();
+  const prefix = want.slice(0, 2);
+  const candidates = voices.filter((v) => v.lang.toLowerCase().replace("_", "-").startsWith(prefix));
+  if (candidates.length === 0) return null;
+
+  const score = (v: VoiceLike): number => {
+    let s = 0;
+    if (AVOID.test(v.name)) s -= 100;
+    if (NATURAL.test(v.name)) s += 50;
+    if (KNOWN_GOOD.test(v.name)) s += 25;
+    if (v.localService === false) s += 10; // network voices are usually higher quality
+    if (v.lang.toLowerCase().replace("_", "-") === want) s += 8; // exact locale
+    if (v.default) s += 1;
+    return s;
+  };
+  return [...candidates].sort((a, b) => score(b) - score(a))[0];
+}
 
 const ERROR_MAP: Record<string, VoiceErrorCode> = {
   "not-allowed": "permission-denied",
@@ -152,6 +194,8 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
     const utterance = new Utterance(text);
     utterance.lang = SPEECH_LANG[language];
     utterance.rate = 0.95; // calm and unhurried
+    const voice = pickVoice(synth.getVoices?.() ?? [], language);
+    if (voice) utterance.voice = voice;
     const done = () => {
       if (this.utterance === utterance) {
         this.utterance = null;
