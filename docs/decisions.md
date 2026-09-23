@@ -92,7 +92,6 @@ the `VoiceProvider` interface in `src/lib/voice/provider.ts` is the seam it will
 - **Unsupported browsers** (e.g. Firefox has no SpeechRecognition): mic button hidden, plain-language note,
   typing unchanged. Speech synthesis absent: no sound control.
 - **Not verified with a real microphone/speaker** — the Web Speech API is exercised through fakes only. Try it in Chrome.
-<<<<<<< HEAD
 
 ---
 
@@ -113,5 +112,117 @@ the `VoiceProvider` interface in `src/lib/voice/provider.ts` is the seam it will
 - **`npm run check:bundle`** scans `.next/static` for key patterns, secret variable names and the Anthropic SDK (site-contract §15 step 6).
 - **Not done:** Vercel deployment itself (needs your account), Gemini Live, Supabase, real-device screen-reader and
   keyboard passes (see `docs/demo-script.md`).
-=======
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
+
+---
+
+# Decisions (single-screen "live call" redesign — explicit deviation from spec)
+
+The user asked for a single continuous call view (camera, confirmation, and explanation shown
+inline in one scrolling conversation rather than full-screen swaps), and explicitly chose the
+"merge into one continuous view" option after being told it deviates from documented requirements.
+Recording that deviation here per CLAUDE.md's "preserve the contract and explain the conflict" rule.
+
+**What this deviates from:**
+- PRD §7 / CLAUDE.md "Required UI screens" list 8 separate, individually-screenshotted states
+  (01–08). They still exist as *states* in the state machine (unchanged), but 02–07 no longer
+  render as distinct full-screen views — they're sections of one ongoing call screen.
+- design-standard.md's TranscriptCard guidance: "Do not make it look like an endless chat log."
+  The call feed is intentionally a growing transcript for the call's duration; it resets on every
+  new call and never spans across calls, which is the mitigation applied, but it is a transcript.
+
+**What did NOT change:** the state machine (`state-machine.ts`), safety classifier, matching,
+confirmation gate, and every guard are byte-for-byte the same as before. This was a presentation-only
+rewrite — every gate (call-start, camera consent, confirmed-match-before-explanation, safety
+escalation) still applies exactly as before, and the existing test suite for that layer is untouched.
+
+**New architecture:**
+- `use-call-feed.ts`: builds the running transcript from two sources only — the `listening` state's
+  actual back-and-forth, and the record explanation revealed one chunk per `explainStep`. Camera
+  permission/guidance, confirm-match, safety, and complete are NOT duplicated into the transcript;
+  they render their existing rich card (heading, body, buttons) in a pinned action area fixed at the
+  bottom of the same screen while that step is current, then are replaced by the next step's card —
+  the camera preview is now an inline panel on this one screen, not a separate view.
+- The transcript persists in local component state for the life of one call and clears when a new
+  call starts (`session.callCount` changes) — it is not part of the reducer/session and is never sent
+  anywhere.
+- Voice (hands-free listening/speaking) was already state-agnostic before this change and needed no
+  modification; the "always listening and responding" behavior the user asked for was already true
+  once the earlier voice-output bug was fixed.
+- Off-topic redirection: unchanged, still the deterministic `clarificationPrompt` fallback in
+  `intent.ts` — no new AI-driven redirection was added (would exceed CLAUDE.md's bounded Claude tasks).
+- One heading level fixed as part of this pass: `SafetyCard`'s heading moved from `<h1>` to `<h2>`,
+  since the call screen now has exactly one persistent `<h1>` for its whole duration.
+
+---
+
+# Decisions (Gemini-voice speech output)
+
+Request: "the voice sounds different per browser — I want Gemini's voice so the review sees the same
+thing regardless of browser." Interpreted narrowly: replace the SPOKEN OUTPUT renderer only. Listening
+(speech recognition) is unaffected and stays on the browser's own Web Speech API — that already worked
+and wasn't the complaint.
+
+- **API verified against the real installed SDK, not docs.** An initial WebFetch of Google's docs named
+  a model/call shape (`gemini-3.1-flash-tts-preview`, `client.interactions.create()`) that looked
+  suspicious against training knowledge. Rather than trust or dismiss it, I installed `@google/genai`
+  locally and read its actual `.d.ts` — confirmed `ai.models.generateContent({model, contents, config:
+  {responseModalities:["AUDIO"], speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName}}}}})` is the
+  real, current surface, and that `gemini-3.1-flash-tts-preview` is a real model in the shipped type
+  union (just newer than training knowledge — the "interactions" surface is a separate, broader agent-platform
+  API, not needed here). Then ran a live smoke test against the user's real key before writing app code.
+- **Content boundary unchanged.** Gemini only renders TEXT TO AUDIO here — the exact same fixed
+  copy-catalogue / record strings already sent to browser `speechSynthesis` are sent verbatim, character
+  for character. It never composes what is said; there is no new content-generation surface.
+- **No language parameter sent.** Gemini TTS auto-detects the input language from the text itself,
+  verified working for both English and the exact seeded Chinese sentences — sidesteps guessing the
+  right BCP-47/ISO code format for `speechConfig.languageCode`.
+- **PCM → WAV is hand-rolled** (44-byte RIFF header, `src/lib/ai/wav.ts`) rather than adding the `wav`
+  npm dependency — Gemini returns raw 16-bit PCM (`audio/l16; rate=24000...`, format details vary
+  slightly by model) which browsers can't play without a container.
+- **Route always returns real bytes or a real JSON error** (`/api/companion/speak`) — never a fake/empty
+  success. The client (`gemini-speech-client.ts`) treats anything short of `ok` + `audio/*` as failure and
+  falls back to `speechSynthesis`, so voice is never silently lost if Gemini is slow/down/unconfigured.
+- **Test-safety seam: the player is NOT auto-installed.** Unlike the browser voice provider (safe to
+  lazily construct — an unsupported browser just no-ops), a `GeminiSpeechPlayer` always makes a real
+  network call when asked to speak. Auto-installing it inside `CompanionExperience` would make every
+  existing test that starts a call attempt a real (doomed) fetch, since tests render that component
+  directly. Instead, `getGeminiSpeechPlayer()` returns `null` until something explicitly installs one,
+  and the real app does that via `<GeminiVoiceBootstrap>`, mounted only from `/companion`'s page — a
+  sibling `CompanionExperience` never sees in tests. Zero existing test files needed to change.
+- **Live-tested end-to-end** through the actual running Next.js server (not just a standalone script)
+  for both English and Simplified Chinese, against the real Gemini API — both produced valid, correctly-
+  formatted WAV audio (confirmed via `file`/hex-dump, not just byte counts).
+
+---
+
+# Decisions (spoken medicine name/strength — an alternative to the camera)
+
+Request: "what if i want to spell out the medicine i have in my hand or if i want to say out loud my
+pronunciation may be off? so i dont always have to use the camera." Interpreted as: give the camera-guidance
+step a voice-driven way to fill the *existing* typed-label form, since some people would rather speak the
+name and strength than hold a label to the camera, or worry the browser will mishear a spoken word.
+
+- **Reuses the existing typed-label path exactly — no new matcher, no new gate.** A spoken utterance is
+  parsed (`src/lib/label/spoken-label.ts`, pure regex, no model) into the same `{medicineName, strength}`
+  shape the typed form produces, validated with the same `parseTypedLabel`, and dispatched as the same
+  `SUBMIT_LABEL` event. It goes through the unmodified deterministic matcher in `match-record.ts` — this
+  feature only adds an input modality, never a new way of deciding a match.
+- **Deliberately not fuzzy.** The concern that speech recognition "may be off" was explicitly not answered
+  by loosening the name match. Two real medicines can sound alike (hydroxyzine/hydralazine is the textbook
+  example); guessing past a mishearing would be a safety regression, not an accessibility fix. If the name
+  comes through garbled, the deterministic matcher correctly returns a no-match/safety outcome, same as a
+  garbled camera read would — the person can try again, spell it out via the keyboard (already the fallback
+  for a bad camera read), or use the demo label.
+- **Two-turn "slot filling" for a name said without a strength.** Per a follow-up request mid-implementation,
+  saying only the name ("It's Metformin") no longer falls to a generic "didn't catch that" — the companion
+  asks specifically for the strength next ("What strength does the label say?"), and the *next* utterance
+  only needs to supply that, combined with the remembered name. The name is held in a component-local ref
+  (`use-conversation.ts`), not session state — it's a two-turn conversational nicety, not something the
+  reducer needs to know about, and it's cleared the moment the state leaves `camera-guidance` or a label is
+  submitted.
+- **Bare-name detection is conservative on purpose.** `extractSpokenMedicineNameOnly` declines anything that
+  reads as a question (what/how/when/…), anything longer than five words, and anything already caught by
+  hedge/negative/short-affirm — so it only fires on a plausible short declarative name, and everything else
+  still falls through to the existing "unclear" handling rather than being mistaken for a name.
+- **Discoverability**: a short hint line ("You can also just tell me the medicine name and strength…") was
+  added to the camera-guidance card so the capability isn't voice-only tribal knowledge.

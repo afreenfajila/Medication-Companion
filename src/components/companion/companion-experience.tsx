@@ -2,49 +2,53 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CallFooter } from "@/components/ui/call-footer";
-import { SoundToggle } from "@/components/ui/sound-toggle";
+import { CompanionOrb } from "@/components/ui/companion-orb";
 import { PhoneShell, ScreenBody } from "@/components/ui/shell";
-import { resolveExplanation } from "@/lib/content/explanation";
-import { requestLabelAnalysis } from "@/lib/label/analyze-client";
-import { clearPendingImage, peekPendingImage } from "@/lib/label/pending-image";
+import { rephraseResponseSchema } from "@/lib/api/schemas";
+import { resolveExplanation, withRephrasedFlavor } from "@/lib/content/explanation";
+import type { RephraseFieldSet } from "@/lib/content/rephrase-guard";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { requestLabelAnalysis } from "@/lib/label/analyze-client";
 import { clearPendingImage, peekPendingImage } from "@/lib/label/pending-image";
 import { dispatch, useSession } from "@/lib/session/session-store";
 import { guardRequestedState, pathForState } from "@/lib/session/state-machine";
+import { getGeminiSpeechPlayer } from "@/lib/voice/gemini-speech-player";
 import { speakableText } from "@/lib/voice/speakable";
 import { getVoiceProvider, useVoiceCapabilities } from "@/lib/voice/use-voice";
 import { AnalyzingScreen, CameraGuidanceScreen, CameraPermissionScreen } from "./camera-screens";
+import { CallFeed } from "./call-feed";
 import { CompleteScreen } from "./complete-screen";
 import { ConfirmScreen } from "./confirm-screen";
 import { ExplainScreen } from "./explain-screen";
-import { ListeningScreen } from "./listening-screen";
+import { ListeningActions } from "./listening-screen";
 import { SafetyScreen } from "./safety-screen";
 import { DisclosureFooter, ScreenHeader } from "./screen-chrome";
 import { StartScreen } from "./start-screen";
+import { useCallFeed } from "./use-call-feed";
 import { useVoiceConversation } from "./use-conversation";
 import { VoiceBar } from "./voice-bar";
-import { VoiceCallToggle } from "./voice-call-toggle";
 
 const ANALYSIS_DELAY_MS = 900;
 
 /**
- * Renders whatever the session state machine says. The URL never decides:
- * `?state=` is compared to the authoritative state and rewritten to match, so
- * `/companion?state=explain` without a confirmed match simply shows start.
+ * The whole call — from "Call with companion" to "End call" — happens on this
+ * one screen. There is no full-screen swap for the camera, confirmation,
+ * explanation, or safety steps: a running conversation transcript (`CallFeed`)
+ * scrolls above, and whatever the current step needs (camera preview, decision
+ * buttons, language control, safety actions...) stays pinned just above the
+ * call controls. Only the pre-call landing (`StartScreen`) is a different
+ * layout, since a call cannot be "in progress" before it starts.
+ *
+ * The URL never decides the state: `?state=` is compared to the authoritative
+ * session state and rewritten to match, so `/companion?state=explain` without
+ * a confirmed match simply shows start.
  */
 export function CompanionExperience() {
   const session = useSession();
   const language = session.language;
   const t = useCallback((key: CopyKey) => translate(language, key), [language]);
   const mainRef = useRef<HTMLElement>(null);
-
-  // Spoken replies: OFF until the user turns sound on, and only during an active call.
-  const caps = useVoiceCapabilities();
-  const [soundOn, setSoundOn] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
-  const sound = soundOn && session.callActive && caps.synthesis;
-  const previousState = useRef(session.state);
+  const wasCallActive = useRef(session.callActive);
 
   // Keep the URL a reflection of the session, never the other way round.
   useEffect(() => {
@@ -82,97 +86,128 @@ export function CompanionExperience() {
     return () => window.clearTimeout(id);
   }, [session.state, pendingMode, sessionId]);
 
-  // Move focus to the new screen when the state changes (screen-reader friendly).
+  // Move focus once at the big transitions (into/out of a call) — not on every
+  // step within it, since that would fight the continuous "one call" feeling.
   useEffect(() => {
-    if (previousState.current === session.state) return;
-    previousState.current = session.state;
+    if (wasCallActive.current === session.callActive) return;
+    wasCallActive.current = session.callActive;
     mainRef.current?.focus({ preventScroll: true });
-    mainRef.current?.scrollTo?.({ top: 0 });
-  }, [session.state]);
+  }, [session.callActive]);
 
   const explanation = resolveExplanation(session, language);
+
+  // Optional visual-only polish: an English rephrase of the non-dosing "flavour"
+  // text (title/purpose/caution/prompt), fetched once per confirmed medicine and
+  // validated server-side before it ever reaches here (see rephrase-guard.ts).
+  // The instruction, the source line, and everything SPOKEN aloud always use the
+  // exact approved text below — this never touches what the companion says.
+  const [rephrased, setRephrased] = useState<{ key: string; fields: RephraseFieldSet } | null>(null);
+  const candidateId = session.candidate?.candidateId ?? null;
+  const rephraseKey = `${language}:${candidateId ?? ""}`;
+  const rephrasedFields = rephrased && rephrased.key === rephraseKey ? rephrased.fields : null;
+
+  useEffect(() => {
+    if (session.state !== "explain" || language !== "en" || !candidateId) return;
+    const key = `${language}:${candidateId}`;
+    const controller = new AbortController();
+    fetch("/api/companion/rephrase", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.sessionId }),
+      signal: controller.signal,
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        const parsed = rephraseResponseSchema.safeParse(json);
+        if (parsed.success && parsed.data.ok) setRephrased({ key, fields: parsed.data.data.fields });
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [session.state, language, candidateId, session.sessionId]);
+
+  const displayedExplanation = explanation
+    ? withRephrasedFlavor(explanation, language, rephrasedFields)
+    : null;
 
   // Exactly the approved on-screen wording; explanation text only with a confirmed match.
   const spoken = speakableText(session, t, explanation);
 
-<<<<<<< HEAD
-  // One "Voice call" control turns BOTH ears (recognition) and mouth (synthesis) on
-  // together, like answering a call — no further taps needed for a normal turn.
-  // It is off by default; nothing about the mic or speaker starts until this tap.
+  // Like answering a phone call: tapping "Call with companion" IS the user action
+  // that starts both ears (recognition) and mouth (synthesis) — no second tap, no
+  // visible toggle. Nothing about the mic/speaker runs before that tap, and ending
+  // the call stops both; the next call starts the same way, automatically.
   const caps = useVoiceCapabilities();
-  const [voiceCallOn, setVoiceCallOn] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  // Recognition is what makes it a two-way "call" (spoken replies alone are just
-  // a read-aloud toggle, which isn't offered as its own control in this build).
-  const voiceAvailable = caps.recognition;
-  const active = voiceCallOn && session.callActive;
-  const canSpeak = active && caps.synthesis;
+  // Gemini speech doesn't need browser speechSynthesis support at all; the
+  // browser-TTS fallback inside speakNow() already no-ops safely if absent.
+  const canSpeak = session.callActive;
 
-  // "Next call starts quiet again": derived state, not an effect (React's
-  // documented "adjusting state when a prop changes" pattern) — reset
-  // synchronously during render when a new call begins.
-  const [seenCallCount, setSeenCallCount] = useState(session.callCount);
-  if (seenCallCount !== session.callCount) {
-    setSeenCallCount(session.callCount);
-    if (voiceCallOn) setVoiceCallOn(false);
-  }
-
-=======
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   useEffect(() => {
-    const provider = getVoiceProvider();
-    if (!provider) return;
-    return provider.onSpeakingChange(setSpeaking);
+    const offs = [
+      getVoiceProvider()?.onSpeakingChange(setSpeaking),
+      getGeminiSpeechPlayer()?.onSpeakingChange(setSpeaking),
+    ].filter((off): off is () => void => Boolean(off));
+    return () => offs.forEach((off) => off());
+  }, []);
+
+  // Gemini renders the exact same approved text as audio, so the voice sounds
+  // the same for every reviewer regardless of which browser/OS they're on,
+  // instead of depending on whatever speech-synthesis voices happen to be
+  // installed. It never composes what is said — only the renderer differs.
+  // Any failure (no key, network, blocked autoplay) falls back to the
+  // browser's own speechSynthesis, which always still works.
+  const speakNow = useCallback((text: string, lang: typeof language) => {
+    const player = getGeminiSpeechPlayer();
+    if (!player) {
+      getVoiceProvider()?.speak(text, lang);
+      return;
+    }
+    player.speak(text, lang).then((ok) => {
+      if (!ok) getVoiceProvider()?.speak(text, lang);
+    });
   }, []);
 
   useEffect(() => {
-    const provider = getVoiceProvider();
-    if (!provider) return;
-<<<<<<< HEAD
     if (!canSpeak || !spoken) {
-=======
-    if (!sound || !spoken) {
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
-      provider.stopSpeaking();
+      getGeminiSpeechPlayer()?.stop();
+      getVoiceProvider()?.stopSpeaking();
       return;
     }
-    provider.speak(spoken, language);
-    return () => provider.stopSpeaking();
-<<<<<<< HEAD
-  }, [canSpeak, spoken, language, session.repeatCount]);
+    speakNow(spoken, language);
+    return () => {
+      getGeminiSpeechPlayer()?.stop();
+      getVoiceProvider()?.stopSpeaking();
+    };
+  }, [canSpeak, spoken, language, session.repeatCount, speakNow]);
 
   const conversation = useVoiceConversation({
     session,
-    soundActive: active,
+    soundActive: session.callActive,
     speaking: speaking && canSpeak,
     cameraLive: session.cameraMode === "preview",
-    speakNotice: (text) => canSpeak && getVoiceProvider()?.speak(text, language),
+    speakNotice: (text) => canSpeak && speakNow(text, language),
     t,
   });
-  const showVoiceBar = active && caps.recognition && session.callActive && session.state !== "start";
-=======
-  }, [sound, spoken, language, session.repeatCount]);
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
+  const showVoiceBar = session.callActive && caps.recognition && session.state !== "start";
 
-  let screen: React.ReactNode;
+  // The one running transcript for the whole call — see use-call-feed.ts.
+  const feed = useCallFeed(session, t, displayedExplanation);
+  const orbState = speaking ? "speaking" : conversation.listening ? "listening" : "idle";
+
+  let pinnedActions: React.ReactNode = null;
   switch (session.state) {
     case "listening":
-      screen = (
-        <ListeningScreen
+      pinnedActions = (
+        <ListeningActions
           t={t}
           session={session}
-<<<<<<< HEAD
-          orbState={speaking ? "speaking" : conversation.listening ? "listening" : "idle"}
-=======
-          speaking={speaking}
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
           onSend={(text) => dispatch({ type: "USER_MESSAGE", text })}
           onSelectRoute={(route) => dispatch({ type: "SELECT_ROUTE", route })}
         />
       );
       break;
     case "camera-permission":
-      screen = (
+      pinnedActions = (
         <CameraPermissionScreen
           t={t}
           onGrant={() => dispatch({ type: "CAMERA_CONSENT", granted: true })}
@@ -181,7 +216,7 @@ export function CompanionExperience() {
       );
       break;
     case "camera-guidance":
-      screen = (
+      pinnedActions = (
         <CameraGuidanceScreen
           t={t}
           mode={session.cameraMode ?? "fallback"}
@@ -192,10 +227,10 @@ export function CompanionExperience() {
       );
       break;
     case "analyzing":
-      screen = <AnalyzingScreen t={t} />;
+      pinnedActions = <AnalyzingScreen t={t} />;
       break;
     case "confirm-match":
-      screen = session.candidate ? (
+      pinnedActions = session.candidate ? (
         <ConfirmScreen
           t={t}
           candidate={session.candidate}
@@ -212,13 +247,11 @@ export function CompanionExperience() {
       break;
     case "explain":
       // Defensive: the reducer cannot enter explain without a confirmed match.
-      screen = explanation ? (
+      pinnedActions = displayedExplanation ? (
         <ExplainScreen
           t={t}
           language={language}
-          explanation={explanation}
           step={session.explainStep}
-          repeatCount={session.repeatCount}
           onLanguageChange={(l) => dispatch({ type: "SET_LANGUAGE", language: l })}
           onStep={(direction) => dispatch({ type: "EXPLAIN_STEP", direction })}
           onUnderstood={() => dispatch({ type: "UNDERSTOOD" })}
@@ -226,7 +259,7 @@ export function CompanionExperience() {
       ) : null;
       break;
     case "safety":
-      screen = (
+      pinnedActions = (
         <SafetyScreen
           t={t}
           session={session}
@@ -237,40 +270,17 @@ export function CompanionExperience() {
       );
       break;
     case "complete":
-      screen = <CompleteScreen t={t} onAnother={() => dispatch({ type: "NEW_MEDICINE" })} />;
+      pinnedActions = <CompleteScreen t={t} onAnother={() => dispatch({ type: "NEW_MEDICINE" })} />;
       break;
     case "start":
     default:
-      screen = (
-        <StartScreen
-          t={t}
-          language={language}
-          onCall={() => dispatch({ type: "CALL_START" })}
-          onLanguageChange={(l) => dispatch({ type: "SET_LANGUAGE", language: l })}
-        />
-      );
+      pinnedActions = null;
   }
 
   return (
     <PhoneShell>
       <div lang={language} className="flex min-h-0 flex-1 flex-col">
-        <ScreenHeader
-          t={t}
-          control={
-<<<<<<< HEAD
-            session.callActive && voiceAvailable ? (
-              <VoiceCallToggle on={voiceCallOn} onToggle={() => setVoiceCallOn((v) => !v)} t={t} />
-=======
-            session.callActive && caps.synthesis ? (
-              <SoundToggle
-                on={sound}
-                onToggle={() => setSoundOn((v) => !v)}
-                labels={{ on: t("soundOn"), off: t("soundOff"), group: t("soundLabel") }}
-              />
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
-            ) : undefined
-          }
-        />
+        <ScreenHeader t={t} />
         <ScreenBody>
           <main
             ref={mainRef}
@@ -278,9 +288,27 @@ export function CompanionExperience() {
             data-screen={session.state}
             className="flex flex-1 flex-col outline-none"
           >
-            {screen}
+            {session.state === "start" ? (
+              <StartScreen
+                t={t}
+                language={language}
+                onCall={() => dispatch({ type: "CALL_START" })}
+                onLanguageChange={(l) => dispatch({ type: "SET_LANGUAGE", language: l })}
+              />
+            ) : (
+              <div className="flex flex-1 flex-col gap-4 py-2">
+                <h1 className="sr-only">{t("callWithCompanion")}</h1>
+                <div className="flex flex-col items-center gap-1">
+                  <CompanionOrb size="sm" state={orbState} />
+                </div>
+                <CallFeed entries={feed} interim={conversation.interim} t={t} />
+              </div>
+            )}
           </main>
         </ScreenBody>
+        {pinnedActions && (
+          <div className="border-t border-line bg-canvas px-6 pb-3 pt-4">{pinnedActions}</div>
+        )}
         {showVoiceBar && <VoiceBar view={conversation} t={t} />}
         {session.callActive && (
           <CallFooter

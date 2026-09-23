@@ -2,20 +2,12 @@
 
 import { Camera, FileImage, ScanLine, SwitchCamera } from "lucide-react";
 import Image from "next/image";
-<<<<<<< HEAD
 import { useEffect, useRef, useState } from "react";
-=======
-import { useRef, useState } from "react";
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
 import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
 import { CameraPreview } from "@/components/ui/camera-preview";
-import { CompanionOrb } from "@/components/ui/companion-orb";
 import { samplePhotos } from "@/lib/content/samples";
 import { setPendingImage } from "@/lib/label/pending-image";
-<<<<<<< HEAD
 import { registerVoiceAction } from "@/lib/voice/actions";
-=======
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
 import { validateImage } from "@/lib/label/image-validation";
 import type { CameraIssue, CameraMode } from "@/lib/session/state-machine";
 import type { LabelInput } from "@/types/content";
@@ -23,7 +15,7 @@ import { CameraLive, type CameraFacing } from "./camera-live";
 import { StateLabel, type T } from "./screen-chrome";
 import { TypedLabelForm } from "./typed-label-form";
 
-/** 03-label-camera-permission. Explain first; approve and refuse are equally tappable. */
+/** 03-label-camera-permission, as the pinned card for that step. Approve and refuse are equally tappable. */
 export function CameraPermissionScreen({
   t,
   onGrant,
@@ -34,23 +26,14 @@ export function CameraPermissionScreen({
   onDecline: () => void;
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center gap-6 py-4 text-center">
-      <div className="flex flex-1 flex-col items-center justify-center gap-6">
-        <CompanionOrb state="camera" />
-        <div>
-          <StateLabel>{t("cameraPermissionLabel")}</StateLabel>
-          <h1 className="mt-2 text-[28px] font-bold leading-tight">
-            {t("cameraPermissionHeading")}
-          </h1>
-          <p className="mx-auto mt-3 max-w-[21rem] text-lg leading-normal">
-            {t("cameraPermissionBody")}
-          </p>
-          <p className="mx-auto mt-3 max-w-[21rem] text-[15px] text-navy-700">
-            {t("cameraPurpose")}
-          </p>
-        </div>
+    <div className="flex flex-col gap-4">
+      <div className="text-center">
+        <StateLabel>{t("cameraPermissionLabel")}</StateLabel>
+        <h2 className="mt-1 text-[22px] font-bold leading-tight">{t("cameraPermissionHeading")}</h2>
+        <p className="mx-auto mt-2 max-w-[21rem] text-lg leading-normal">{t("cameraPermissionBody")}</p>
+        <p className="mx-auto mt-2 max-w-[21rem] text-[15px] text-navy-700">{t("cameraPurpose")}</p>
       </div>
-      <div className="flex w-full flex-col gap-3">
+      <div className="flex flex-col gap-3">
         <PrimaryButton onClick={onGrant} icon={<SwitchCamera className="h-5 w-5" aria-hidden="true" />}>
           {t("switchCamera")}
         </PrimaryButton>
@@ -61,11 +44,13 @@ export function CameraPermissionScreen({
 }
 
 /**
- * 04-label-camera-guidance. With consent, shows a LOCAL camera preview (rear
- * camera by default, flip where supported). A still is captured only when the
- * user taps the button. If the camera is declined/blocked/absent — or simply not
- * wanted — the sample-photo "upload", typed details and demo label all work, so
- * the demo never depends on hardware.
+ * 04-label-camera-guidance, as the pinned card for that step — a smaller inline
+ * panel on the SAME call screen, not a separate full-screen camera view. With
+ * consent, shows a LOCAL camera preview (rear camera by default, flip where
+ * supported). A still is captured only when the user taps the button. If the
+ * camera is declined/blocked/absent — or simply not wanted — the sample-photo
+ * "upload", typed details and demo label all work, so the demo never depends
+ * on hardware.
  */
 export function CameraGuidanceScreen({
   t,
@@ -121,7 +106,6 @@ export function CameraGuidanceScreen({
     );
   };
 
-<<<<<<< HEAD
   // A spoken "take a photo" runs exactly the button's handler (only while the camera is live).
   const captureRef = useRef(capture);
   useEffect(() => {
@@ -133,8 +117,6 @@ export function CameraGuidanceScreen({
     return () => registerVoiceAction("capture", null);
   }, [preview, live]);
 
-=======
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   const chooseSample = async (src: string) => {
     setError(null);
     setBusy(true);
@@ -178,21 +160,21 @@ export function CameraGuidanceScreen({
   );
 
   return (
-    <div className="flex flex-1 flex-col gap-4 py-2">
+    <div className="flex flex-col gap-4">
       {preview ? (
         <>
           <div className="text-center">
             <StateLabel>{t("cameraGuidanceLabel")}</StateLabel>
-            <h1 className="mt-1 text-[26px] font-bold leading-tight">
-              {t("cameraGuidanceHeading")}
-            </h1>
+            <h2 className="mt-1 text-[20px] font-bold leading-tight">{t("cameraGuidanceHeading")}</h2>
           </div>
+          {/* A smaller inline panel — part of this same call screen, not a full takeover. */}
           <CameraPreview
             live={live}
             statusLabel={t("cameraPermissionLabel")}
             badgeLabel={t("oneMedicineOnly")}
             youLabel={t("you")}
             summary={t("cameraLiveSummary")}
+            className="max-h-64"
             feed={
               <CameraLive
                 key={facing}
@@ -227,22 +209,19 @@ export function CameraGuidanceScreen({
           </PrimaryButton>
         </>
       ) : (
-        <div className="flex flex-col items-center gap-4 pt-4 text-center">
-          <CompanionOrb size="sm" state="camera" />
-          <h1 className="text-[26px] font-bold leading-tight">{heading}</h1>
-          <p className="max-w-[21rem] text-lg leading-normal">{body}</p>
+        <div className="text-center">
+          <h2 className="text-[20px] font-bold leading-tight">{heading}</h2>
+          <p className="mx-auto mt-1 max-w-[21rem] text-lg leading-normal">{body}</p>
         </div>
       )}
 
       {error && (
-<<<<<<< HEAD
         <p role="alert" className="text-center text-base font-medium text-danger-800">
-=======
-        <p role="alert" className="text-center text-base font-medium text-danger-700">
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
           {error}
         </p>
       )}
+
+      <p className="mx-auto max-w-[21rem] text-center text-[15px] text-navy-700">{t("spokenLabelHint")}</p>
 
       <div role="group" aria-label={t("moreWays")} className="flex flex-col gap-3">
         {!preview && demoButton(PrimaryButton)}
@@ -260,7 +239,7 @@ export function CameraGuidanceScreen({
             aria-label={t("samplePickerHeading")}
             className="fade-in flex flex-col gap-3 rounded-lg border border-line bg-surface p-4"
           >
-            <h2 className="text-[20px] font-bold leading-tight">{t("samplePickerHeading")}</h2>
+            <h3 className="text-[18px] font-bold leading-tight">{t("samplePickerHeading")}</h3>
             <p className="text-sm leading-snug text-navy-700">{t("samplePickerNote")}</p>
             <ul className="flex flex-col gap-2">
               {samplePhotos.map((p) => (
@@ -300,19 +279,13 @@ export function CameraGuidanceScreen({
   );
 }
 
-/** Brief "checking" beat between label submission and the result. */
+/** Brief "checking" beat between label submission and the result — an inline note, not a full screen. */
 export function AnalyzingScreen({ t }: { t: T }) {
   return (
-    <div
-      role="status"
-      className="flex flex-1 flex-col items-center justify-center gap-6 py-4 text-center"
-    >
-      <CompanionOrb state="camera" />
-      <div>
-        <StateLabel>{t("analyzingLabel")}</StateLabel>
-        <h1 className="mt-2 text-[28px] font-bold leading-tight">{t("analyzingHeading")}</h1>
-        <p className="mx-auto mt-3 max-w-[21rem] text-lg leading-normal">{t("analyzingBody")}</p>
-      </div>
+    <div role="status" className="flex flex-col items-center gap-1 py-2 text-center">
+      <StateLabel>{t("analyzingLabel")}</StateLabel>
+      <h2 className="text-[20px] font-bold leading-tight">{t("analyzingHeading")}</h2>
+      <p className="mx-auto max-w-[21rem] text-base leading-normal text-navy-700">{t("analyzingBody")}</p>
     </div>
   );
 }

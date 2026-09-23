@@ -36,9 +36,9 @@ export function SafetyCard({
         <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
         <span>{label}</span>
       </div>
-      <h1 id="safety-heading" className="mt-2 text-[26px] font-bold leading-tight">
+      <h2 id="safety-heading" className="mt-2 text-[22px] font-bold leading-tight">
         {heading}
-      </h1>
+      </h2>
       {reason && <p className="mt-3 text-lg leading-snug">{reason}</p>}
       <p className="mt-3 text-lg leading-snug">{body}</p>
       {children}

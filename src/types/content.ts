@@ -41,6 +41,7 @@ export type UserIntent =
   | "start-call"
   | "unknown-medicine-question"
   | "schedule-question"
+  | "list-prescriptions" // extension: "what are my prescriptions?" — distinct from identifying an unlabelled pill
   | "show-medicine"
   | "ask-schedule"
   | "repeat"

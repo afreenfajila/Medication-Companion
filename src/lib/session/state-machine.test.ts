@@ -74,6 +74,39 @@ describe("conversation routing and contextual actions", () => {
     }
   });
 
+  it("'what are my prescriptions' names what's on file (from the record), distinct from identifying a pill", () => {
+    for (const text of [
+      "What are my prescriptions?",
+      "What medicines do I have?",
+      "what am I prescribed",
+      "list my medications",
+      "我的处方是什么",
+      "我在吃什么药",
+    ]) {
+      const r = routeMessage(text, none);
+      expect(r.intent).toBe("list-prescriptions");
+      expect(r.assistantKey).toBe("prescriptionsListed");
+      expect(r.contextualActions).toEqual(["show-medicine"]);
+      // Naming what's on file is not the same as explaining it — no shortcut to the gated content.
+      expect(r.toExplain).toBeUndefined();
+      expect(r.safetyReason).toBeUndefined();
+    }
+  });
+
+  it("'what are my prescriptions' is checked before the looser unknown-medicine pattern", () => {
+    // "what medicine(s)" alone would otherwise match UNKNOWN_MEDICINE first.
+    expect(routeMessage("What medicines do I have?", none).intent).toBe("list-prescriptions");
+    expect(routeMessage("What medicine is this?", none).intent).toBe("unknown-medicine-question");
+  });
+
+  it("an off-topic question (e.g. the weather) is redirected to the two supported actions, not answered", () => {
+    const r = routeMessage("What will happen if I ask about the weather today?", none);
+    expect(r.intent).toBe("general");
+    expect(r.assistantKey).toBe("clarificationPrompt");
+    expect(r.contextualActions).toEqual(["show-medicine", "ask-schedule"]);
+    expect(r.safetyReason).toBeUndefined();
+  });
+
   it("schedule question without a confirmed record → approved clarification with both actions", () => {
     const r = routeMessage("When do I take my medicine?", none);
     expect(r.intent).toBe("schedule-question");

@@ -1,5 +1,6 @@
 import { metforminPurposeEn, metforminRecord, recordSource } from "./demo-record";
 import { candidateIdFor } from "@/lib/matching/match-record";
+import type { RephraseFieldSet } from "./rephrase-guard";
 import type {
   CandidateDisplay,
   LocalizedText,
@@ -60,6 +61,31 @@ export function resolveExplanation(
       sourceLine: pick(e.sourceLine, language),
       caution: pick(e.caution, language),
       confirmationPrompt: pick(e.confirmationPrompt, language),
+    },
+  };
+}
+
+/**
+ * Optionally swaps in a Claude-rephrased (and already-validated) version of the
+ * non-dosing "flavour" text. English only — Chinese keeps the reviewed static
+ * translation, per CLAUDE.md's preference for local translations where they
+ * exist. `instruction` and `sourceLine` are never touched by this function.
+ */
+export function withRephrasedFlavor(
+  view: ExplanationView,
+  language: UiLanguage,
+  fields: Partial<RephraseFieldSet> | null,
+): ExplanationView {
+  if (language !== "en" || !fields) return view;
+  return {
+    ...view,
+    explanation: {
+      ...view.explanation,
+      title: fields.title ?? view.explanation.title,
+      purpose: fields.purpose ?? view.explanation.purpose,
+      instructionIntro: fields.instructionIntro ?? view.explanation.instructionIntro,
+      caution: fields.caution ?? view.explanation.caution,
+      confirmationPrompt: fields.confirmationPrompt ?? view.explanation.confirmationPrompt,
     },
   };
 }

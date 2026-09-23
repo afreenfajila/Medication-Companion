@@ -61,6 +61,13 @@ export function useVoiceConversation(opts: {
   const [paused, setPaused] = useState(false);
   const [notice, setNotice] = useState<CopyKey | null>(null);
   const silentTurns = useRef(0);
+  // A medicine name said aloud without its strength yet ("It's Metformin"),
+  // remembered only long enough for the follow-up turn ("500 milligrams") to
+  // complete it — see commands.ts's camera-guidance case.
+  const pendingSpokenName = useRef<string | null>(null);
+  useEffect(() => {
+    if (session.state !== "camera-guidance") pendingSpokenName.current = null;
+  }, [session.state]);
 
   // Latest values for the long-lived provider callbacks.
   const latest = useRef({ session, speaking, speakNotice, t, cameraLive: opts.cameraLive, soundActive });
@@ -68,7 +75,9 @@ export function useVoiceConversation(opts: {
     latest.current = { session, speaking, speakNotice, t, cameraLive: opts.cameraLive, soundActive };
   });
 
-  const enabled = session.callActive && caps.recognition;
+  // `soundActive` is the explicit "Start voice call" tap — the mic is never
+  // opened, and no permission prompt appears, before that user action.
+  const enabled = session.callActive && caps.recognition && soundActive;
   const active = enabled && !muted && !paused && session.state !== "analyzing";
 
   const handleTranscript = useCallback((text: string) => {
@@ -84,11 +93,21 @@ export function useVoiceConversation(opts: {
       candidateId: s.candidate?.candidateId ?? null,
       explainStep: s.explainStep,
       cameraLive: latest.current.cameraLive,
+      pendingSpokenMedicineName: pendingSpokenName.current,
     });
-    if (intent.kind === "event") dispatch(intent.event);
-    else if (intent.kind === "message") dispatch({ type: "USER_MESSAGE", text: text.slice(0, 300) });
-    else if (intent.kind === "ui") runVoiceAction(intent.action);
-    else {
+    if (intent.kind === "event") {
+      pendingSpokenName.current = null;
+      dispatch(intent.event);
+    } else if (intent.kind === "message") {
+      pendingSpokenName.current = null;
+      dispatch({ type: "USER_MESSAGE", text: text.slice(0, 300) });
+    } else if (intent.kind === "ui") {
+      runVoiceAction(intent.action);
+    } else if (intent.kind === "need-strength") {
+      pendingSpokenName.current = intent.medicineName;
+      setNotice("askStrengthForSpokenLabel");
+      if (soundOn) say(tr("askStrengthForSpokenLabel"));
+    } else {
       setNotice("voiceDidntCatch");
       if (soundOn) say(tr("voiceDidntCatch"));
     }

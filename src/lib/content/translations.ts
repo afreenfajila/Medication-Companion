@@ -46,6 +46,8 @@ const en = {
     "Would you like to show me a medicine label, or ask about your medicine schedule?",
   scheduleNeedsRecord:
     "To talk about your schedule, I first need to check a medicine against your record. Would you like to show me the medicine label?",
+  prescriptionsListed:
+    "Your demo pharmacy record shows one medicine on file: Metformin 500 mg. Would you like to show me the label so I can explain it?",
   showMedicine: "Show medicine",
   askSchedule: "Ask about my schedule",
   youSay: "Mei Ling says:",
@@ -53,7 +55,6 @@ const en = {
   typeLabel: "Type your question",
   typePlaceholder: "For example: What is this medicine for?",
   send: "Send",
-<<<<<<< HEAD
   voiceListeningNow: "I’m listening… please speak now.",
   voiceSpeaking: "Speaking…",
   voiceMicOn: "Mic on",
@@ -63,11 +64,10 @@ const en = {
     "I’m still here. Tap “Mic on” when you’re ready to talk, or type instead.",
   voiceDidntCatch:
     "Sorry, I didn’t catch that. Please say it again, or use the buttons.",
-=======
-  voiceTapToSpeak: "Tap to speak",
-  voiceStop: "Stop listening",
-  voiceListeningNow: "I’m listening… please speak now.",
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
+  askStrengthForSpokenLabel:
+    "Got it. What strength does the label say — for example, 500 milligrams?",
+  spokenLabelHint:
+    "You can also just tell me the medicine name and strength — for example, “It’s Metformin, 500 milligrams.”",
   voicePrivacy:
     "Your browser may send your voice to its own speech service to turn it into text. Typing works the same way.",
   voiceUnsupported: "Voice input isn’t available in this browser. Typing works the same way.",
@@ -77,14 +77,6 @@ const en = {
   voiceNoMic: "I couldn’t find a microphone. You can keep typing.",
   voiceNetwork: "The voice service couldn’t be reached. You can keep typing.",
   voiceUnknown: "Voice didn’t work this time. You can keep typing.",
-<<<<<<< HEAD
-  voiceCallStart: "Start voice call",
-  voiceCallOn: "Voice call on",
-=======
-  soundOn: "Sound on",
-  soundOff: "Sound off",
-  soundLabel: "Read replies aloud",
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   anotherMedicineGuide: "Of course. Tell me what you would like to check next.",
 
   // Camera
@@ -248,6 +240,8 @@ const zhHans: Copy = {
   clarificationPrompt: "您想给我看药物标签，还是询问您的服药时间？",
   scheduleNeedsRecord:
     "要谈服药时间，我需要先对照您的记录核对药物。您想给我看药物标签吗？",
+  prescriptionsListed:
+    "您的示范药房记录显示您有一种药物：二甲双胍 500 毫克。您想给我看标签，让我为您解释吗？",
   showMedicine: "显示药物",
   askSchedule: "询问我的服药时间",
   youSay: "Mei Ling 说：",
@@ -255,7 +249,6 @@ const zhHans: Copy = {
   typeLabel: "输入您的问题",
   typePlaceholder: "例如：这个药是做什么用的？",
   send: "发送",
-<<<<<<< HEAD
   voiceListeningNow: "我在听…请说话。",
   voiceSpeaking: "正在说话…",
   voiceMicOn: "麦克风已开",
@@ -263,11 +256,9 @@ const zhHans: Copy = {
   voiceMicLabel: "麦克风",
   voicePaused: "我还在这里。准备好说话时，请点“麦克风已开”，或改用输入文字。",
   voiceDidntCatch: "抱歉，我没听清楚。请再说一遍，或使用按钮。",
-=======
-  voiceTapToSpeak: "点击说话",
-  voiceStop: "停止聆听",
-  voiceListeningNow: "我在听…请说话。",
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
+  askStrengthForSpokenLabel: "好的。标签上写的是多少剂量？例如：500 毫克。",
+  spokenLabelHint:
+    "您也可以直接说出药物名称和剂量——例如：“是二甲双胍，500 毫克。”",
   voicePrivacy:
     "您的浏览器可能会把您的声音发送到它自己的语音服务，转换成文字。输入文字的效果相同。",
   voiceUnsupported: "此浏览器不支持语音输入。输入文字的效果相同。",
@@ -276,14 +267,6 @@ const zhHans: Copy = {
   voiceNoMic: "我找不到麦克风。您可以继续输入文字。",
   voiceNetwork: "无法连接语音服务。您可以继续输入文字。",
   voiceUnknown: "这次语音没有成功。您可以继续输入文字。",
-<<<<<<< HEAD
-  voiceCallStart: "开始语音通话",
-  voiceCallOn: "语音通话中",
-=======
-  soundOn: "声音已开",
-  soundOff: "声音已关",
-  soundLabel: "朗读回复",
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   anotherMedicineGuide: "好的。请告诉我接下来想查看什么。",
 
   cameraPermissionLabel: "摄像头权限",

@@ -81,11 +81,7 @@ export function TypedLabelForm({ t, onSubmit }: { t: T; onSubmit: (input: LabelI
       </div>
 
       {invalid && (
-<<<<<<< HEAD
         <p id={ids.err} role="alert" className="text-base font-medium text-danger-800">
-=======
-        <p id={ids.err} role="alert" className="text-base font-medium text-danger-700">
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
           {t("typedRequired")}
         </p>
       )}

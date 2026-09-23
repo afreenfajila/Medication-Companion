@@ -2,7 +2,6 @@
 
 import { Camera, Phone, Stethoscope, UserRound } from "lucide-react";
 import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
-import { CompanionOrb } from "@/components/ui/companion-orb";
 import { DemoNotice } from "@/components/ui/notices";
 import { SafetyCard } from "@/components/ui/safety-card";
 import type { CopyKey } from "@/lib/content/translations";
@@ -19,9 +18,10 @@ const ACTION_ICONS: Record<HelpActionId, React.ReactNode> = {
 };
 
 /**
- * 07-safety-escalation. Says what is uncertain, that no instructions will be
- * shown, and offers human options. Every non-"try again" action is a labelled
- * demo — nothing is called or sent.
+ * 07-safety-escalation, as the pinned card for that step on the same call
+ * screen. Says what is uncertain, that no instructions will be shown, and
+ * offers human options. Every non-"try again" action is a labelled demo —
+ * nothing is called or sent.
  */
 export function SafetyScreen({
   t,
@@ -46,11 +46,7 @@ export function SafetyScreen({
   const label = (key: CopyKey) => t(key);
 
   return (
-    <div className="flex flex-1 flex-col gap-4 py-2">
-      <div className="flex justify-center">
-        <CompanionOrb size="sm" state="safety" />
-      </div>
-
+    <div className="flex flex-col gap-4">
       <SafetyCard
         urgent={view.urgent}
         label={label(view.labelKey)}
@@ -63,7 +59,7 @@ export function SafetyScreen({
         )}
       </SafetyCard>
 
-      <div className="mt-auto flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
         {main && (
           <PrimaryButton icon={ACTION_ICONS[main.id]} onClick={() => run(main.id)}>
             {label(main.labelKey)}

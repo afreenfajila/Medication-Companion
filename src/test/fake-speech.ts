@@ -1,15 +1,11 @@
 import type { RecognitionLike, VoiceEnv } from "@/lib/voice/browser-voice";
 
 /** Controllable fakes for the Web Speech API. */
-<<<<<<< HEAD
 export function createFakeSpeech(
   opts: { recognition?: boolean; synthesis?: boolean; voices?: Array<Record<string, unknown>> } = {},
 ) {
-  const { recognition = true, synthesis = true, voices = [] } = opts;
-=======
-export function createFakeSpeech(opts: { recognition?: boolean; synthesis?: boolean } = {}) {
   const { recognition = true, synthesis = true } = opts;
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
+  let voices = opts.voices ?? [];
 
   const recognitions: FakeRecognition[] = [];
   class FakeRecognition implements RecognitionLike {
@@ -36,6 +32,12 @@ export function createFakeSpeech(opts: { recognition?: boolean; synthesis?: bool
     // --- test drivers
     say(transcript: string, isFinal = true) {
       this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript }], { isFinal })] as never });
+      // Real engines run with continuous=false (see BrowserVoiceProvider.startListening):
+      // a final result auto-ends the recognition, just like a real browser would.
+      if (isFinal) {
+        this.started = false;
+        this.onend?.();
+      }
     }
     fail(error: string) {
       this.onerror?.({ error });
@@ -47,20 +49,15 @@ export function createFakeSpeech(opts: { recognition?: boolean; synthesis?: bool
   class FakeUtterance {
     lang = "";
     rate = 1;
-<<<<<<< HEAD
     voice: unknown = null;
-=======
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
     onstart: (() => void) | null = null;
     onend: (() => void) | null = null;
     onerror: (() => void) | null = null;
     constructor(readonly text: string) {}
   }
   const synth = {
-<<<<<<< HEAD
+    onvoiceschanged: null as (() => void) | null,
     getVoices: () => voices,
-=======
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
     speak: (u: FakeUtterance) => {
       utterances.push(u);
       u.onstart?.();
@@ -81,5 +78,12 @@ export function createFakeSpeech(opts: { recognition?: boolean; synthesis?: bool
         }
       : {}),
   };
-  return { env, recognitions, utterances, synth };
+
+  /** Simulates the browser's voice list finishing its async load some time later. */
+  const deliverVoices = (list: Array<Record<string, unknown>>) => {
+    voices = list;
+    synth.onvoiceschanged?.();
+  };
+
+  return { env, recognitions, utterances, synth, deliverVoices };
 }

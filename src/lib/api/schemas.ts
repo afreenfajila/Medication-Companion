@@ -59,3 +59,37 @@ export const labelAnalyzeFieldsSchema = z.object({
   sessionId: z.string().min(1).max(64),
   inputMode: z.literal("image"),
 });
+
+export const rephraseRequestSchema = z.object({
+  sessionId: z.string().min(1).max(64),
+});
+
+const rephraseFieldSetSchema = z.object({
+  title: z.string(),
+  purpose: z.string(),
+  instructionIntro: z.string(),
+  caution: z.string(),
+  confirmationPrompt: z.string(),
+});
+
+/** Always `ok`: worst case is `source: "fallback"` with the exact approved text. */
+export const rephraseResponseDataSchema = z.object({
+  fields: rephraseFieldSetSchema,
+  source: z.enum(["claude", "fallback"]),
+});
+export type RephraseResponseData = z.infer<typeof rephraseResponseDataSchema>;
+
+export const rephraseResponseSchema = z.discriminatedUnion("ok", [
+  apiSuccessSchema(rephraseResponseDataSchema),
+  apiFailureSchema,
+]);
+
+/**
+ * Speech output: renders already-approved text to audio (never generates
+ * content). Success returns the raw WAV bytes directly (Content-Type:
+ * audio/wav), not a JSON envelope — only failures use the standard envelope.
+ */
+export const speakRequestSchema = z.object({
+  text: z.string().min(1).max(600),
+  language: z.enum(["en", "zh-Hans"]),
+});

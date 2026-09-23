@@ -29,6 +29,15 @@ const SHOW_MEDICINE_REQUEST =
 const SCHEDULE_REQUEST =
   /\b(ask|check|tell|know|see)\b.*\bschedule\b|\b(my|the) (medicine |medication )?schedule\b|\bmedicine schedule\b|问.*服药时间|我的服药时间/i;
 
+// "What are MY prescriptions/medicines" — asking what's on file, not identifying
+// an unlabelled pill in hand. Checked BEFORE the (looser) UNKNOWN_MEDICINE
+// pattern below, which would otherwise swallow it via its bare "what medicine".
+const PRESCRIPTIONS_LIST =
+  // "my medicine(s)/medication(s)" must be PLURAL to count as a list request —
+  // "my medicine" (singular) is ambiguous with an ordinary schedule question
+  // ("when do I take my medicine?") and must fall through to SCHEDULE instead.
+  /\bmy (current )?(prescriptions?|medications|medicines)\b|\bwhat (medicines?|medications?|prescriptions?)\b[^?]*\b(do i have|am i (on|taking|prescribed))\b|\bwhat am i (taking|prescribed)\b|\b(list|show me) my (medicines?|medications?|prescriptions?)\b|我的处方|我在吃(什么|哪些)药|我有(什么|哪些)药|我的药物清单|我吃(什么|哪些)药/i;
+
 const UNKNOWN_MEDICINE =
   /what('?s| is| are) (this|that|it|these)\b|what medicine|which medicine|what.*\bfor\b|is this (my |the |a )?(medicine|pill|tablet)|这是什么|什么药|做什么用/i;
 
@@ -37,9 +46,13 @@ const SCHEDULE =
 
 /**
  * Deterministic in-call routing (site-contract.md §4). Order matters:
- * safety → human help → unknown medicine → schedule → broad/unclear.
+ * safety → human help → explicit route requests → list-my-prescriptions →
+ * unknown medicine → schedule → broad/unclear.
  * "What is this for? When do I take it?" is an unknown-medicine question:
  * we cannot talk about timing until a medicine is identified.
+ * "What are my prescriptions?" is different: it asks what's on file, not to
+ * identify an unlabelled pill — it's answered by name (from the local record),
+ * but still never with dosing details before a confirmed label match.
  */
 export function routeMessage(
   text: string,
@@ -84,6 +97,13 @@ export function routeMessage(
       assistantKey: "clarificationPrompt",
       contextualActions: [],
       route: "ask-schedule",
+    };
+  }
+  if (PRESCRIPTIONS_LIST.test(text)) {
+    return {
+      intent: "list-prescriptions",
+      assistantKey: "prescriptionsListed",
+      contextualActions: ["show-medicine"],
     };
   }
   if (UNKNOWN_MEDICINE.test(text)) {

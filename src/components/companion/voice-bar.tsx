@@ -5,42 +5,46 @@ import type { T } from "./screen-chrome";
 import type { CopyKey } from "@/lib/content/translations";
 
 /**
- * Call status strip: what the companion is doing right now, live captions of what
- * it hears, and a mute button like on a phone call. Status is shown in words, not
- * colour or animation alone.
+ * Call status strip: a plain-text caption of what the companion is doing, and a
+ * small stop/mute control — like the mute icon on a phone call, not a labelled
+ * "button". Status is words, not colour or animation alone (design-standard §7:
+ * audio output needs a visible caption and a stop/mute control).
+ *
+ * Live interim words are shown in the call feed itself (as part of the running
+ * transcript), not repeated here — this strip is just the current mic/speaker
+ * status, or a notice such as "didn't catch that" when there's nothing else to say.
  */
 export function VoiceBar({ view, t }: { view: ConversationView; t: T }) {
-  const status: string | null = view.interim
-    ? view.interim
+  const status: string | null = view.notice
+    ? t(view.notice as CopyKey)
     : view.speaking
       ? t("voiceSpeaking")
       : view.listening
         ? t("voiceListeningNow")
-        : view.notice
-          ? t(view.notice as CopyKey)
-          : null;
+        : null;
 
   return (
-    <div className="flex items-center gap-3 border-t border-line bg-canvas px-4 py-2">
+    <div className="flex items-center gap-2 border-t border-line bg-canvas px-4 py-2">
       <p role="status" aria-live="polite" className="min-h-6 flex-1 text-sm leading-snug text-navy-700">
         {status ?? t("voicePrivacy")}
       </p>
+      {/* Icon only — no pill, no border, no visible label — but a real 44×44 target
+          and a dynamic accessible name ("Mic on"/"Mic off") for assistive tech. */}
       <button
         type="button"
         aria-pressed={view.micOn}
-        aria-label={t("voiceMicLabel")}
         onClick={view.toggleMic}
         className={cn(
-          "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-pill border px-4 text-sm font-bold",
-          view.micOn ? "border-navy-900 bg-navy-900 text-white" : "border-line bg-surface text-navy-900",
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-pill",
+          view.micOn ? "text-navy-900" : "text-slate-600",
         )}
       >
         {view.micOn ? (
-          <Mic className="h-4 w-4" aria-hidden="true" />
+          <Mic className="h-5 w-5" aria-hidden="true" />
         ) : (
-          <MicOff className="h-4 w-4" aria-hidden="true" />
+          <MicOff className="h-5 w-5" aria-hidden="true" />
         )}
-        <span>{view.micOn ? t("voiceMicOn") : t("voiceMicOff")}</span>
+        <span className="sr-only">{view.micOn ? t("voiceMicOn") : t("voiceMicOff")}</span>
       </button>
     </div>
   );

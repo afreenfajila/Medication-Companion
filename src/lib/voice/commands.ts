@@ -1,3 +1,9 @@
+import {
+  extractSpokenMedicineNameOnly,
+  extractSpokenStrength,
+  parseSpokenLabel,
+} from "@/lib/label/spoken-label";
+import { parseTypedLabel } from "@/lib/label/typed-label";
 import { classifySafety } from "@/lib/safety/classify";
 import type { SessionEvent } from "@/lib/session/state-machine";
 import type { CompanionState, ContextualActionId } from "@/types/content";
@@ -12,6 +18,8 @@ export type VoiceIntent =
   | { kind: "event"; event: SessionEvent }
   | { kind: "ui"; action: "capture" }
   | { kind: "message"; text: string }
+  /** A medicine name was said with no strength yet — ask for the strength next. */
+  | { kind: "need-strength"; medicineName: string }
   | { kind: "unclear" };
 
 export type CommandContext = {
@@ -20,6 +28,8 @@ export type CommandContext = {
   candidateId: string | null;
   explainStep: 0 | 1 | 2;
   cameraLive: boolean;
+  /** Set once a spoken name has been heard and we're waiting on its strength. */
+  pendingSpokenMedicineName: string | null;
 };
 
 const normalise = (text: string) =>
@@ -93,7 +103,7 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
       if (affirm && !negative && isShort(n)) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: true } };
       return { kind: "unclear" };
 
-    case "camera-guidance":
+    case "camera-guidance": {
       if (TAKE_PHOTO.test(n) && ctx.cameraLive) return { kind: "ui", action: "capture" };
       if (USE_DEMO.test(n)) {
         return {
@@ -101,7 +111,43 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
           event: { type: "SUBMIT_LABEL", input: { mode: "demo", demoAssetId: "sample_metformin_label" } },
         };
       }
+      // Saying the name and strength out loud ("It's Metformin, 500 milligrams")
+      // is another way to fill the same typed-label form — for anyone who'd
+      // rather not use the camera, or whose pronunciation speech recognition
+      // might mishear. It goes through the identical validated typed input and
+      // the same deterministic matcher; nothing here decides a match itself.
+      const spoken = parseSpokenLabel(raw);
+      if (spoken) {
+        const parsed = parseTypedLabel({ ...spoken, patientName: "" });
+        if (parsed.ok) return { kind: "event", event: { type: "SUBMIT_LABEL", input: parsed.input } };
+      }
+
+      // The name came in on an earlier turn ("It's Metformin") without a
+      // strength — this turn only needs to supply that ("500 milligrams").
+      // Re-ask (rather than falling to "unclear") for anything that isn't a
+      // recognisable strength, so the two-turn exchange doesn't silently drop.
+      if (ctx.pendingSpokenMedicineName) {
+        const strength = extractSpokenStrength(raw);
+        if (strength) {
+          const parsed = parseTypedLabel({
+            medicineName: ctx.pendingSpokenMedicineName,
+            strength,
+            patientName: "",
+          });
+          if (parsed.ok) return { kind: "event", event: { type: "SUBMIT_LABEL", input: parsed.input } };
+        }
+        return { kind: "need-strength", medicineName: ctx.pendingSpokenMedicineName };
+      }
+
+      // A bare medicine name with no strength yet: ask for the strength next,
+      // same as a person reading the label off would naturally give both.
+      if (!hedge && !negative && !(affirm && isShort(n))) {
+        const name = extractSpokenMedicineNameOnly(raw);
+        if (name) return { kind: "need-strength", medicineName: name };
+      }
+
       return { kind: "unclear" };
+    }
 
     case "confirm-match": {
       const id = ctx.candidateId;

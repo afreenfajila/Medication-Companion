@@ -3,11 +3,45 @@ import { resolveExplanation } from "@/lib/content/explanation";
 import { t as translate } from "@/lib/content/translations";
 import { createFakeSpeech } from "@/test/fake-speech";
 import { toConfirmMatch, toExplain, run, startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo, resolve } from "@/test/helpers";
-import { BrowserVoiceProvider } from "./browser-voice";
+import { BrowserVoiceProvider, pickVoice } from "./browser-voice";
 import { VoiceError } from "./provider";
 import { speakableText } from "./speakable";
 
 const en = (k: Parameters<typeof translate>[1]) => translate("en", k);
+
+describe("pickVoice", () => {
+  it("prefers a natural/neural/network voice over a classic local one", () => {
+    const voices = [
+      { name: "Microsoft David Desktop", lang: "en-US", localService: true },
+      { name: "Google US English", lang: "en-US", localService: false },
+    ];
+    expect(pickVoice(voices, "en")?.name).toBe("Google US English");
+  });
+
+  it("never picks a novelty/joke voice even if it's the only close match", () => {
+    const voices = [
+      { name: "Zarvox", lang: "en-US" },
+      { name: "Some Generic Voice", lang: "en-US" },
+    ];
+    expect(pickVoice(voices, "en")?.name).toBe("Some Generic Voice");
+  });
+
+  it("only considers voices matching the requested language", () => {
+    const voices = [
+      { name: "Google 普通话（中国大陆）", lang: "zh-CN" },
+      { name: "Google US English", lang: "en-US" },
+    ];
+    expect(pickVoice(voices, "zh-Hans")?.name).toBe("Google 普通话（中国大陆）");
+  });
+
+  it("returns null when nothing matches the requested language", () => {
+    expect(pickVoice([{ name: "Google US English", lang: "en-US" }], "zh-Hans")).toBeNull();
+  });
+
+  it("returns null for an empty list rather than throwing", () => {
+    expect(pickVoice([], "en")).toBeNull();
+  });
+});
 
 describe("BrowserVoiceProvider", () => {
   it("opens nothing on construct/connect: no mic use and no speech until a user action", async () => {
@@ -134,6 +168,46 @@ describe("BrowserVoiceProvider", () => {
 
     fake.utterances[0].onend?.();
     expect(speaking).toHaveBeenLastCalledWith(false);
+  });
+
+  it("picks up a voice list that finishes loading AFTER construction (the usual cause of a robotic voice)", () => {
+    // Chrome/Edge often return an empty voice list synchronously and only populate
+    // it asynchronously; a naive one-shot getVoices() call at speak-time can miss it
+    // forever unless something reacts to `onvoiceschanged`.
+    const fake = createFakeSpeech({ voices: [] });
+    const p = new BrowserVoiceProvider(fake.env);
+
+    p.speak("Hello there", "en");
+    expect(fake.utterances[0].voice).toBeNull(); // nothing installed yet — no crash, just the engine default
+
+    fake.deliverVoices([
+      { name: "Microsoft David Desktop", lang: "en-US" }, // classic robotic SAPI voice
+      { name: "Google US English (Natural)", lang: "en-US", localService: false },
+    ]);
+    p.speak("Here is what your record says.", "en");
+    expect(fake.utterances[1].voice).toMatchObject({ name: "Google US English (Natural)" });
+  });
+
+  it("re-checks the voice list on every speak() in case it loaded without firing the event", () => {
+    const fake = createFakeSpeech({ voices: [] });
+    const p = new BrowserVoiceProvider(fake.env);
+    p.speak("one", "en");
+    expect(fake.utterances[0].voice).toBeNull();
+
+    // Some engines populate the array without ever calling onvoiceschanged.
+    fake.synth.getVoices = () => [{ name: "Samantha", lang: "en-US" }];
+    p.speak("two", "en");
+    expect(fake.utterances[1].voice).toMatchObject({ name: "Samantha" });
+  });
+
+  it("keeps the last known-good voice list if a later getVoices() call returns empty", () => {
+    const fake = createFakeSpeech({
+      voices: [{ name: "Google US English (Natural)", lang: "en-US", localService: false }],
+    });
+    const p = new BrowserVoiceProvider(fake.env);
+    fake.synth.getVoices = () => []; // a transient empty read after the real list was already seen
+    p.speak("one", "en");
+    expect(fake.utterances[0].voice).toMatchObject({ name: "Google US English (Natural)" });
   });
 
   it("a new utterance replaces the old one, and stopSpeaking cancels", () => {

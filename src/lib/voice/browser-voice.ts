@@ -20,7 +20,6 @@ export interface RecognitionLike {
   start(): void;
   stop(): void;
 }
-<<<<<<< HEAD
 export interface VoiceLike {
   name: string;
   lang: string;
@@ -31,11 +30,6 @@ interface UtteranceLike {
   lang: string;
   rate: number;
   voice?: VoiceLike | null;
-=======
-interface UtteranceLike {
-  lang: string;
-  rate: number;
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   onstart: (() => void) | null;
   onend: (() => void) | null;
   onerror: (() => void) | null;
@@ -43,21 +37,17 @@ interface UtteranceLike {
 export type VoiceEnv = {
   SpeechRecognition?: new () => RecognitionLike;
   webkitSpeechRecognition?: new () => RecognitionLike;
-<<<<<<< HEAD
   speechSynthesis?: {
     speak(u: UtteranceLike): void;
     cancel(): void;
     getVoices?(): VoiceLike[];
+    onvoiceschanged?: (() => void) | null;
   };
-=======
-  speechSynthesis?: { speak(u: UtteranceLike): void; cancel(): void };
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
   SpeechSynthesisUtterance?: new (text: string) => UtteranceLike;
 };
 
 export const SPEECH_LANG: Record<UiLanguage, string> = { en: "en-US", "zh-Hans": "zh-CN" };
 
-<<<<<<< HEAD
 // Voices that are novelty/robotic or known-poor; never chosen if anything else exists.
 const AVOID = /espeak|albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|fred|junior|kathy|princess|ralph/i;
 // Neural / network / premium voices sound far more natural than the OS default.
@@ -89,8 +79,6 @@ export function pickVoice(voices: readonly VoiceLike[], language: UiLanguage): V
   return [...candidates].sort((a, b) => score(b) - score(a))[0];
 }
 
-=======
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
 const ERROR_MAP: Record<string, VoiceErrorCode> = {
   "not-allowed": "permission-denied",
   "service-not-allowed": "permission-denied",
@@ -118,8 +106,23 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
   private errors = new Set<Listener<Error>>();
   private listening = new Set<Listener<boolean>>();
   private speaking = new Set<Listener<boolean>>();
+  private voicesCache: VoiceLike[] = [];
 
-  constructor(private readonly env: VoiceEnv) {}
+  constructor(private readonly env: VoiceEnv) {
+    // Chrome/Edge load the voice list ASYNCHRONOUSLY, and in some versions it never
+    // populates at all until something subscribes to `onvoiceschanged` — without
+    // this, getVoices() can return [] forever and every utterance falls back to
+    // the engine's single most basic default voice (this is the usual cause of
+    // "the voice sounds robotic" even though better voices are installed).
+    this.refreshVoices();
+    const synth = env.speechSynthesis;
+    if (synth) synth.onvoiceschanged = () => this.refreshVoices();
+  }
+
+  private refreshVoices(): void {
+    const list = this.env.speechSynthesis?.getVoices?.() ?? [];
+    if (list.length > 0) this.voicesCache = list;
+  }
 
   get capabilities(): VoiceCapabilities {
     return {
@@ -203,15 +206,16 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
     const { speechSynthesis: synth, SpeechSynthesisUtterance: Utterance } = this.env;
     if (!synth || !Utterance || !text.trim()) return;
 
-    this.stopSpeaking();
+    // Only cancel when something is actually in flight. Chrome can silently drop a
+    // speak() call issued immediately after cancel() — skipping the redundant cancel
+    // on a clean start (e.g. the call's very first greeting) avoids that failure mode.
+    if (this.utterance) this.stopSpeaking();
     const utterance = new Utterance(text);
     utterance.lang = SPEECH_LANG[language];
     utterance.rate = 0.95; // calm and unhurried
-<<<<<<< HEAD
-    const voice = pickVoice(synth.getVoices?.() ?? [], language);
+    this.refreshVoices(); // pick up a list that finished loading since construction
+    const voice = pickVoice(this.voicesCache, language);
     if (voice) utterance.voice = voice;
-=======
->>>>>>> a2528316cb25c39d4d44554f392e8ee3a5a5e16a
     const done = () => {
       if (this.utterance === utterance) {
         this.utterance = null;
