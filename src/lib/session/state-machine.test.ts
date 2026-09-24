@@ -99,12 +99,15 @@ describe("conversation routing and contextual actions", () => {
     expect(routeMessage("What medicine is this?", none).intent).toBe("unknown-medicine-question");
   });
 
-  it("an off-topic question (e.g. the weather) is redirected to the two supported actions, not answered", () => {
+  it("an off-topic question (e.g. the weather) is acknowledged and redirected, not answered", () => {
     const r = routeMessage("What will happen if I ask about the weather today?", none);
-    expect(r.intent).toBe("general");
-    expect(r.assistantKey).toBe("clarificationPrompt");
+    expect(r.intent).toBe("off-topic");
+    expect(r.assistantKey).toBe("offTopicWorld");
+    // Redirection still lands on the spine's two doors, and answers nothing.
     expect(r.contextualActions).toEqual(["show-medicine", "ask-schedule"]);
     expect(r.safetyReason).toBeUndefined();
+    expect(r.toExplain).toBeUndefined();
+    expect(r.route).toBeUndefined();
   });
 
   it("schedule question without a confirmed record → approved clarification with both actions", () => {
@@ -122,7 +125,7 @@ describe("conversation routing and contextual actions", () => {
   });
 
   it("broad/unclear request → the same clarification with both actions", () => {
-    const r = routeMessage("Hello", none);
+    const r = routeMessage("I need something", none);
     expect(r.intent).toBe("general");
     expect(r.assistantKey).toBe("clarificationPrompt");
     expect(r.contextualActions).toEqual(["show-medicine", "ask-schedule"]);

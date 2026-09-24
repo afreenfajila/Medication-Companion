@@ -226,3 +226,171 @@ name and strength than hold a label to the camera, or worry the browser will mis
   still falls through to the existing "unclear" handling rather than being mistaken for a name.
 - **Discoverability**: a short hint line ("You can also just tell me the medicine name and strength…") was
   added to the camera-guidance card so the capability isn't voice-only tribal knowledge.
+
+---
+
+# Decisions (natural rephrasing of in-call conversational replies)
+
+Request: "i want natural communication with AI, either using claude or gemini." Read together with
+the earlier "AI should respond to me naturally while setting all the necessary guardrails" (which
+already shipped as Claude-rephrase of the record explanation screen), this asks for the same
+naturalisation to reach the live back-and-forth during a call, not just the explanation.
+
+- **Scope is bounded by CLAUDE.md itself, not a judgement call.** CLAUDE.md's "Required in-call
+  routing" section pins two sentences verbatim: `showLabelQuestion` ("Let's check this together...")
+  and `clarificationPrompt` ("Would you like to show me a medicine label, or ask about your medicine
+  schedule?"). Naturalising those would drift from the project's own required copy, so they — and
+  everything safety/urgent/escalation/consent-related (`urgentHeading`, `safetyHeading`, `reasonHelp`,
+  `cameraPermissionBody`) — are permanently excluded (`CONVERSATIONAL_REPHRASE_KEYS` in
+  `rephrase-guard.ts`, enforced both client-side and, independently, by the API route's Zod
+  allow-list — the client can't even ask for an ineligible key). This is CLAUDE.md's own instruction
+  followed exactly: "If an implementation request conflicts with them, preserve the safety/content
+  contract and explain the conflict" — explained here rather than silently building full-scope
+  free-form conversation.
+- **Only wording changes; the decision never does.** `session.assistantKey` — which sentence the
+  reducer chose — is completely unaffected; this only lets Claude propose different WORDS for that
+  same chosen sentence, validated by the identical guard already built for the explanation screen
+  (`isSafeRephrase`: no new numbers, no invented medical claims, same key terms, sane length). Claude
+  never sees anything but that one already-approved sentence, and the route looks the canonical text
+  up itself from the copy catalogue — the client names only a key, never sends its own text, so it
+  can't smuggle arbitrary content through as if it were already-approved.
+- **Never adds a delay a live call would show.** Each turn's line is decided once, within an 800ms
+  budget, and then frozen for that turn — it is spoken and shown exactly once, never the approved line
+  followed moments later by a swapped-in natural one (which would have been worse than the original
+  complaint, not better). If Claude doesn't answer in time, or its answer fails the guard, the exact
+  approved line is used, exactly as it always was — matching CLAUDE.md's "AI: optional enhancement;
+  not required for happy-path demo success."
+- **Chose Claude, not Gemini, for the text itself.** The request said "either" — Gemini's integration
+  in this app is speech-audio rendering (text → voice), not text generation, so reusing Claude (already
+  doing the equivalent bounded task for the explanation screen) keeps one text-generation surface
+  instead of introducing a second. Gemini still renders whatever final text is decided to audio, same
+  as before.
+
+---
+
+# Decisions (spine-based redirection for off-topic input)
+
+Request: apply the "conversational spine" pattern from the ELVTR course — rather than hard guardrails
+that bounce a user away ("I cannot help with that"), acknowledge the off-topic input conversationally,
+then steer back to the product's primary task. Origin: the Teddy Roosevelt virtual-president experience,
+where teenagers asked Roosevelt about video games and the system had to redirect without breaking
+immersion.
+
+**The spine here:** *helping Mei Ling understand the medicine information in her demo pharmacy record.*
+
+- **Where the pattern applies — and where it emphatically does not.** This was the one real design
+  tension. The course pattern is about SCOPE management (a user wandering off-task), not about
+  SAFETY. Medication Companion has two distinct kinds of "we won't answer that":
+  1. *Off-spine talk* — the weather, football, "are you a robot?", "can you ring my daughter?".
+     Nothing is at stake except the relationship. Warmth is correct: acknowledge, then redirect.
+  2. *Safety-classified input* — urgent-risk language and unsupported medical questions (dose changes,
+     missed doses, interactions, diagnosis). Here a friendly deflection would be actively harmful: it
+     softens a message that has to land plainly, and risks a user reading "let's get back to your
+     record" as "this isn't serious". CLAUDE.md constraints 1 and 6 require escalation, not banter.
+
+  So `routeMessage` runs `classifySafety` FIRST and only consults `classifyOffTopic` afterwards. A
+  message containing both bait and a trigger ("Hello, I have chest pain") escalates — covered by an
+  explicit test named for the rule it protects.
+
+- **`classifyOffTopic` (src/lib/session/off-topic.ts)** returns `capability | world | social | null`,
+  deterministic and local. Three consequences worth stating:
+  - It refuses to fire on any text containing a medicine/label/dose/pharmacy term, so a loose social
+    pattern can never swallow a genuine medicine question ("Is this the pill I saw on TV?").
+  - Feeling and symptom language ("I feel tired", "I'm dizzy") is deliberately NOT in the social
+    pattern. A chatty redirect is the wrong response to something that might be a symptom; those fall
+    through to the ordinary clarification path and stay eligible for the safety classifier.
+  - `capability` is its own tier because "can you call my daughter?" needs a limitation stated
+    (CLAUDE.md constraint 7 — never imply an action the demo cannot perform) plus a route to a real
+    person, which is a different reply from "I don't know about football".
+
+- **The replies are fixed approved copy** (`offTopicSocial` / `offTopicWorld` / `offTopicCapability`,
+  EN + zh-Hans), not model-generated. An off-topic turn therefore cannot become a path to invented
+  content. Each ends by offering the spine's two doors, and the turn returns the same contextual
+  actions the clarification prompt does — no new state, no new gate, no weakened gate.
+
+- **Two of the three lines are rephrase-eligible** (`CONVERSATIONAL_REPHRASE_KEYS`): a redirect whose
+  whole purpose is to not sound canned fails hardest when heard verbatim twice, and these lines carry
+  no clinical content. `offTopicCapability` is excluded — it states a limitation and names a concrete
+  control ("Tap Get help"), which is reviewed wording.
+
+**What did NOT change:** the state machine, safety classifier, matching, camera consent, and the
+confirmed-match-before-explanation gate. Redirection never sets `route` or `toExplain`, so it cannot
+reach record content even in a confirmed-match session (tested).
+
+---
+
+# Decisions (step-aware re-prompts instead of a bare "I didn't catch that")
+
+Reported: after confirming the match, asking the companion "what's next?" answered
+"Sorry, I didn't catch that. Please say it again" — a dead end at the exact moment the companion
+knows most about what should happen next.
+
+**Cause.** `interpretUtterance` (voice/commands.ts) is deterministic per state: outside `listening`
+each state accepts a small known set of answers, and anything else returns `unclear`. Every `unclear`,
+in every state, produced the same generic line. The interpretation logic was right — a spoken
+question must never be guessed into a gate decision — but the *reply* to it carried no information.
+
+**Fix (use-conversation.ts, `unclearGuidanceKey`).** The re-prompt is now chosen by state: acknowledge,
+then name what this step accepts. `explain` distinguishes mid-explanation ("say next, go back, or
+repeat") from the final chunk, where "next" no longer exists and offering it would misdirect.
+`listening` keeps the generic line — there the person may say anything, so there is no step to name,
+and free speech routes through the normal NLU rather than reaching this path at all.
+
+This is the same spine principle applied to the guided states: the previous behaviour was a
+guardrail that bounced the person, with no door named.
+
+- **The lines are fixed approved copy** (EN + zh-Hans) naming this screen's own controls. No model
+  decides what the next step is, and no re-prompt opens a gate — it only re-asks.
+- **The confirm-match re-prompt is deliberately neutral**: "yes", "no", *or* "I'm not sure", so a
+  person who didn't understand the question is never nudged toward confirming a medicine. Tested.
+- Tested also: no guidance line can contain dosing content, in either language.
+
+---
+
+# Decisions (two voice-transcript bugs: dropped replies, and self-echo)
+
+Both reported from the running prototype, with screenshots.
+
+## 1. "I mention my medication and there is no response back"
+
+Two spoken questions in a row appeared in the transcript with no companion reply between them.
+
+**Cause.** `useCallFeed` keyed each companion turn by `assistantKey:repeatCount` and appended only when
+that signature *changed*. Both garbled utterances routed to the same approved reply, so the second reply
+was deduplicated away. The companion had answered; the transcript refused to show it. The same bug hit
+the user's own words: saying the identical sentence twice showed one card.
+
+**Fix.** `Session.turnCount` increments on every accepted `USER_MESSAGE`, and both feed signatures
+include it. One accepted message is now one turn in the transcript, whatever it routes to and whatever
+reply it draws. `turnCount` is assigned once in the reducer (`heard`) so every downstream path —
+safety, route, explain, ordinary reply — carries it. It also joins the rephrase turn signature, so a
+repeated line is re-decided rather than repeated verbatim.
+
+**Not the cause, worth recording:** the speech recognition itself ("I have met for free medicine") was
+mishearing. That is a browser ASR limitation, not something to fix in app code — but it made the bug
+visible, because mishearings reliably route to the same fallback reply.
+
+## 2. "I didn't even say hello but this was already input here"
+
+"Mei Ling says: hello" appeared with nobody having spoken — the mic heard the companion's own greeting.
+
+**Cause.** The listen loop only *declined to open* the mic while speaking (`if (speaking || listening)
+return`); it never *closed* an already-open one. So the mic stayed open through the companion's speech,
+and `handleTranscript`'s `if (isSpeaking) return` missed it, because recognition delivers its final
+transcript just after speech ends, when `speaking` has already flipped false.
+
+**Fix, in two layers:**
+- **Causal:** the loop now calls `stopListening()` when the companion starts speaking.
+- **Second net (`lib/voice/echo.ts`):** a transcript is dropped when it arrives within 1.2 s of speech
+  ending, is a contiguous word-slice of what was just said, AND came from a recognition session that
+  was open while the companion spoke. All three conditions are required.
+
+**The third condition exists because of a bug I introduced and the tests caught.** Content matching
+alone suppressed a legitimate "500 milligrams" — the answer to "…what strength does the label say, for
+example, 500 milligrams?" quotes its own prompt. Tracking whether the mic overlapped the speech
+distinguishes the two: a mic opened *after* the companion finished cannot have heard it. Both cases are
+now tested, and the echo test was verified to fail with the guard disabled.
+
+**Direction of failure is deliberate.** Suppressing a real utterance costs a re-prompt; accepting an
+echo fabricates a turn the person never took. On the confirmation screen that asymmetry is the whole
+point — an echoed "yes" must never confirm a medicine.

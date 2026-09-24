@@ -1,3 +1,4 @@
+import type { CopyKey } from "@/lib/content/translations";
 import { unsupportedMedicalPatterns, urgentPatterns } from "@/lib/safety/classify";
 
 /**
@@ -120,4 +121,34 @@ export function applyValidatedRephrase(
     }
   }
   return result;
+}
+
+/**
+ * In-call conversational lines the natural-language rephrase is allowed to
+ * vary the wording of ("what if I ask something else while on the call" →
+ * make that feel less scripted). Deliberately excludes:
+ *  - `showLabelQuestion` and `clarificationPrompt` — CLAUDE.md's "Required
+ *    in-call routing" pins these two sentences verbatim; rephrasing them would
+ *    drift from the project's own required copy.
+ *  - anything safety/urgent/escalation/consent-related (`urgentHeading`,
+ *    `safetyHeading`, `reasonHelp`, `cameraPermissionBody`, …) — reviewed,
+ *    high-stakes wording that a model never touches.
+ *  - the record explanation — already has its own, more tightly scoped
+ *    rephrase path above (`REPHRASE_FIELDS`).
+ */
+export const CONVERSATIONAL_REPHRASE_KEYS = [
+  "scheduleNeedsRecord",
+  "prescriptionsListed",
+  "anotherMedicineGuide",
+  // Spine redirections: the two lines whose whole purpose is to not sound like a
+  // canned refusal, so hearing the identical sentence twice is the failure mode.
+  // `offTopicCapability` is excluded — it states a limitation and names a concrete
+  // control ("Tap Get help"), which is reviewed wording, not flavour text.
+  "offTopicSocial",
+  "offTopicWorld",
+] as const satisfies readonly CopyKey[];
+export type ConversationalRephraseKey = (typeof CONVERSATIONAL_REPHRASE_KEYS)[number];
+
+export function isConversationalRephraseKey(key: CopyKey): key is ConversationalRephraseKey {
+  return (CONVERSATIONAL_REPHRASE_KEYS as readonly string[]).includes(key);
 }

@@ -39,8 +39,19 @@ function explainStepLines(step: 0 | 1 | 2, e: ExplanationView["explanation"]): s
  * rich card in the pinned action area below the feed while they're current;
  * this keeps the transcript readable rather than repeating every UI heading.
  * The feed clears when a new call starts and otherwise never rewrites history.
+ *
+ * `listeningLine` is what to actually show for a `listening`-state reply: the
+ * approved copy immediately for most lines, or — for the small set eligible
+ * for natural rephrasing (see `CONVERSATIONAL_REPHRASE_KEYS`) — `null` while
+ * that decision is still pending, so the transcript never shows the approved
+ * line only to silently swap it moments later; it appears once, already final.
  */
-export function useCallFeed(session: Session, t: T, explanation: ExplanationView | null): FeedMessage[] {
+export function useCallFeed(
+  session: Session,
+  t: T,
+  explanation: ExplanationView | null,
+  listeningLine: string | null,
+): FeedMessage[] {
   const [entries, setEntries] = useState<FeedMessage[]>([]);
   const seen = useRef<Seen>(initialSeen(session.callCount));
   const idRef = useRef(0);
@@ -58,15 +69,27 @@ export function useCallFeed(session: Session, t: T, explanation: ExplanationView
       additions.push({ id: `f${idRef.current}`, speaker, lines });
     };
 
-    if (session.userText && session.userText !== seen.current.userSig) {
-      seen.current.userSig = session.userText;
+    // Keyed by turn, not by text: saying the same thing twice is two turns, and
+    // must look like two turns.
+    const userSig = `${session.turnCount}`;
+    if (session.userText && userSig !== seen.current.userSig) {
+      seen.current.userSig = userSig;
       push("user", session.userText);
     }
 
-    const assistantSig = `${session.assistantKey}:${session.repeatCount}`;
-    if (session.callActive && session.state === "listening" && assistantSig !== seen.current.assistantSig) {
+    // The turn is part of the signature for the same reason: two different
+    // questions can legitimately get the same approved reply, and the second
+    // reply must still appear — otherwise the companion looks like it ignored
+    // the person, which is precisely what it must never look like.
+    const assistantSig = `${session.assistantKey}:${session.repeatCount}:${session.turnCount}`;
+    if (
+      session.callActive &&
+      session.state === "listening" &&
+      assistantSig !== seen.current.assistantSig &&
+      listeningLine !== null
+    ) {
       seen.current.assistantSig = assistantSig;
-      push("companion", t(session.assistantKey));
+      push("companion", listeningLine);
     }
 
     if (session.state === "explain" && explanation) {
@@ -92,7 +115,7 @@ export function useCallFeed(session: Session, t: T, explanation: ExplanationView
     // `entries` intentionally excluded: this effect only ever reads the latest
     // value via closure to build the next one, and depending on it would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, t, explanation]);
+  }, [session, t, explanation, listeningLine]);
 
   return entries;
 }

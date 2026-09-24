@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CONVERSATIONAL_REPHRASE_KEYS } from "@/lib/content/rephrase-guard";
 
 // Shared request/response contracts (site-contract.md §8). Used by the route
 // to build responses and by the client to validate what it receives.
@@ -93,3 +94,23 @@ export const speakRequestSchema = z.object({
   text: z.string().min(1).max(600),
   language: z.enum(["en", "zh-Hans"]),
 });
+
+/**
+ * In-call conversational rephrase: the client names WHICH approved line it
+ * wants naturalised (never sends its own text) — the server looks up the
+ * canonical English copy itself, so a client can't smuggle arbitrary text
+ * through as if it were already-approved. English only, same as the
+ * explanation rephrase (Chinese already has reviewed static translations).
+ */
+export const replyRephraseRequestSchema = z.object({
+  key: z.enum(CONVERSATIONAL_REPHRASE_KEYS),
+});
+export const replyRephraseResponseDataSchema = z.object({
+  text: z.string(),
+  source: z.enum(["claude", "fallback"]),
+});
+export type ReplyRephraseResponseData = z.infer<typeof replyRephraseResponseDataSchema>;
+export const replyRephraseResponseSchema = z.discriminatedUnion("ok", [
+  apiSuccessSchema(replyRephraseResponseDataSchema),
+  apiFailureSchema,
+]);

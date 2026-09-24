@@ -20,7 +20,7 @@ export function ContextualChoiceGroup({
 }) {
   if (choices.length === 0) return null;
   return (
-    <div role="group" aria-label={groupLabel} className="fade-in flex flex-col gap-3">
+    <div role="group" aria-label={groupLabel} className="fade-in flex flex-col gap-2">
       {choices.map((choice, i) => {
         const icon =
           choice.id === "show-medicine" ? (
@@ -30,7 +30,9 @@ export function ContextualChoiceGroup({
           );
         const Button = i === 0 ? PrimaryButton : SecondaryButton;
         return (
-          <Button key={choice.id} icon={icon} onClick={() => onSelect(choice.id)}>
+          // Compact: these share the pinned area with the typed fallback, and
+          // keeping them at full CTA size pushed the conversation off screen.
+          <Button key={choice.id} compact icon={icon} onClick={() => onSelect(choice.id)}>
             {choice.label}
           </Button>
         );

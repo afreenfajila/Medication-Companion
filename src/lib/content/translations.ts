@@ -48,6 +48,14 @@ const en = {
     "To talk about your schedule, I first need to check a medicine against your record. Would you like to show me the medicine label?",
   prescriptionsListed:
     "Your demo pharmacy record shows one medicine on file: Metformin 500 mg. Would you like to show me the label so I can explain it?",
+  // Spine-based redirection: acknowledge what was said, then walk back to the
+  // one thing this companion does. Never used for safety-classified input.
+  offTopicSocial:
+    "It’s nice to hear from you. I’m an AI companion, so I stay with one thing — the medicine information in your pharmacy record. Would you like to show me a medicine label, or ask about your schedule?",
+  offTopicWorld:
+    "I’d enjoy talking about that, but it’s outside what I know. What I can help with is the medicine information in your pharmacy record. Would you like to show me a medicine label, or ask about your schedule?",
+  offTopicCapability:
+    "I can’t do that in this demo — I’m not connected to a pharmacy or a phone. Tap Get help to reach a real person. I can also help you understand the medicine information in your record.",
   showMedicine: "Show medicine",
   askSchedule: "Ask about my schedule",
   youSay: "Mei Ling says:",
@@ -64,6 +72,23 @@ const en = {
     "I’m still here. Tap “Mic on” when you’re ready to talk, or type instead.",
   voiceDidntCatch:
     "Sorry, I didn’t catch that. Please say it again, or use the buttons.",
+  // Step-aware versions of the line above. Outside the open conversation the
+  // companion knows exactly what this step is waiting for, so it says so
+  // instead of leaving the person to guess ("what do I do now?").
+  unclearExplain:
+    "I didn’t quite catch that. You can say “next” to hear the rest, “go back”, or “repeat that”.",
+  unclearExplainLast:
+    "I didn’t quite catch that. That’s everything your record says. You can say “I understand” when you’re ready, or “repeat that”.",
+  unclearConfirmMatch:
+    "I didn’t quite catch that. Is this your medicine? You can say “yes”, “no”, or “I’m not sure”.",
+  unclearCameraPermission:
+    "I didn’t quite catch that. You can say “yes” to open the camera, or “no” to type the label instead.",
+  unclearCameraGuidance:
+    "I didn’t quite catch that. You can say “take a photo”, “use the demo label”, or tell me the medicine name and strength.",
+  unclearSafety:
+    "I didn’t quite catch that. You can say “try another label”, or “back to the conversation”. You can also say “get help”.",
+  unclearComplete:
+    "I didn’t quite catch that. You can say “another medicine”, or “end call”.",
   askStrengthForSpokenLabel:
     "Got it. What strength does the label say — for example, 500 milligrams?",
   spokenLabelHint:
@@ -242,6 +267,12 @@ const zhHans: Copy = {
     "要谈服药时间，我需要先对照您的记录核对药物。您想给我看药物标签吗？",
   prescriptionsListed:
     "您的示范药房记录显示您有一种药物：二甲双胍 500 毫克。您想给我看标签，让我为您解释吗？",
+  offTopicSocial:
+    "很高兴听到您说话。我是一位 AI 助手，只专注于一件事——您药房记录中的药物信息。您想给我看药物标签，还是询问您的服药时间？",
+  offTopicWorld:
+    "我也很想聊这个，不过这超出了我知道的范围。我能帮您了解的是您药房记录中的药物信息。您想给我看药物标签，还是询问您的服药时间？",
+  offTopicCapability:
+    "在这个示范中我做不到——我没有连接药房或电话。请点击「寻求帮助」联系真人。我也可以帮您了解记录中的药物信息。",
   showMedicine: "显示药物",
   askSchedule: "询问我的服药时间",
   youSay: "Mei Ling 说：",
@@ -256,6 +287,19 @@ const zhHans: Copy = {
   voiceMicLabel: "麦克风",
   voicePaused: "我还在这里。准备好说话时，请点“麦克风已开”，或改用输入文字。",
   voiceDidntCatch: "抱歉，我没听清楚。请再说一遍，或使用按钮。",
+  unclearExplain:
+    "我没太听清楚。您可以说「继续」听下一部分，或说「返回」、「重复」。",
+  unclearExplainLast:
+    "我没太听清楚。这就是您记录中的全部内容。准备好时可以说「我明白了」，或说「重复」。",
+  unclearConfirmMatch:
+    "我没太听清楚。这是您的药物吗？您可以说「是」、「不是」，或「我不确定」。",
+  unclearCameraPermission:
+    "我没太听清楚。您可以说「是」打开相机，或说「不是」改用输入标签。",
+  unclearCameraGuidance:
+    "我没太听清楚。您可以说「拍照」、「示范标签」，或告诉我药物名称和剂量。",
+  unclearSafety:
+    "我没太听清楚。您可以说「再试一个标签」，或「回到对话」。也可以说「寻求帮助」。",
+  unclearComplete: "我没太听清楚。您可以说「另一种药」，或「结束通话」。",
   askStrengthForSpokenLabel: "好的。标签上写的是多少剂量？例如：500 毫克。",
   spokenLabelHint:
     "您也可以直接说出药物名称和剂量——例如：“是二甲双胍，500 毫克。”",

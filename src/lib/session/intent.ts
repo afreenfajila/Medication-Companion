@@ -1,5 +1,6 @@
 import type { CopyKey } from "@/lib/content/translations";
 import { classifySafety } from "@/lib/safety/classify";
+import { classifyOffTopic, type OffTopicKind } from "./off-topic";
 import type {
   ContextualActionId,
   SafetyReason,
@@ -17,6 +18,12 @@ export type RoutedMessage = {
   toExplain?: boolean;
   /** The person asked for a route outright ("I want to show the medicine"): act as if they chose it. */
   route?: ContextualActionId;
+};
+
+const OFF_TOPIC_KEYS: Record<OffTopicKind, CopyKey> = {
+  social: "offTopicSocial",
+  world: "offTopicWorld",
+  capability: "offTopicCapability",
 };
 
 const HELP_REQUEST =
@@ -46,8 +53,8 @@ const SCHEDULE =
 
 /**
  * Deterministic in-call routing (site-contract.md §4). Order matters:
- * safety → human help → explicit route requests → list-my-prescriptions →
- * unknown medicine → schedule → broad/unclear.
+ * safety → human help → off-spine talk → explicit route requests →
+ * list-my-prescriptions → unknown medicine → schedule → broad/unclear.
  * "What is this for? When do I take it?" is an unknown-medicine question:
  * we cannot talk about timing until a medicine is identified.
  * "What are my prescriptions?" is different: it asks what's on file, not to
@@ -81,6 +88,19 @@ export function routeMessage(
       assistantKey: "reasonHelp",
       contextualActions: [],
       safetyReason: "help-requested",
+    };
+  }
+  // Spine-based redirection. Deliberately AFTER every safety check above, so a
+  // safety-classified message can never be answered with a friendly deflection,
+  // and before the medicine patterns only because `classifyOffTopic` refuses to
+  // fire on anything containing a medicine/label/dose term.
+  const offTopic = classifyOffTopic(text);
+  if (offTopic) {
+    return {
+      intent: "off-topic",
+      assistantKey: OFF_TOPIC_KEYS[offTopic],
+      // Still offering the spine's two doors, exactly as the clarification does.
+      contextualActions: ["show-medicine", "ask-schedule"],
     };
   }
   if (SHOW_MEDICINE_REQUEST.test(text)) {

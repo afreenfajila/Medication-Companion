@@ -3,6 +3,7 @@ import {
   applyValidatedRephrase,
   introducesNewNumbers,
   introducesUnsafeLanguage,
+  isConversationalRephraseKey,
   isSafeRephrase,
   preservesKeyTerms,
   REPHRASE_FIELDS,
@@ -108,5 +109,25 @@ describe("applyValidatedRephrase — per-field fallback", () => {
   it("ignores a non-string value for a field", () => {
     const result = applyValidatedRephrase(canonical, { title: 12345 } as never);
     expect(result.title).toBe(canonical.title);
+  });
+});
+
+describe("isConversationalRephraseKey", () => {
+  it("accepts the small set of eligible in-call conversational lines", () => {
+    expect(isConversationalRephraseKey("scheduleNeedsRecord")).toBe(true);
+    expect(isConversationalRephraseKey("prescriptionsListed")).toBe(true);
+    expect(isConversationalRephraseKey("anotherMedicineGuide")).toBe(true);
+  });
+
+  it("rejects CLAUDE.md's two verbatim-required routing sentences", () => {
+    expect(isConversationalRephraseKey("showLabelQuestion")).toBe(false);
+    expect(isConversationalRephraseKey("clarificationPrompt")).toBe(false);
+  });
+
+  it("rejects safety/escalation/consent wording", () => {
+    expect(isConversationalRephraseKey("urgentHeading")).toBe(false);
+    expect(isConversationalRephraseKey("safetyHeading")).toBe(false);
+    expect(isConversationalRephraseKey("reasonHelp")).toBe(false);
+    expect(isConversationalRephraseKey("cameraPermissionBody")).toBe(false);
   });
 });

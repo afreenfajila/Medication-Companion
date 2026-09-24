@@ -148,6 +148,10 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     act(() => fake.recognitions[0].say("What are my prescriptions?", true));
+    // This reply is eligible for natural rephrasing (see CONVERSATIONAL_REPHRASE_KEYS),
+    // so it waits a short, bounded budget before speaking — there is no real
+    // server in this test, so it always falls back to the exact approved line.
+    act(() => vi.advanceTimersByTime(900));
 
     expect(screen.getByText(/Metformin 500 mg/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
@@ -155,12 +159,85 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
 
-  it("an off-topic question (the weather) is redirected to the two supported actions, not answered", () => {
+  it("two questions that get the same reply still show two replies", () => {
+    // Reported: two spoken questions in a row, and the transcript showed only
+    // the user's words — the second reply was deduplicated away by its text and
+    // the companion looked like it had ignored the person.
+    const fake = install();
+    render(<CompanionExperience />);
+    startCall(fake);
+    respond(fake, "I have met for free medicine");
+    respond(fake, "the medication I have says it is so bad for free");
+
+    const userTurns = screen.getAllByText(/Mei Ling says:/);
+    const companionTurns = screen.getAllByText(/Companion says:/);
+    expect(userTurns).toHaveLength(2);
+    // Greeting + a reply to each question.
+    expect(companionTurns).toHaveLength(3);
+  });
+
+  it("saying the very same thing twice is two turns, not one", () => {
+    const fake = install();
+    render(<CompanionExperience />);
+    startCall(fake);
+    respond(fake, "I do not understand");
+    respond(fake, "I do not understand");
+
+    expect(screen.getAllByText(/Mei Ling says:/)).toHaveLength(2);
+    expect(screen.getAllByText(/Companion says:/)).toHaveLength(3);
+  });
+
+  it("the companion's own words are not heard back as a user turn", () => {
+    // Reported: "Mei Ling says: hello" appeared without the user saying anything —
+    // the mic was open through the companion's greeting and recognition handed
+    // its tail back just after the speech ended.
+    const fake = install();
+    render(<CompanionExperience />);
+    startCall(fake);
+    expect(fake.recognitions.length).toBeGreaterThan(0); // the mic really is open
+
+    act(() => fake.recognitions.at(-1)!.say("What is this for?", true));
+    expect(screen.getAllByText(/Mei Ling says:/)).toHaveLength(1);
+    // The companion replies, then that reply comes back off the microphone the
+    // moment it stops talking — before the mic has been reopened for a new turn.
+    act(() => fake.utterances.at(-1)?.onend?.());
+    act(() =>
+      fake.recognitions.at(-1)!.say("Would you like to show me the medicine label?", true),
+    );
+
+    expect(screen.getAllByText(/Mei Ling says:/)).toHaveLength(1); // still just the real one
+  });
+
+  it("but a person repeating a word the prompt suggested is NOT treated as an echo", () => {
+    // "...for example, 500 milligrams" → "500 milligrams" is a real answer that
+    // happens to quote the question. Suppressing it would strand the person.
+    const fake = install();
+    render(<CompanionExperience />);
+    startCall(fake);
+    respond(fake, "What is this for?");
+    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
+    finishSpeaking(fake);
+
+    respond(fake, "It's Metformin");
+    expect(screen.getByText(/what strength does the label say/i)).toBeInTheDocument();
+    respond(fake, "500 milligrams");
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+  });
+
+  it("an off-topic question (the weather) is acknowledged, then redirected to the two supported actions", () => {
     const fake = install();
     render(<CompanionExperience />);
     startCall(fake);
     act(() => fake.recognitions[0].say("What will happen if I ask about the weather today?", true));
+    // This redirect is rephrase-eligible, so the turn's wording is decided within
+    // the 800 ms budget; with no rephrase service here that decision is the
+    // approved line itself.
+    tick(1000);
 
+    // Acknowledged first — not bounced with a bare refusal — then walked back.
+    expect(screen.getByText(/I’d enjoy talking about that/)).toBeInTheDocument();
     expect(screen.getByText(/Would you like to show me a medicine label/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /ask about my schedule/i })).toBeInTheDocument();
@@ -189,6 +266,12 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
       render(<CompanionExperience />);
       startCall(fake);
       act(() => fake.recognitions[0].say(phrase, true));
+      // "tell me my medicine schedule" lands on `scheduleNeedsRecord`, which is
+      // eligible for natural rephrasing (see CONVERSATIONAL_REPHRASE_KEYS) and so
+      // waits a short, bounded budget before speaking; with no real server in
+      // this test it always falls back to the exact approved line. A no-op for
+      // the other two phrases here, which land on the non-eligible `clarificationPrompt`.
+      act(() => vi.advanceTimersByTime(900));
       // Still in `listening`, and the conversation moved forward with a new reply.
       expect(screen.getByText(/show me (a |the )?medicine label/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
@@ -241,7 +324,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
 
-  it("something unrecognised on a yes/no screen gets a gentle 'didn't catch that', not silence", () => {
+  it("something unrecognised on a yes/no screen re-prompts with that step's own choices", () => {
     // Free speech in `listening` always routes through the normal NLU (never "unclear") —
     // this only applies on a screen expecting a specific answer, e.g. confirm-match.
     const fake = install();
@@ -257,8 +340,31 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     finishSpeaking(fake);
 
     act(() => fake.recognitions.at(-1)!.say("asdkjhasd blorp", true));
-    expect(screen.getByText(/didn’t catch that/i)).toBeInTheDocument();
+    // Acknowledged, then told what this step accepts — including "I'm not sure",
+    // so the re-prompt never nudges toward confirming.
+    expect(screen.getByText(/didn’t quite catch that/i)).toBeInTheDocument();
+    expect(screen.getByText(/say “yes”, “no”, or “I’m not sure”/i)).toBeInTheDocument();
     expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument(); // unchanged
+  });
+
+  it("after a confirmed match, an unrecognised question names the next step instead of stalling", () => {
+    const fake = install();
+    render(<CompanionExperience />);
+    startCall(fake);
+    respond(fake, "What is this for?");
+    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    finishSpeaking(fake);
+    respond(fake, "yes that is my medicine");
+
+    act(() => fake.recognitions.at(-1)!.say("so what am I meant to do now", true));
+    expect(screen.getByText(/say “next” to hear the rest/i)).toBeInTheDocument();
+    // Guidance only — it moves nothing and opens nothing.
+    expect(screen.getByRole("button", { name: /next/i })).toBeInTheDocument();
   });
 
   it("spoken urgent-risk wording is caught by the safety classifier, exactly like typed", () => {

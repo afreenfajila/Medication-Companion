@@ -177,6 +177,11 @@ Animation rules:
 
 - Navy fill, white text, 56 px minimum height.
 - Full width inside the phone layout unless part of a deliberate compact choice.
+- **Compact variant — 48 px.** Only for the temporary in-call contextual choices
+  (`Show medicine` / `Ask about my schedule`), which share the pinned control area with
+  the typed fallback; at full size they pushed the conversation itself off screen. Still
+  above the 44 px tap-target floor. Never for the landing CTA, and never for a consent or
+  confirmation decision — there the full size is the point.
 - Rounded pill or 16–28 px rounded rectangle.
 - Icon before label when useful.
 - Strong visible keyboard focus.

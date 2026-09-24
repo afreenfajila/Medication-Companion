@@ -13,7 +13,7 @@ vi.mock("@anthropic-ai/sdk", () => {
   return { default: Anthropic };
 });
 
-import { rephraseExplanationFields, REPHRASE_SYSTEM_PROMPT } from "./rephrase";
+import { rephraseConversationalLine, rephraseExplanationFields, LINE_REPHRASE_SYSTEM_PROMPT, REPHRASE_SYSTEM_PROMPT } from "./rephrase";
 
 const input = {
   title: "Here is what your record says.",
@@ -82,6 +82,44 @@ describe("rephraseExplanationFields", () => {
   it("maps SDK/network errors to service-error without leaking the cause", async () => {
     create.mockRejectedValue(new Error("connect ECONNRESET sk-ant-secret"));
     const err = await rephraseExplanationFields(input).catch((e: Error) => e);
+    expect(err).toMatchObject({ reason: "service-error" });
+    expect((err as Error).message).not.toMatch(/sk-ant/);
+  });
+});
+
+describe("rephraseConversationalLine", () => {
+  it("fails closed without calling the SDK when no key is configured", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    await expect(rephraseConversationalLine("Would you like to show me the label?")).rejects.toMatchObject({
+      reason: "not-configured",
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("sends the line as plain text with the line-rephrase prompt, and returns the trimmed reply", async () => {
+    create.mockResolvedValue(textResponse("  Want to show me the label so I can take a look?  "));
+    const out = await rephraseConversationalLine("Would you like to show me the label?");
+    expect(out).toBe("Want to show me the label so I can take a look?");
+
+    const req = create.mock.calls[0][0];
+    expect(req.system).toBe(LINE_REPHRASE_SYSTEM_PROMPT);
+    expect(req.system).toMatch(/do not add any new fact/i);
+    expect(req.output_config).toBeUndefined(); // plain text — no JSON schema needed for one sentence
+    expect(req.messages[0].content).toBe("Would you like to show me the label?");
+  });
+
+  it.each([
+    ["truncated output", textResponse("{", "max_tokens"), "invalid-output"],
+    ["no text block", { stop_reason: "end_turn", content: [] }, "invalid-output"],
+    ["refusal", textResponse("", "refusal"), "refused"],
+  ])("maps %s to a typed AiUnavailableError", async (_n, response, reason) => {
+    create.mockResolvedValue(response);
+    await expect(rephraseConversationalLine("x")).rejects.toMatchObject({ name: "AiUnavailableError", reason });
+  });
+
+  it("maps SDK/network errors to service-error without leaking the cause", async () => {
+    create.mockRejectedValue(new Error("connect ECONNRESET sk-ant-secret"));
+    const err = await rephraseConversationalLine("x").catch((e: Error) => e);
     expect(err).toMatchObject({ reason: "service-error" });
     expect((err as Error).message).not.toMatch(/sk-ant/);
   });

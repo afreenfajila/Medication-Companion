@@ -6,6 +6,7 @@ import { dispatch } from "@/lib/session/session-store";
 import type { Session } from "@/lib/session/state-machine";
 import { runVoiceAction } from "@/lib/voice/actions";
 import { interpretUtterance } from "@/lib/voice/commands";
+import { isLikelySelfEcho } from "@/lib/voice/echo";
 import { VoiceError, type VoiceErrorCode } from "@/lib/voice/provider";
 import { getVoiceProvider, useVoiceCapabilities } from "@/lib/voice/use-voice";
 
@@ -20,6 +21,34 @@ const ERROR_KEY: Record<VoiceErrorCode, CopyKey> = {
   unsupported: "voiceUnsupported",
   unknown: "voiceUnknown",
 };
+
+/**
+ * What to say when an utterance couldn't be interpreted.
+ *
+ * Outside the open conversation, every state is waiting for one of a small,
+ * known set of answers — so a bare "I didn't catch that" strands the person at
+ * exactly the moment the companion knows most about what comes next. Each state
+ * therefore re-prompts with its own step: acknowledge, then say what can be
+ * said here. (`listening` keeps the generic line: there the person can say
+ * anything, so there is no specific step to name.)
+ *
+ * These are fixed approved lines naming this screen's own controls — never a
+ * model's idea of what to do next, and they open no gate.
+ */
+const UNCLEAR_GUIDANCE: Partial<Record<Session["state"], CopyKey>> = {
+  "camera-permission": "unclearCameraPermission",
+  "camera-guidance": "unclearCameraGuidance",
+  "confirm-match": "unclearConfirmMatch",
+  safety: "unclearSafety",
+  complete: "unclearComplete",
+};
+
+export function unclearGuidanceKey(session: Pick<Session, "state" | "explainStep">): CopyKey {
+  if (session.state === "explain") {
+    return session.explainStep === 2 ? "unclearExplainLast" : "unclearExplain";
+  }
+  return UNCLEAR_GUIDANCE[session.state] ?? "voiceDidntCatch";
+}
 
 export type ConversationView = {
   /** Mic is open right now. */
@@ -50,6 +79,8 @@ export function useVoiceConversation(opts: {
   soundActive: boolean;
   speaking: boolean;
   cameraLive: boolean;
+  /** Exactly what the companion is saying/just said, for echo suppression. */
+  spokenText: string | null;
   speakNotice: (text: string) => void;
   t: (key: CopyKey) => string;
 }): ConversationView {
@@ -75,6 +106,39 @@ export function useVoiceConversation(opts: {
     latest.current = { session, speaking, speakNotice, t, cameraLive: opts.cameraLive, soundActive };
   });
 
+  // What the companion last said, and when it stopped — the echo guard's inputs.
+  const lastSpoken = useRef<string | null>(null);
+  const speechEndedAt = useRef(0);
+  /**
+   * True while the CURRENT recognition session is one that was open while the
+   * companion was talking — the only kind that can have heard it. Cleared as
+   * soon as a fresh mic opens after speech, so that a person repeating a word
+   * the prompt suggested ("...for example, 500 milligrams" → "500 milligrams")
+   * is never mistaken for an echo.
+   */
+  const micOverlappedSpeech = useRef(false);
+  const wasListening = useRef(false);
+  useEffect(() => {
+    if (speaking) {
+      // Any recognition still in flight may have picked this up.
+      micOverlappedSpeech.current = true;
+    } else if (listening && !wasListening.current) {
+      // A mic that opened after the companion finished cannot have heard it.
+      micOverlappedSpeech.current = false;
+    }
+    wasListening.current = listening;
+  }, [speaking, listening]);
+  useEffect(() => {
+    if (opts.spokenText) lastSpoken.current = opts.spokenText;
+  }, [opts.spokenText]);
+  useEffect(() => {
+    if (speaking) {
+      speechEndedAt.current = Number.POSITIVE_INFINITY; // still talking
+    } else if (speechEndedAt.current === Number.POSITIVE_INFINITY) {
+      speechEndedAt.current = Date.now();
+    }
+  }, [speaking]);
+
   // `soundActive` is the explicit "Start voice call" tap — the mic is never
   // opened, and no permission prompt appears, before that user action.
   const enabled = session.callActive && caps.recognition && soundActive;
@@ -83,9 +147,27 @@ export function useVoiceConversation(opts: {
   const handleTranscript = useCallback((text: string) => {
     const { session: s, speaking: isSpeaking, speakNotice: say, t: tr, soundActive: soundOn } = latest.current;
     if (isSpeaking) return; // never react to the companion's own voice
+    // ...nor to the tail of it, arriving from a mic that was open while it spoke.
+    if (
+      micOverlappedSpeech.current &&
+      isLikelySelfEcho(text, lastSpoken.current, Date.now() - speechEndedAt.current)
+    ) {
+      micOverlappedSpeech.current = false;
+      setInterim("");
+      return; // silently: nothing was said, so there is nothing to answer
+    }
     setInterim("");
     silentTurns.current = 0;
     setNotice(null);
+
+    // Notices are spoken from in here rather than from the session's line, so
+    // they must be remembered for the echo guard too — otherwise the companion
+    // can hear its own "I didn't quite catch that" and try to answer it.
+    const sayNotice = (line: string) => {
+      if (!soundOn) return;
+      lastSpoken.current = line;
+      say(line);
+    };
 
     const intent = interpretUtterance(text, {
       state: s.state,
@@ -106,10 +188,11 @@ export function useVoiceConversation(opts: {
     } else if (intent.kind === "need-strength") {
       pendingSpokenName.current = intent.medicineName;
       setNotice("askStrengthForSpokenLabel");
-      if (soundOn) say(tr("askStrengthForSpokenLabel"));
+      sayNotice(tr("askStrengthForSpokenLabel"));
     } else {
-      setNotice("voiceDidntCatch");
-      if (soundOn) say(tr("voiceDidntCatch"));
+      const key = unclearGuidanceKey(s);
+      setNotice(key);
+      sayNotice(tr(key));
     }
   }, []);
 
@@ -147,7 +230,16 @@ export function useVoiceConversation(opts: {
       provider.stopListening();
       return;
     }
-    if (speaking || listening) return;
+    // Close the mic while the companion talks. Without this the mic stayed open
+    // through the companion's own speech and recognition delivered it as a user
+    // turn ("Mei Ling says: hello" after the greeting) — the in-handler
+    // `speaking` check can't catch that, because the final transcript usually
+    // lands just after speech ends.
+    if (speaking) {
+      provider.stopListening();
+      return;
+    }
+    if (listening) return;
     const id = window.setTimeout(() => provider.startListening(session.language), LISTEN_DELAY_MS);
     return () => window.clearTimeout(id);
   }, [active, speaking, listening, session.language, session.state, session.assistantKey, session.explainStep]);

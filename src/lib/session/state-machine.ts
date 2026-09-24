@@ -45,6 +45,13 @@ export type Session = {
   safetyReason: SafetyReason | null;
   explainStep: 0 | 1 | 2;
   repeatCount: number;
+  /**
+   * Increments on every accepted user message. The transcript keys each turn by
+   * this, so asking two different questions that happen to get the SAME approved
+   * reply still shows two replies — without it the second one looked like the
+   * companion had ignored the person.
+   */
+  turnCount: number;
   helpAction: HelpActionId | null;
   audit: AuditEvent[];
   auditSeq: number;
@@ -101,6 +108,7 @@ export function createInitialSession(): Session {
     safetyReason: null,
     explainStep: 0,
     repeatCount: 0,
+    turnCount: 0,
     helpAction: null,
     audit: [],
     auditSeq: 0,
@@ -298,10 +306,13 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       const text = event.text.trim();
       if (!s.callActive || text.length === 0) return s;
       const routed = routeMessage(text, { matchConfirmed: isMatchConfirmed(s) });
+      // One accepted message = one turn, whatever it routes to. Counted here so
+      // every path below (safety, route, explain, ordinary reply) carries it.
+      const heard: Session = { ...s, userText: text, turnCount: s.turnCount + 1 };
 
       // Urgent-risk overrides the normal path from ANY active-call state.
       if (routed.intent === "urgent-risk") {
-        return enterSafety({ ...s, userText: text }, ctx, "urgent-risk");
+        return enterSafety(heard, ctx, "urgent-risk");
       }
 
       // Unsupported medical questions and human-help requests also leave the normal path
@@ -310,7 +321,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         if (s.state === "start" || s.state === "safety" || s.state === "analyzing") return s;
         const keep = s.matchStatus === "confirmed";
         return enterSafety(
-          { ...s, userText: text },
+          heard,
           ctx,
           routed.safetyReason,
           {
@@ -323,7 +334,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       }
       if (s.state !== "listening") return s;
 
-      const base: Session = { ...s, userText: text };
+      const base: Session = heard;
       if (routed.safetyReason) {
         return enterSafety(base, ctx, routed.safetyReason, {}, { intent: routed.intent });
       }

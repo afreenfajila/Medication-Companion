@@ -51,6 +51,7 @@ export type UserIntent =
   | "deny-match"
   | "unsure-match"
   | "general"
+  | "off-topic" // recognised as off-spine: acknowledged, then redirected (never answered)
   | "unsupported-medical-question"
   | "urgent-risk";
 
