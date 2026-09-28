@@ -98,7 +98,15 @@ describe("the call starts voice automatically — no separate button", () => {
     render(
       <VoiceBar
         t={(key) => translate("en", key)}
-        view={{ listening: false, speaking: false, interim: "", micOn: true, notice: null, toggleMic: () => undefined }}
+        view={{
+          listening: false,
+          speaking: false,
+          interim: "",
+          micOn: true,
+          notice: null,
+          toggleMic: () => undefined,
+          submitText: () => undefined,
+        }}
       />,
     );
     expect(screen.getByText(/may send your voice to its own speech service/i)).toBeInTheDocument();
@@ -364,8 +372,9 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
 
     act(() => fake.recognitions.at(-1)!.say("so what am I meant to do now", true));
     expect(screen.getByText(/say “next” to hear the rest/i)).toBeInTheDocument();
-    // Guidance only — it moves nothing and opens nothing.
-    expect(screen.getByRole("button", { name: /next/i })).toBeInTheDocument();
+    // Guidance only — it moves nothing and opens nothing: still on the first step.
+    expect(screen.getByLabelText(translate("en", "explainHintNext"))).toBeInTheDocument();
+    expect(screen.queryByText("Take 1 tablet twice daily with meals.")).toBeNull();
   });
 
   it("spoken urgent-risk wording is caught by the safety classifier, exactly like typed", () => {

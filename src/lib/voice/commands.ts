@@ -66,6 +66,8 @@ const ANOTHER_MEDICINE = /\b(another|other|new|different|next)( medicine| one)?\
 
 /** A bare yes/no is only trusted in a short utterance ("ok what is this for" is a question). */
 const isShort = (n: string) => wordCount(n) <= 5;
+/** "What is this for please" is a question, not a yes — even though it contains "please". */
+const QUESTION = /^(what|when|how|why|where|which|who|whose|is|are|can|could|do|does|should|will|would)\b|什么|怎么|为什么|吗|呢/;
 
 export function interpretUtterance(text: string, ctx: CommandContext): VoiceIntent {
   const raw = text.trim();
@@ -96,7 +98,8 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
       // Except after "Did you mean Metformin?": there "yes" answers the name
       // check and the label button is only an alternative, so the reducer decides.
       if (ctx.nameCheckPending) return { kind: "message", text: raw };
-      if (offered.length === 1 && offered[0] === "show-medicine" && affirm && !negative && !hedge && isShort(n)) {
+      const question = QUESTION.test(n) || raw.includes("?") || raw.includes("？");
+      if (offered.length === 1 && offered[0] === "show-medicine" && affirm && !negative && !hedge && !question && isShort(n)) {
         return { kind: "event", event: { type: "SELECT_ROUTE", route: "show-medicine" } };
       }
       return { kind: "message", text: raw };
