@@ -52,6 +52,14 @@ export type Session = {
    * companion had ignored the person.
    */
   turnCount: number;
+  /**
+   * The user turn the current `listening` reply answers, or null when the line
+   * wasn't caused by something the person said (greeting, "another medicine").
+   * Only a reply to a turn may be re-worded by the understanding pass.
+   */
+  replyTo: number | null;
+  /** The companion's last question was "did you mean <medicine>?" — a bare yes/no answers it. */
+  nameCheckPending: boolean;
   helpAction: HelpActionId | null;
   audit: AuditEvent[];
   auditSeq: number;
@@ -82,7 +90,18 @@ export type SessionEvent =
   | { type: "RETURN_TO_CALL" }
   | { type: "HELP_ACTION"; action: Exclude<HelpActionId, "try-again"> }
   | { type: "REPEAT" }
-  | { type: "END_CALL" };
+  | { type: "END_CALL" }
+  /**
+   * The understanding pass's advisory result for one turn: which of the two
+   * in-call doors to offer, and whether it asked a name check. The reply TEXT
+   * never enters the session — it is display/speech only.
+   */
+  | {
+      type: "AI_REPLY";
+      turnCount: number;
+      contextualActions: ContextualActionId[];
+      checkingMedicineName: boolean;
+    };
 
 export type ReduceContext = { now: string };
 
@@ -109,6 +128,8 @@ export function createInitialSession(): Session {
     explainStep: 0,
     repeatCount: 0,
     turnCount: 0,
+    replyTo: null,
+    nameCheckPending: false,
     helpAction: null,
     audit: [],
     auditSeq: 0,
@@ -221,6 +242,7 @@ function applyRoute(
   route: ContextualActionId,
   via: "button" | "message",
 ): Session {
+  s = { ...s, replyTo: null, nameCheckPending: false };
   const audit: AuditInput = {
     eventType: "route-selected",
     summary:
@@ -305,10 +327,19 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
     case "USER_MESSAGE": {
       const text = event.text.trim();
       if (!s.callActive || text.length === 0) return s;
-      const routed = routeMessage(text, { matchConfirmed: isMatchConfirmed(s) });
+      const routed = routeMessage(text, {
+        matchConfirmed: isMatchConfirmed(s),
+        nameCheckPending: s.state === "listening" && s.nameCheckPending,
+      });
       // One accepted message = one turn, whatever it routes to. Counted here so
       // every path below (safety, route, explain, ordinary reply) carries it.
-      const heard: Session = { ...s, userText: text, turnCount: s.turnCount + 1 };
+      const heard: Session = {
+        ...s,
+        userText: text,
+        turnCount: s.turnCount + 1,
+        replyTo: null,
+        nameCheckPending: false,
+      };
 
       // Urgent-risk overrides the normal path from ANY active-call state.
       if (routed.intent === "urgent-risk") {
@@ -348,6 +379,8 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           ...base,
           assistantKey: routed.assistantKey,
           contextualActions: routed.contextualActions,
+          replyTo: base.turnCount,
+          nameCheckPending: routed.assistantKey === "medicineNameCheck",
         },
         ctx,
         {
@@ -360,6 +393,32 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
             intent: routed.intent,
             actionsOffered: routed.contextualActions.join(",") || "none",
             characters: text.length, // length only — never the raw text
+          },
+        },
+      );
+    }
+
+    case "AI_REPLY": {
+      // Only for the reply it was computed for: a later turn, a route taken, or
+      // any state change since makes it stale, and it is dropped.
+      if (!s.callActive || s.state !== "listening") return s;
+      if (s.replyTo === null || s.replyTo !== event.turnCount || s.turnCount !== event.turnCount) return s;
+      const actions = event.contextualActions.filter(
+        (a, i, all): a is ContextualActionId =>
+          (a === "show-medicine" || a === "ask-schedule") && all.indexOf(a) === i,
+      );
+      return withAudit(
+        { ...s, contextualActions: actions, nameCheckPending: event.checkingMedicineName },
+        ctx,
+        {
+          eventType: "message-classified",
+          summary: "Reply worded by the understanding pass (advisory; no gate changed)",
+          actor: "system",
+          route: "claude-understanding",
+          validationStatus: "passed",
+          details: {
+            actionsOffered: actions.join(",") || "none",
+            nameCheck: event.checkingMedicineName,
           },
         },
       );
@@ -601,6 +660,8 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         userText: null,
         assistantKey: "anotherMedicineGuide",
         contextualActions: [],
+        replyTo: null,
+        nameCheckPending: false,
         labelRouteSelected: false,
         cameraMode: null,
         cameraIssue: null,
@@ -645,6 +706,8 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         helpAction: null,
         assistantKey: "anotherMedicineGuide",
         contextualActions: [],
+        replyTo: null,
+        nameCheckPending: false,
         labelRouteSelected: false,
       };
     }

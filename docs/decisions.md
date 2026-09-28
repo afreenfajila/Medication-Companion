@@ -394,3 +394,50 @@ now tested, and the echo test was verified to fail with the guard disabled.
 **Direction of failure is deliberate.** Suppressing a real utterance costs a re-prompt; accepting an
 echo fabricates a turn the person never took. On the confirmation screen that asymmetry is the whole
 point — an echoed "yes" must never confirm a medicine.
+
+## 3. "I was mentioning the medicine in my hand but it just asks me to show the label"
+
+**Problem:** speech recognition heard "I do have Metformin with me" as "I do have met for pain with me".
+Nothing in the in-call router recognised a medicine name, so the person got the generic "show me a
+label, or ask about your schedule?" — as if they hadn't said anything about their medicine.
+
+**Change (`lib/session/intent.ts`):** before a match is confirmed, the record's medicine name said
+correctly routes to `medicineMentioned` (it names Metformin as the medicine on the record and asks for
+the label). A common mishearing ("met for pain", "met forming", "med for men") routes to
+`medicineNameCheck` instead — "Did you mean Metformin?" — with ways to answer that don't depend on
+pronunciation: say it again, type it, or spell it letter by letter ("M E T F O R M I N" is joined back
+up). A bare "yes"/"no" answers that check (`nameCheckPending`), and the label is offered as an
+alternative, not the next step. "I have a pill with me" without a recognised name gets the standard
+label question instead of the two-way prompt.
+
+**Why a loose pattern is safe here but not in the spoken-label matcher:** this only changes what the
+companion *says*. It takes no route, sets no candidate and unlocks nothing; the label check and the
+explicit confirmation are still the only way to record content. `spoken-label.ts` stays strict
+because its output feeds the matcher.
+
+## 4. "Don't use a lot of hard-coded responses — make it sound more reasonable"
+
+Pattern-matched routing with fixed replies can't reason about what someone meant, and it sounds
+scripted however many patterns are added. Decision (agreed with the product owner): add a bounded
+**understanding pass** — Claude task 3 in CLAUDE.md — rather than more patterns.
+
+**How it's bounded.**
+- The deterministic router still runs first and decides everything that matters: safety,
+  help, routes, the explanation. Claude only sees turns the router answered with an ordinary reply
+  (`UNDERSTAND_KEYS`), and the server re-runs the safety classifier before calling it.
+- Claude knows the medicine's name only. Its reply goes through `isSafeCompanionReply`, which
+  rejects any digit, dosing or timing word, advice, invented claim, "confirmed/matched" claim, or
+  markup. It can't state an instruction even if it tries.
+- Its structured output also chooses which of the two in-call doors to offer, and whether it is
+  checking a medicine name. The reducer takes that as `AI_REPLY` only for the same turn, only in
+  `listening`, filtered to the two known action ids. The reply text never enters the session.
+- Every failure falls back to the router's approved reply: no key (the client asks
+  `GET /api/companion/understand` once per call and skips the pass, so replies stay instant),
+  a timeout (4 s), a refusal, invalid JSON, or a guard rejection.
+
+**What this changes in CLAUDE.md.** The two "required in-call routing" sentences become the
+deterministic fallback wording rather than the only wording. The actions and every gate are unchanged.
+
+**Trade-off accepted.** Replies now vary and can take a moment. While Claude works, the transcript
+shows "Let me think about that…" so the pause reads as the companion thinking, not as the app
+ignoring the person.

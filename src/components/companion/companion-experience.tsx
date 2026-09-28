@@ -4,9 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CallFooter } from "@/components/ui/call-footer";
 import { CompanionOrb } from "@/components/ui/companion-orb";
 import { PhoneShell, ScreenBody } from "@/components/ui/shell";
-import { replyRephraseResponseSchema, rephraseResponseSchema } from "@/lib/api/schemas";
+import {
+  replyRephraseResponseSchema,
+  rephraseResponseSchema,
+  understandCapabilityResponseSchema,
+  understandResponseSchema,
+} from "@/lib/api/schemas";
 import { resolveExplanation, withRephrasedFlavor } from "@/lib/content/explanation";
 import { isConversationalRephraseKey, type RephraseFieldSet } from "@/lib/content/rephrase-guard";
+import { isUnderstandKey } from "@/lib/content/understand-guard";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { requestLabelAnalysis } from "@/lib/label/analyze-client";
 import { clearPendingImage, peekPendingImage } from "@/lib/label/pending-image";
@@ -33,6 +39,13 @@ const ANALYSIS_DELAY_MS = 900;
 // the exact approved wording instead — never long enough to feel like a pause
 // in what should still feel like a live call.
 const LINE_REPHRASE_BUDGET_MS = 800;
+// How long the understanding pass gets to answer something the person said.
+// Longer than a rephrase — it is working out what they meant, and a short
+// "thinking" pause is natural in a conversation — but still bounded: after
+// this, the approved reply is used, so the call never stalls.
+const UNDERSTAND_BUDGET_MS = 4000;
+// How much of the conversation the understanding pass sees for context.
+const UNDERSTAND_HISTORY_TURNS = 6;
 
 /**
  * The whole call — from "Call with companion" to "End call" — happens on this
@@ -146,13 +159,121 @@ export function CompanionExperience() {
   // later, a naturalised one on top of it. If Claude doesn't answer (or fails
   // validation) within the budget, the exact approved line is used, exactly
   // as it always was.
+  //
+  // A reply to something the person SAID goes further (CLAUDE.md § Claude,
+  // task 3): Claude reads the message in the context of the conversation and
+  // answers it in its own words, e.g. "Did you mean Metformin?" for a misheard
+  // name. What it returns is advisory — a reply that passes the server guard,
+  // and which of the two in-call doors to offer (AI_REPLY, which the reducer
+  // only accepts for the same turn). No gate moves; if it's slow, unavailable
+  // or rejected, the router's approved reply is used exactly as before.
+  // Asked once per call: with no AI configured the pass is skipped outright,
+  // so replies stay instant rather than "thinking" and then falling back.
+  const [understandingOn, setUnderstandingOn] = useState<{ call: number; enabled: boolean } | null>(null);
+  useEffect(() => {
+    if (!session.callActive) return;
+    const call = session.callCount;
+    const controller = new AbortController();
+    fetch("/api/companion/understand", { method: "GET", signal: controller.signal })
+      .then((r) => r.json())
+      .then((json) => {
+        const parsed = understandCapabilityResponseSchema.safeParse(json);
+        setUnderstandingOn({ call, enabled: parsed.success && parsed.data.ok && parsed.data.data.enabled });
+      })
+      .catch(() => setUnderstandingOn({ call, enabled: false }));
+    return () => controller.abort();
+  }, [session.callActive, session.callCount]);
+
+  const understandEligible =
+    understandingOn?.call === session.callCount &&
+    understandingOn.enabled &&
+    session.callActive &&
+    session.state === "listening" &&
+    session.userText !== null &&
+    session.replyTo !== null &&
+    session.replyTo === session.turnCount &&
+    isUnderstandKey(session.assistantKey);
   const listeningEligible =
-    session.callActive && session.state === "listening" && language === "en" && isConversationalRephraseKey(session.assistantKey);
+    !understandEligible &&
+    session.callActive &&
+    session.state === "listening" &&
+    language === "en" &&
+    isConversationalRephraseKey(session.assistantKey);
   // Includes turnCount so a repeated reply is decided afresh each turn — the
   // same sentence twice in a row is exactly what the rephrase is there to avoid.
-  const turnSig = `${session.assistantKey}:${session.repeatCount}:${session.turnCount}`;
+  // An understood reply is decided once per turn, so "Repeat" says it again.
+  const turnSig = understandEligible
+    ? `understand:${session.turnCount}:${session.language}`
+    : `${session.assistantKey}:${session.repeatCount}:${session.turnCount}`;
   const [decidedLine, setDecidedLine] = useState<{ sig: string; text: string } | null>(null);
   const decidedTurns = useRef<Set<string>>(new Set());
+  const feedRef = useRef<{ speaker: "user" | "companion"; lines: string[] }[]>([]);
+
+  useEffect(() => {
+    if (!understandEligible || decidedTurns.current.has(turnSig) || session.userText === null) return;
+    const turn = session.turnCount;
+    const key = session.assistantKey;
+    const message = session.userText;
+    const offered = session.contextualActions;
+    const canonical = t(key);
+    const controller = new AbortController();
+    const decide = (text: string) => {
+      if (decidedTurns.current.has(turnSig)) return;
+      decidedTurns.current.add(turnSig);
+      setDecidedLine({ sig: turnSig, text });
+    };
+    const budget = window.setTimeout(() => {
+      decide(canonical); // out of time — the router's approved reply, exactly as before
+      controller.abort();
+    }, UNDERSTAND_BUDGET_MS);
+
+    // What was said before this message, oldest first. The feed may or may not
+    // already hold this turn's own words; they're sent separately, so drop them.
+    const past = feedRef.current.map((e) => ({ speaker: e.speaker, text: e.lines.join(" ").slice(0, 600) }));
+    if (past.at(-1)?.speaker === "user" && past.at(-1)?.text === message) past.pop();
+    const history = past.filter((e) => e.text.trim()).slice(-UNDERSTAND_HISTORY_TURNS);
+
+    fetch("/api/companion/understand", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message,
+        key,
+        language: session.language,
+        offered,
+        checkingMedicineName: session.nameCheckPending,
+        history,
+      }),
+      signal: controller.signal,
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        window.clearTimeout(budget);
+        const parsed = understandResponseSchema.safeParse(json);
+        if (!parsed.success || !parsed.data.ok) return decide(canonical);
+        const data = parsed.data.data;
+        if (data.source === "claude") {
+          dispatch({
+            type: "AI_REPLY",
+            turnCount: turn,
+            contextualActions: data.contextualActions,
+            checkingMedicineName: data.checkingMedicineName,
+          });
+        }
+        decide(data.text);
+      })
+      .catch(() => {
+        window.clearTimeout(budget);
+        decide(canonical);
+      });
+    return () => {
+      window.clearTimeout(budget);
+      controller.abort(); // a new turn started (or this one unmounted) — stop waiting on the old one
+    };
+    // Keyed on the turn: the AI_REPLY this effect dispatches changes the offered
+    // actions, and must not start a second request for the same turn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [understandEligible, turnSig]);
 
   useEffect(() => {
     if (!listeningEligible || decidedTurns.current.has(turnSig)) return;
@@ -190,11 +311,12 @@ export function CompanionExperience() {
     };
   }, [listeningEligible, turnSig, session.assistantKey, t]);
 
-  const listeningLine = !listeningEligible
+  const listeningLine = !listeningEligible && !understandEligible
     ? t(session.assistantKey) // not eligible: immediate, exactly as before
     : decidedLine && decidedLine.sig === turnSig
       ? decidedLine.text
       : null; // eligible but not decided yet — say/show nothing for this turn until it is
+  const companionThinking = understandEligible && listeningLine === null;
 
   // Exactly the approved on-screen wording; explanation text only with a confirmed match.
   const spoken = speakableText(session, t, explanation, listeningLine);
@@ -260,6 +382,9 @@ export function CompanionExperience() {
 
   // The one running transcript for the whole call — see use-call-feed.ts.
   const feed = useCallFeed(session, t, displayedExplanation, listeningLine);
+  useEffect(() => {
+    feedRef.current = feed;
+  }, [feed]);
   const orbState = speaking ? "speaking" : conversation.listening ? "listening" : "idle";
 
   let pinnedActions: React.ReactNode = null;
@@ -369,13 +494,13 @@ export function CompanionExperience() {
                 <div className="flex flex-col items-center gap-1">
                   <CompanionOrb size="sm" state={orbState} />
                 </div>
-                <CallFeed entries={feed} interim={conversation.interim} t={t} />
+                <CallFeed entries={feed} interim={conversation.interim} thinking={companionThinking} t={t} />
               </div>
             )}
           </main>
         </ScreenBody>
         {pinnedActions && (
-          <div className="border-t border-line bg-canvas px-6 pb-3 pt-4">{pinnedActions}</div>
+          <div className="border-t border-line bg-canvas px-4 pb-2 pt-3">{pinnedActions}</div>
         )}
         {showVoiceBar && <VoiceBar view={conversation} t={t} />}
         {session.callActive && (

@@ -61,6 +61,13 @@ export default function AboutPage() {
             label matches the record, and it never writes medicine information.
           </li>
           <li>
+            When it is configured, <strong>Claude</strong> also works out what you meant during the
+            call, for example a medicine name the speech recognition misheard, and replies in its own
+            words. It knows only the medicine&apos;s name, is checked for any dose, timing or advice
+            before you see it, and cannot open the camera or confirm a medicine. Without it, fixed
+            replies are used.
+          </li>
+          <li>
             A <strong>fixed, non-AI matcher</strong> compares that text with the demo record and
             makes the match decision.
           </li>

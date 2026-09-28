@@ -145,16 +145,24 @@ Structure:
 
 - Three layered teal circles.
 - Soft low-opacity outer halo.
-- Semantic icon in the centre: microphone, camera, check, or help.
+- Icon in the centre: the companion logo when idle or speaking; otherwise a semantic icon
+  (microphone, camera, check, or help).
 - Never use a human face as the AI avatar.
+
+**Companion logo** (`CompanionLogo`, `src/components/ui/companion-logo.tsx`): a speech bubble
+with two dots and a four-point sparkle, meaning "it talks with you, and it's an AI guide". It is
+drawn as a round-capped line icon on a 24 px grid to match Lucide, and coloured with
+`currentColor`: off-white on the teal orb core, and off-white on a `#5B9B98` rounded square for
+the browser icon (`src/app/icon.svg`). It is decorative (`aria-hidden`); the companion is always
+also named in text.
 
 States:
 
 | State | Visual |
 |---|---|
-| Idle | Slow soft breathing scale, 3.2–4.8 s loop |
+| Idle | Slow soft breathing scale, 3.2–4.8 s loop; companion logo |
 | Listening | Gentle expanding outer rings; microphone icon |
-| Speaking | Subtle waveform or alternating ring opacity |
+| Speaking | Subtle waveform or alternating ring opacity; companion logo |
 | Camera focus | Camera icon; focus ring; no rapid flashing |
 | Match found | Check icon; restrained teal glow |
 | Safety | Stable orb; no alarm animation; accompanying warning card |
@@ -177,10 +185,11 @@ Animation rules:
 
 - Navy fill, white text, 56 px minimum height.
 - Full width inside the phone layout unless part of a deliberate compact choice.
-- **Compact variant — 48 px.** Only for the temporary in-call contextual choices
-  (`Show medicine` / `Ask about my schedule`), which share the pinned control area with
-  the typed fallback; at full size they pushed the conversation itself off screen. Still
-  above the 44 px tap-target floor. Never for the landing CTA, and never for a consent or
+- **Compact variant — 44 px, side by side.** Only for the temporary in-call contextual
+  choices (`Show medicine` / `Ask about my schedule`), which share the pinned control area
+  with the typed fallback; stacked at full size they pushed the conversation itself off
+  screen. They sit in one row and wrap to a stack only when too narrow. Exactly at the
+  44 px tap-target floor. Never for the landing CTA, and never for a consent or
   confirmation decision — there the full size is the point.
 - Rounded pill or 16–28 px rounded rectangle.
 - Icon before label when useful.
@@ -209,7 +218,7 @@ Animation rules:
 ### ContextualChoiceGroup
 
 - Appears only after the call begins and the companion needs route clarification.
-- May contain one or two full-width large buttons.
+- May contain one or two compact pill buttons in a single row (wrapping on narrow screens).
 - Typical actions: `Show medicine` and `Ask about my schedule`.
 - Must appear immediately below the companion’s question that explains the choice.
 - Must disappear once a route is selected; never act as permanent navigation.

@@ -24,8 +24,8 @@ export function VoiceBar({ view, t }: { view: ConversationView; t: T }) {
         : null;
 
   return (
-    <div className="flex items-center gap-2 border-t border-line bg-canvas px-4 py-2">
-      <p role="status" aria-live="polite" className="min-h-6 flex-1 text-sm leading-snug text-navy-700">
+    <div className="flex items-center gap-2 border-t border-line bg-canvas px-4">
+      <p role="status" aria-live="polite" className="flex-1 text-[13px] leading-snug text-navy-700">
         {status ?? t("voicePrivacy")}
       </p>
       {/* Icon only — no pill, no border, no visible label — but a real 44×44 target

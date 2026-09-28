@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CONVERSATIONAL_REPHRASE_KEYS } from "@/lib/content/rephrase-guard";
+import { UNDERSTAND_KEYS } from "@/lib/content/understand-guard";
 
 // Shared request/response contracts (site-contract.md §8). Used by the route
 // to build responses and by the client to validate what it receives.
@@ -112,5 +113,42 @@ export const replyRephraseResponseDataSchema = z.object({
 export type ReplyRephraseResponseData = z.infer<typeof replyRephraseResponseDataSchema>;
 export const replyRephraseResponseSchema = z.discriminatedUnion("ok", [
   apiSuccessSchema(replyRephraseResponseDataSchema),
+  apiFailureSchema,
+]);
+
+/**
+ * In-call understanding (Claude task 3): the person's own message plus a short
+ * window of the conversation. `key` names the deterministic reply the router
+ * already chose; the server looks up its approved text itself and returns it
+ * unchanged whenever the model is unavailable or its reply fails the guard.
+ */
+const understandTurnSchema = z.object({
+  speaker: z.enum(["user", "companion"]),
+  text: z.string().trim().min(1).max(600),
+});
+export const understandRequestSchema = z.object({
+  message: z.string().trim().min(1).max(300),
+  key: z.enum(UNDERSTAND_KEYS),
+  language: z.enum(["en", "zh-Hans"]),
+  /** The deterministic router's offered actions — echoed back unchanged on fallback. */
+  offered: z.array(z.enum(["show-medicine", "ask-schedule"])).max(2),
+  /** Whether the deterministic reply is itself a "did you mean…?" name check. */
+  checkingMedicineName: z.boolean().default(false),
+  history: z.array(understandTurnSchema).max(8).default([]),
+});
+export const understandResponseDataSchema = z.object({
+  text: z.string(),
+  contextualActions: z.array(z.enum(["show-medicine", "ask-schedule"])).max(2),
+  checkingMedicineName: z.boolean(),
+  source: z.enum(["claude", "fallback"]),
+});
+export type UnderstandResponseData = z.infer<typeof understandResponseDataSchema>;
+export const understandResponseSchema = z.discriminatedUnion("ok", [
+  apiSuccessSchema(understandResponseDataSchema),
+  apiFailureSchema,
+]);
+export const understandCapabilitySchema = z.object({ enabled: z.boolean() });
+export const understandCapabilityResponseSchema = z.discriminatedUnion("ok", [
+  apiSuccessSchema(understandCapabilitySchema),
   apiFailureSchema,
 ]);

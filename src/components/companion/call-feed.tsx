@@ -8,13 +8,24 @@ import type { T } from "./screen-chrome";
  * page; this is what keeps everything said so far in view instead of it being
  * replaced by the next screen. Auto-scrolls to the newest message.
  */
-export function CallFeed({ entries, interim, t }: { entries: FeedMessage[]; interim: string; t: T }) {
+export function CallFeed({
+  entries,
+  interim,
+  thinking = false,
+  t,
+}: {
+  entries: FeedMessage[];
+  interim: string;
+  /** The companion is working out a reply to what was just said. */
+  thinking?: boolean;
+  t: T;
+}) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // jsdom (tests) has no scrollIntoView implementation at all.
     bottomRef.current?.scrollIntoView?.({ block: "end" });
-  }, [entries.length, interim]);
+  }, [entries.length, interim, thinking]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -29,6 +40,13 @@ export function CallFeed({ entries, interim, t }: { entries: FeedMessage[]; inte
           ))}
         </TranscriptCard>
       ))}
+      {thinking && (
+        <TranscriptCard speaker="companion" label={t("companionSays")}>
+          <span role="status" className="text-navy-700">
+            {t("companionThinking")}
+          </span>
+        </TranscriptCard>
+      )}
       {interim && (
         <TranscriptCard speaker="user" label={t("youSay")}>
           {interim}

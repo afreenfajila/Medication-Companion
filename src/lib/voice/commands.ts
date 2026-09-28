@@ -28,6 +28,8 @@ export type CommandContext = {
   candidateId: string | null;
   explainStep: 0 | 1 | 2;
   cameraLive: boolean;
+  /** The companion just asked "did you mean <medicine>?" — "yes" answers that, not an offered button. */
+  nameCheckPending?: boolean;
   /** Set once a spoken name has been heard and we're waiting on its strength. */
   pendingSpokenMedicineName: string | null;
 };
@@ -91,6 +93,9 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
       // Explicit requests ("I want to show the medicine", "my schedule") are routed by the
       // reducer itself, so typed and spoken input behave identically.
       // A bare "yes" answers a single offered question (unambiguous only when ONE action is offered).
+      // Except after "Did you mean Metformin?": there "yes" answers the name
+      // check and the label button is only an alternative, so the reducer decides.
+      if (ctx.nameCheckPending) return { kind: "message", text: raw };
       if (offered.length === 1 && offered[0] === "show-medicine" && affirm && !negative && !hedge && isShort(n)) {
         return { kind: "event", event: { type: "SELECT_ROUTE", route: "show-medicine" } };
       }

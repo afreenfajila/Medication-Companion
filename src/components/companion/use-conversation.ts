@@ -171,6 +171,7 @@ export function useVoiceConversation(opts: {
 
     const intent = interpretUtterance(text, {
       state: s.state,
+      nameCheckPending: s.nameCheckPending,
       contextualActions: s.contextualActions,
       candidateId: s.candidate?.candidateId ?? null,
       explainStep: s.explainStep,

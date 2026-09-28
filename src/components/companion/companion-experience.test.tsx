@@ -224,9 +224,13 @@ describe("in-call flow", () => {
     expect(init.body.get("image")).toBeInstanceOf(Blob);
     expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
-    // Only the sample list + analyze route were fetched — no other network use.
+    // Only the sample list + analyze route were fetched — plus the once-per-call
+    // check for whether the understanding pass is configured. No other network use.
     expect(
-      fetchFn.mock.calls.every(([u]) => String(u).startsWith("/samples/") || u === "/api/label/analyze"),
+      fetchFn.mock.calls.every(
+        ([u]) =>
+          String(u).startsWith("/samples/") || u === "/api/label/analyze" || u === "/api/companion/understand",
+      ),
     ).toBe(true);
   });
 
@@ -413,6 +417,86 @@ describe("natural rephrasing of eligible in-call conversational lines", () => {
     await flush();
 
     expect(screen.getByText(/Let’s check this together/)).toBeInTheDocument();
-    expect(fetchFn).not.toHaveBeenCalled();
+    expect(fetchFn.mock.calls.some(([u]) => u === "/api/companion/reply-rephrase")).toBe(false);
+  });
+});
+
+describe("understanding pass — Claude answers what the person meant", () => {
+  function stubUnderstanding(post: unknown | "hang", enabled = true) {
+    const fn = vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+      if (String(url) === "/api/companion/understand" && init?.method === "GET") {
+        return { ok: true, json: async () => ({ ok: true, data: { enabled }, requestId: "req_cap" }) };
+      }
+      if (String(url) === "/api/companion/understand") {
+        if (post === "hang") return new Promise(() => undefined);
+        return { ok: true, json: async () => post };
+      }
+      throw new Error(`unexpected fetch in this test: ${url}`);
+    });
+    vi.stubGlobal("fetch", fn);
+    return fn;
+  }
+
+  const settle = (ms = 1000) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+
+  const nameCheck =
+    "I think you said Metformin, the medicine on your record — did I hear that right? You can also type it below, or show me the label.";
+
+  it("a misheard name gets Claude's own check-back, with the doors it chose", async () => {
+    const fetchFn = stubUnderstanding({
+      ok: true,
+      data: { text: nameCheck, contextualActions: ["show-medicine"], checkingMedicineName: true, source: "claude" },
+      requestId: "req_u",
+    });
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    await settle(); // capability check
+    send("I do have met for pain with me");
+    expect(screen.getByText(/let me think about that/i)).toBeInTheDocument();
+    await settle();
+
+    expect(screen.getByText(nameCheck)).toBeInTheDocument();
+    expect(screen.queryByText(/let me think about that/i)).toBeNull();
+    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull();
+
+    // It was sent the person's words and the router's reading — never record instructions.
+    const post = fetchFn.mock.calls.find(([u, i]) => u === "/api/companion/understand" && i?.method === "POST");
+    const body = JSON.parse(post![1]!.body!);
+    expect(body).toMatchObject({ message: "I do have met for pain with me", key: "medicineNameCheck" });
+    expect(JSON.stringify(body)).not.toMatch(/twice daily|with meals/i);
+  });
+
+  it("falls back to the approved reply if Claude doesn't answer in time", async () => {
+    stubUnderstanding("hang");
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    await settle();
+    send("I do have met for pain with me");
+    await settle(4500);
+    expect(screen.getByText(/I want to make sure I heard you right/)).toBeInTheDocument();
+  });
+
+  it("is skipped entirely when the server says it isn't configured — replies stay instant", async () => {
+    const fetchFn = stubUnderstanding({ never: "used" }, false);
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    await settle();
+    send("What is this for?");
+    expect(screen.getByText(/Let’s check this together/)).toBeInTheDocument();
+    expect(fetchFn.mock.calls.some(([u, i]) => u === "/api/companion/understand" && i?.method === "POST")).toBe(false);
+  });
+
+  it("a safety message never waits on — or reaches — the understanding pass", async () => {
+    const fetchFn = stubUnderstanding({ never: "used" });
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    await settle();
+    send("I have chest pain");
+    expect(screen.getByRole("alert")).toHaveTextContent("This may need urgent help.");
+    expect(fetchFn.mock.calls.some(([u, i]) => u === "/api/companion/understand" && i?.method === "POST")).toBe(false);
   });
 });

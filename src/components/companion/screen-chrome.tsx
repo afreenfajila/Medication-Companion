@@ -18,7 +18,7 @@ export function ScreenHeader({ t, control }: { t: T; control?: React.ReactNode }
 /** Persistent disclosure + link to /about (site-contract §15). */
 export function DisclosureFooter({ t }: { t: T }) {
   return (
-    <footer className="px-6 pb-5 pt-3 text-center text-[13px] leading-snug text-navy-700">
+    <footer className="px-6 pb-3 pt-1.5 text-center text-[12px] leading-snug text-navy-700">
       <p className="font-medium">{t("aiDisclosure")}</p>
       <p>
         {t("prototypeNotice")} ·{" "}

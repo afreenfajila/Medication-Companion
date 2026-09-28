@@ -45,6 +45,32 @@ const PRESCRIPTIONS_LIST =
   // ("when do I take my medicine?") and must fall through to SCHEDULE instead.
   /\bmy (current )?(prescriptions?|medications|medicines)\b|\bwhat (medicines?|medications?|prescriptions?)\b[^?]*\b(do i have|am i (on|taking|prescribed))\b|\bwhat am i (taking|prescribed)\b|\b(list|show me) my (medicines?|medications?|prescriptions?)\b|我的处方|我在吃(什么|哪些)药|我有(什么|哪些)药|我的药物清单|我吃(什么|哪些)药/i;
 
+// The record's medicine said (or typed, or spelled) correctly.
+const RECORD_MEDICINE_NAME = /\bmetformin\b|二甲双胍/i;
+
+// Ways speech recognition commonly mishears it ("met for pain", "met forming",
+// "med for men"). These never count as the name: the companion asks whether
+// that is what was meant. Like everything in this router, it only changes what
+// the companion SAYS — nothing here selects, matches or confirms a medicine
+// (the spoken-label matcher stays deliberately strict).
+const RECORD_MEDICINE_SOUNDALIKE =
+  /\bmet\s?-?form\w*|\b(met|med|meth)\s?(for|four|fore)\s?(min|mins|men|man|mean|main|mine|ming|pain)\b|\bmetphormin\w*|\bmedformin\w*/i;
+
+// Answers to "Did you mean Metformin?" — only read on the turn right after it.
+const NAME_CHECK_YES =
+  /^\s*(yes|yeah|yep|yup|correct|right|that's (it|right)|that is (it|right)|exactly|i did|i do)\b|^\s*(是|对|没错)/i;
+const NAME_CHECK_NO = /^\s*(no|nope|nah|not (that|quite|really)|wrong)\b|^\s*(不是|不对)/i;
+
+/** "M E T F O R M I N" (spelled out, as speech recognition returns it) → "METFORMIN". */
+function joinSpelledLetters(text: string): string {
+  // Only lone letters join — the "s" of "it's" or the "a" of "a pill" never do.
+  return text.replace(/(?<![\w'’])([a-z])[\s.-]+(?=[a-z](?![\w'’]))/gi, "$1");
+}
+
+// "I've got my medicine with me" — the person has something in hand to check.
+const MEDICINE_IN_HAND =
+  /\b(i('ve| have| do have)|i('ve)? got)\b.*\b(with me|in my hand|right here|here with)\b|\b(i'?m |i am )holding\b|\bin my hand\b|我手上|我手里|我带着|我拿着/i;
+
 const UNKNOWN_MEDICINE =
   /what('?s| is| are) (this|that|it|these)\b|what medicine|which medicine|what.*\bfor\b|is this (my |the |a )?(medicine|pill|tablet)|这是什么|什么药|做什么用/i;
 
@@ -54,7 +80,8 @@ const SCHEDULE =
 /**
  * Deterministic in-call routing (site-contract.md §4). Order matters:
  * safety → human help → off-spine talk → explicit route requests →
- * list-my-prescriptions → unknown medicine → schedule → broad/unclear.
+ * list-my-prescriptions → medicine named / misheard / in hand → unknown medicine →
+ * schedule → broad/unclear.
  * "What is this for? When do I take it?" is an unknown-medicine question:
  * we cannot talk about timing until a medicine is identified.
  * "What are my prescriptions?" is different: it asks what's on file, not to
@@ -63,7 +90,11 @@ const SCHEDULE =
  */
 export function routeMessage(
   text: string,
-  ctx: { matchConfirmed: boolean },
+  ctx: {
+    matchConfirmed: boolean;
+    /** The companion just asked "did you mean <medicine>?" — a bare "yes"/"no" answers it. */
+    nameCheckPending?: boolean;
+  },
 ): RoutedMessage {
   const safety = classifySafety(text);
   if (safety.level === "urgent") {
@@ -89,6 +120,17 @@ export function routeMessage(
       contextualActions: [],
       safetyReason: "help-requested",
     };
+  }
+  // Answering "Did you mean Metformin?". A yes means the name was heard as
+  // intended; a no means ask again. Anything else falls through and is
+  // understood on its own (the person may simply say the name again).
+  if (ctx.nameCheckPending && !ctx.matchConfirmed) {
+    if (NAME_CHECK_NO.test(text)) {
+      return { intent: "medicine-mentioned", assistantKey: "medicineNameRetry", contextualActions: ["show-medicine"] };
+    }
+    if (NAME_CHECK_YES.test(text)) {
+      return { intent: "medicine-mentioned", assistantKey: "medicineMentioned", contextualActions: ["show-medicine"] };
+    }
   }
   // Spine-based redirection. Deliberately AFTER every safety check above, so a
   // safety-classified message can never be answered with a friendly deflection,
@@ -123,6 +165,30 @@ export function routeMessage(
     return {
       intent: "list-prescriptions",
       assistantKey: "prescriptionsListed",
+      contextualActions: ["show-medicine"],
+    };
+  }
+  // Before a match is confirmed, naming the medicine (however garbled) gets an
+  // answer that shows it was heard, instead of the generic two-way question.
+  if (!ctx.matchConfirmed && RECORD_MEDICINE_NAME.test(joinSpelledLetters(text))) {
+    return {
+      intent: "medicine-mentioned",
+      assistantKey: "medicineMentioned",
+      contextualActions: ["show-medicine"],
+    };
+  }
+  // Close, but not the name: check what was meant before assuming anything.
+  if (!ctx.matchConfirmed && RECORD_MEDICINE_SOUNDALIKE.test(text)) {
+    return {
+      intent: "medicine-mentioned",
+      assistantKey: "medicineNameCheck",
+      contextualActions: ["show-medicine"],
+    };
+  }
+  if (!ctx.matchConfirmed && MEDICINE_IN_HAND.test(text)) {
+    return {
+      intent: "unknown-medicine-question",
+      assistantKey: "showLabelQuestion",
       contextualActions: ["show-medicine"],
     };
   }

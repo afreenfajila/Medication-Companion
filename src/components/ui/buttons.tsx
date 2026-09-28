@@ -4,26 +4,28 @@ import { cn } from "@/lib/utils/cn";
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   icon?: ReactNode;
   /**
-   * 48px instead of 56px, for the temporary in-call controls that share the
-   * pinned area with the typed fallback (design-standard.md §PrimaryButton).
-   * Still well clear of the 44px tap-target floor, and never used for the
-   * landing CTA or for a consent/confirmation decision, where full size is the
-   * point.
+   * 44px instead of 56px, sized to sit side by side, for the temporary
+   * in-call controls that share the pinned area with the typed fallback
+   * (design-standard.md §PrimaryButton). Exactly at the 44px tap-target floor,
+   * and never used for the landing CTA or for a consent/confirmation decision,
+   * where full size is the point.
    */
   compact?: boolean;
 };
 
 const compactSize = (compact?: boolean) =>
-  compact ? "min-h-12 py-2 text-base" : "min-h-14 py-3 text-lg";
+  compact
+    ? "w-full min-h-11 min-w-0 px-3 py-1.5 text-[15px] leading-tight"
+    : "w-full min-h-14 px-6 py-3 text-lg";
 
-/** Navy fill, 56px min height (48px compact). Landing must render exactly one of these. */
+/** Navy fill, 56px min height (44px compact). Landing must render exactly one of these. */
 export function PrimaryButton({ icon, children, className, compact, type = "button", ...rest }: ButtonProps) {
   return (
     <button
       type={type}
       data-variant="primary"
       className={cn(
-        "inline-flex w-full items-center justify-center gap-2 rounded-pill bg-navy-900 px-6 font-bold text-white",
+        "inline-flex items-center justify-center gap-2 rounded-pill bg-navy-900 font-bold text-white",
         compactSize(compact),
         "transition-colors duration-200 hover:bg-[#1f4368] active:bg-[#12283f]",
         "disabled:cursor-not-allowed disabled:opacity-60",
@@ -44,7 +46,7 @@ export function SecondaryButton({ icon, children, className, compact, type = "bu
       type={type}
       data-variant="secondary"
       className={cn(
-        "inline-flex w-full items-center justify-center gap-2 rounded-pill border border-teal-600/30 bg-teal-100 px-6 font-bold text-navy-900",
+        "inline-flex items-center justify-center gap-2 rounded-pill border border-teal-600/30 bg-teal-100 font-bold text-navy-900",
         compactSize(compact),
         "transition-colors duration-200 hover:bg-[#d7ebe9] active:bg-[#c8e2df]",
         "disabled:cursor-not-allowed disabled:opacity-60",

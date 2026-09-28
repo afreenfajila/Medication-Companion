@@ -18,18 +18,18 @@ export function CallFooter({
   onEnd: () => void;
 }) {
   const base =
-    "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-2 text-[14px] font-bold leading-tight transition-colors";
+    "flex min-h-11 items-center justify-center gap-1.5 rounded-md px-1 text-[14px] font-bold leading-tight transition-colors";
   return (
     <nav
       aria-label={labels.group}
-      className="grid grid-cols-3 gap-2 border-t border-line bg-canvas px-4 pt-3"
+      className="grid grid-cols-3 gap-2 border-t border-line bg-canvas px-4 pt-1.5"
     >
       <button type="button" onClick={onRepeat} className={cn(base, "text-navy-900 hover:bg-teal-100")}>
-        <RotateCcw className="h-5 w-5" aria-hidden="true" />
+        <RotateCcw className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span>{labels.repeat}</span>
       </button>
       <button type="button" onClick={onHelp} className={cn(base, "text-navy-900 hover:bg-teal-100")}>
-        <HandHelping className="h-5 w-5" aria-hidden="true" />
+        <HandHelping className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span>{labels.help}</span>
       </button>
       <button
@@ -37,7 +37,7 @@ export function CallFooter({
         onClick={onEnd}
         className={cn(base, "bg-danger-100 text-danger-800 hover:bg-[#f6dcd9]")}
       >
-        <PhoneOff className="h-5 w-5" aria-hidden="true" />
+        <PhoneOff className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span>{labels.end}</span>
       </button>
     </nav>

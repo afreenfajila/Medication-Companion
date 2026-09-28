@@ -146,6 +146,10 @@ export const CONVERSATIONAL_REPHRASE_KEYS = [
   // control ("Tap Get help"), which is reviewed wording, not flavour text.
   "offTopicSocial",
   "offTopicWorld",
+  // "Did I hear you right?" turns: repeated when recognition keeps mishearing,
+  // so varied wording keeps it sounding like a conversation, not a loop.
+  "medicineNameCheck",
+  "medicineNameRetry",
 ] as const satisfies readonly CopyKey[];
 export type ConversationalRephraseKey = (typeof CONVERSATIONAL_REPHRASE_KEYS)[number];
 

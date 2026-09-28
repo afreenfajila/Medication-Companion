@@ -93,6 +93,63 @@ describe("conversation routing and contextual actions", () => {
     }
   });
 
+  it("a mishearing of the record medicine is checked with the person, not assumed", () => {
+    for (const text of ["I do have met for pain with me", "it's met forming", "med for men"]) {
+      const r = routeMessage(text, none);
+      expect(r.intent).toBe("medicine-mentioned");
+      expect(r.assistantKey).toBe("medicineNameCheck");
+      // The label is an alternative, not the next step it jumps to.
+      expect(r.route).toBeUndefined();
+      expect(r.toExplain).toBeUndefined();
+    }
+  });
+
+  it("answering the name check: yes acknowledges the name, no asks again, anything else is understood fresh", () => {
+    const afterCheck = { matchConfirmed: false, nameCheckPending: true };
+    expect(routeMessage("yes", afterCheck).assistantKey).toBe("medicineMentioned");
+    expect(routeMessage("Yes, that's right", afterCheck).assistantKey).toBe("medicineMentioned");
+    expect(routeMessage("是", afterCheck).assistantKey).toBe("medicineMentioned");
+    expect(routeMessage("no", afterCheck).assistantKey).toBe("medicineNameRetry");
+    expect(routeMessage("No, not that", afterCheck).assistantKey).toBe("medicineNameRetry");
+    // Saying the name again instead of yes/no.
+    expect(routeMessage("metformin", afterCheck).assistantKey).toBe("medicineMentioned");
+    // A bare "yes" means nothing special when the name check wasn't the last question.
+    expect(routeMessage("yes", none).assistantKey).toBe("clarificationPrompt");
+    // Safety still comes first, even as an answer to the check.
+    expect(routeMessage("yes, I can't breathe", afterCheck).intent).toBe("urgent-risk");
+  });
+
+  it("the name spelled out letter by letter is understood", () => {
+    expect(routeMessage("M E T F O R M I N", none).assistantKey).toBe("medicineMentioned");
+    expect(routeMessage("it's m-e-t-f-o-r-m-i-n", none).assistantKey).toBe("medicineMentioned");
+  });
+
+  it("the record medicine named correctly is acknowledged, and still sent to the label check", () => {
+    for (const text of ["I have my metformin here", "It's Metformin", "我带着二甲双胍"]) {
+      const r = routeMessage(text, none);
+      expect(r.intent).toBe("medicine-mentioned");
+      expect(r.assistantKey).toBe("medicineMentioned");
+      expect(r.contextualActions).toEqual(["show-medicine"]);
+      // Hearing the name is never a match: no route taken, nothing unlocked.
+      expect(r.route).toBeUndefined();
+      expect(r.toExplain).toBeUndefined();
+    }
+  });
+
+  it("a medicine in hand without a recognised name gets the label question, not the two-way prompt", () => {
+    for (const text of ["I have a pill with me", "I'm holding a bottle", "我手里有一瓶药"]) {
+      const r = routeMessage(text, none);
+      expect(r.assistantKey).toBe("showLabelQuestion");
+      expect(r.contextualActions).toEqual(["show-medicine"]);
+    }
+  });
+
+  it("after a confirmed match, naming the medicine in a schedule question still reaches the explanation", () => {
+    const r = routeMessage("When do I take my metformin?", { matchConfirmed: true });
+    expect(r.intent).toBe("schedule-question");
+    expect(r.toExplain).toBe(true);
+  });
+
   it("'what are my prescriptions' is checked before the looser unknown-medicine pattern", () => {
     // "what medicine(s)" alone would otherwise match UNKNOWN_MEDICINE first.
     expect(routeMessage("What medicines do I have?", none).intent).toBe("list-prescriptions");
@@ -386,5 +443,71 @@ describe("audit trail", () => {
       ]),
     );
     expect(new Set(s.audit.map((e) => e.id)).size).toBe(s.audit.length);
+  });
+});
+
+describe("understanding pass (AI_REPLY) is advisory and can't move a gate", () => {
+  const misheard: SessionEvent = { type: "USER_MESSAGE", text: "I do have met for pain with me" };
+  const aiReply = (turnCount: number, extra: Partial<Extract<SessionEvent, { type: "AI_REPLY" }>> = {}): SessionEvent => ({
+    type: "AI_REPLY",
+    turnCount,
+    contextualActions: ["show-medicine", "ask-schedule"],
+    checkingMedicineName: false,
+    ...extra,
+  });
+
+  it("a user message marks the reply as answering that turn; the greeting answers none", () => {
+    expect(run([startCall]).replyTo).toBeNull();
+    const s = run([startCall, misheard]);
+    expect(s.replyTo).toBe(s.turnCount);
+    expect(s.nameCheckPending).toBe(true); // the router's own reply is "did you mean Metformin?"
+  });
+
+  it("updates only the offered doors and the pending name check — never the state or the record", () => {
+    const before = run([startCall, misheard]);
+    const after = run([aiReply(before.turnCount)], before);
+    expect(after.state).toBe("listening");
+    expect(after.contextualActions).toEqual(["show-medicine", "ask-schedule"]);
+    expect(after.nameCheckPending).toBe(false);
+    expect(after.candidate).toBeNull();
+    expect(after.matchStatus).toBeNull();
+    expect(after.audit.at(-1)?.route).toBe("claude-understanding");
+  });
+
+  it("is dropped for a stale turn, outside listening, or when the line wasn't a reply", () => {
+    const s = run([startCall, misheard]);
+    expect(blocked([aiReply(s.turnCount - 1)], s)).toBe(true);
+    expect(blocked([aiReply(s.turnCount + 1)], s)).toBe(true);
+    expect(blocked([aiReply(0)], run([startCall]))).toBe(true);
+    const inCamera = run([chooseShowMedicine], s);
+    expect(blocked([aiReply(s.turnCount)], inCamera)).toBe(true);
+  });
+
+  it("can't inject an action that isn't one of the two in-call doors", () => {
+    const s = run([startCall, misheard]);
+    const after = run(
+      [aiReply(s.turnCount, { contextualActions: ["show-medicine", "explain" as never, "show-medicine"] })],
+      s,
+    );
+    expect(after.contextualActions).toEqual(["show-medicine"]);
+  });
+
+  it("an AI-offered door still goes through the normal route guards", () => {
+    const heard = run([startCall, misheard]);
+    const s = run([aiReply(heard.turnCount, { contextualActions: ["ask-schedule"] })], heard);
+    // Offered, so selectable — but schedule content still needs a confirmed record.
+    const chosen = run([{ type: "SELECT_ROUTE", route: "ask-schedule" }], s);
+    expect(chosen.state).toBe("listening");
+    expect(chosen.assistantKey).toBe("scheduleNeedsRecord");
+    // Not offered by the AI, so not selectable.
+    expect(blocked([{ type: "SELECT_ROUTE", route: "show-medicine" }], s)).toBe(true);
+  });
+
+  it("the AI's name check makes a following 'yes' answer it", () => {
+    const s = run([startCall, { type: "USER_MESSAGE", text: "hello there" }]);
+    const checking = run([aiReply(s.turnCount, { contextualActions: ["show-medicine"], checkingMedicineName: true })], s);
+    const yes = run([{ type: "USER_MESSAGE", text: "yes" }], checking);
+    expect(yes.assistantKey).toBe("medicineMentioned");
+    expect(yes.state).toBe("listening"); // acknowledged — the label check is still ahead
   });
 });

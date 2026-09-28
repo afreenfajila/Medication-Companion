@@ -42,6 +42,7 @@ export type UserIntent =
   | "unknown-medicine-question"
   | "schedule-question"
   | "list-prescriptions" // extension: "what are my prescriptions?" — distinct from identifying an unlabelled pill
+  | "medicine-mentioned" // extension: "I have my Metformin with me" — acknowledged, then still sent to the label check
   | "show-medicine"
   | "ask-schedule"
   | "repeat"
@@ -213,6 +214,7 @@ export type AuditEvent = {
   route:
     | "deterministic-demo"
     | "claude-vision"
+    | "claude-understanding"
     | "typed-input"
     | "local-fallback"
     | "gemini-live";

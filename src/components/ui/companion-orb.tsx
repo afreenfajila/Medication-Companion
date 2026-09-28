@@ -1,12 +1,15 @@
 import { Camera, Check, LifeBuoy, Mic } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { CompanionLogo } from "./companion-logo";
 
 export type OrbState = "idle" | "listening" | "speaking" | "camera" | "matched" | "safety";
 
+// The companion's own mark when it is simply present or talking; a semantic
+// icon when the state means something specific (hearing you, camera, match, help).
 const ICONS = {
-  idle: Mic,
+  idle: CompanionLogo,
   listening: Mic,
-  speaking: Mic,
+  speaking: CompanionLogo,
   camera: Camera,
   matched: Check,
   safety: LifeBuoy,

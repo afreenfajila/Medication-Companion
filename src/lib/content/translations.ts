@@ -48,6 +48,18 @@ const en = {
     "To talk about your schedule, I first need to check a medicine against your record. Would you like to show me the medicine label?",
   prescriptionsListed:
     "Your demo pharmacy record shows one medicine on file: Metformin 500 mg. Would you like to show me the label so I can explain it?",
+  // The person named (or roughly named — speech recognition often hears
+  // "Metformin" as "met for pain") the medicine in their hand. Acknowledge it
+  // without treating it as confirmed: only the label check can confirm.
+  medicineMentioned:
+    "It sounds like you may have your Metformin with you — that’s the medicine on your demo pharmacy record. So I can check it’s the same one, would you like to show me the label?",
+  // Heard something CLOSE to the record's medicine name, but not the name
+  // itself. Check what was meant before moving on — and offer ways to answer
+  // that don't depend on pronunciation — rather than jumping to the label.
+  medicineNameCheck:
+    "I want to make sure I heard you right. Did you mean Metformin? You can say “yes”, say the name again, or type or spell it below. Or, if it’s easier, you can show me the label.",
+  medicineNameRetry:
+    "No problem — speech can be tricky to catch. Could you tell me the medicine name again? Typing it, or spelling it out letter by letter, works well too. You can also show me the label.",
   // Spine-based redirection: acknowledge what was said, then walk back to the
   // one thing this companion does. Never used for safety-classified input.
   offTopicSocial:
@@ -60,6 +72,7 @@ const en = {
   askSchedule: "Ask about my schedule",
   youSay: "Mei Ling says:",
   companionSays: "Companion says:",
+  companionThinking: "Let me think about that…",
   typeLabel: "Type your question",
   typePlaceholder: "For example: What is this medicine for?",
   send: "Send",
@@ -267,6 +280,12 @@ const zhHans: Copy = {
     "要谈服药时间，我需要先对照您的记录核对药物。您想给我看药物标签吗？",
   prescriptionsListed:
     "您的示范药房记录显示您有一种药物：二甲双胍 500 毫克。您想给我看标签，让我为您解释吗？",
+  medicineMentioned:
+    "听起来您手边可能有二甲双胍——这是您示范药房记录中的药物。为了确认是同一种药，您想给我看标签吗？",
+  medicineNameCheck:
+    "我想确认我没有听错。您是说二甲双胍吗？您可以说“是”，再说一次药名，或在下方输入。如果更方便，也可以给我看标签。",
+  medicineNameRetry:
+    "没关系——语音有时不容易听清。可以再告诉我一次药名吗？也可以在下方输入药名。您也可以给我看标签。",
   offTopicSocial:
     "很高兴听到您说话。我是一位 AI 助手，只专注于一件事——您药房记录中的药物信息。您想给我看药物标签，还是询问您的服药时间？",
   offTopicWorld:
@@ -277,6 +296,7 @@ const zhHans: Copy = {
   askSchedule: "询问我的服药时间",
   youSay: "Mei Ling 说：",
   companionSays: "助手说：",
+  companionThinking: "让我想一想……",
   typeLabel: "输入您的问题",
   typePlaceholder: "例如：这个药是做什么用的？",
   send: "发送",

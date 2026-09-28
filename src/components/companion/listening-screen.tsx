@@ -52,7 +52,7 @@ export function ListeningActions({
       >
         {/* Kept visible rather than hidden: the label is what tells someone the
             typed route exists at all. Reduced, not removed. */}
-        <label htmlFor={inputId} className="text-[13px] font-bold text-navy-700">
+        <label htmlFor={inputId} className="text-[12px] font-bold text-navy-700">
           {t("typeLabel")}
         </label>
         <div className="flex items-stretch gap-2">
@@ -64,14 +64,14 @@ export function ListeningActions({
             autoComplete="off"
             placeholder={t("typePlaceholder")}
             onChange={(e) => setDraft(e.target.value)}
-            className="min-h-12 min-w-0 flex-1 rounded-pill border border-navy-700/30 bg-surface px-4 text-base placeholder:text-navy-700/70"
+            className="min-h-11 min-w-0 flex-1 rounded-pill border border-navy-700/30 bg-surface px-4 text-base placeholder:text-navy-700/70"
           />
           <button
             type="submit"
             data-variant="secondary"
-            className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-pill border border-teal-600/30 bg-teal-100 px-4 text-base font-bold hover:bg-[#d7ebe9]"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-pill border border-teal-600/30 bg-teal-100 px-4 text-base font-bold hover:bg-[#d7ebe9]"
           >
-            <Send className="h-5 w-5" aria-hidden="true" />
+            <Send className="h-4 w-4" aria-hidden="true" />
             <span>{t("send")}</span>
           </button>
         </div>

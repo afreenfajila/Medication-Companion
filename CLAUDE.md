@@ -75,6 +75,8 @@ Broad or unconfirmed schedule question
 → show temporary contextual actions: Show medicine / Ask about my schedule
 ```
 
+These two sentences are the deterministic router's approved replies and the fallback wording. When the optional understanding pass (Claude task 3 below) is configured, it may answer the same turn in its own words and choose between the same contextual actions; without it, or when its reply fails validation, these exact sentences are used.
+
 This interaction pattern must not weaken existing safety gates: camera consent precedes camera activation, possible match precedes confirmation, and confirmation precedes any record-backed medicine explanation.
 
 ## Absolute safety constraints
@@ -344,10 +346,15 @@ If Gemini is not configured or the session fails, use `BrowserVoiceProvider` / t
 
 ### Claude
 
-Claude is server-only and may do only two bounded tasks:
+Claude is server-only and may do only three bounded tasks:
 
 1. Extract visible identity fields from an uploaded/captured label into strict JSON.
 2. Rephrase server-provided, approved record content into the selected language only if local static translations are insufficient.
+3. Understand an ordinary in-call message (including speech-recognition mishearings, using the recent conversation for context) and reply in natural words, choosing which in-call contextual actions to offer (`Show medicine`, `Ask about my schedule`, or none) and whether it is checking a medicine name it heard. Bounds:
+   - Runs only after the deterministic safety classifier passes the message, and only for ordinary replies — never safety, urgent, help, consent, or limitation messages (`UNDERSTAND_KEYS`).
+   - Knows only the record medicine's name, never its instruction or strength.
+   - Output is advisory and validated: Zod schema, then `isSafeCompanionReply` (no numbers, dosing/timing words, advice, match claims, or markup). Any failure, timeout, or missing key uses the deterministic reply.
+   - It never takes a route, opens the camera, sets a candidate, or confirms anything. The reducer accepts its offered actions only for the same turn (`AI_REPLY`), and every gate still applies.
 
 For the assignment MVP, prefer local translations for the known record. This is more reliable.
 
