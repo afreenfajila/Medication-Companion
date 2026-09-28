@@ -27,9 +27,6 @@ export function ListeningActions({
   onSend: (text: string) => void;
   onSelectRoute: (route: ContextualActionId) => void;
 }) {
-  const [draft, setDraft] = useState("");
-  const inputId = useId();
-
   const choices = (hideChoices ? [] : session.contextualActions).map((id) => ({
     id,
     label: id === "show-medicine" ? t("showMedicine") : t("askSchedule"),
@@ -42,7 +39,27 @@ export function ListeningActions({
         groupLabel={t("companionSays")}
         onSelect={onSelectRoute}
       />
+      <TypedInput t={t} label={t("typeLabel")} placeholder={t("typePlaceholder")} onSend={onSend} />
+    </div>
+  );
+}
 
+/** The always-available typed fallback: whatever is typed is handled like a spoken turn. */
+export function TypedInput({
+  t,
+  label,
+  placeholder,
+  onSend,
+}: {
+  t: T;
+  label: string;
+  placeholder: string;
+  onSend: (text: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const inputId = useId();
+
+  return (
       <form
         className="flex flex-col gap-1"
         onSubmit={(e) => {
@@ -56,7 +73,7 @@ export function ListeningActions({
         {/* Kept visible rather than hidden: the label is what tells someone the
             typed route exists at all. Reduced, not removed. */}
         <label htmlFor={inputId} className="text-[12px] font-bold text-navy-700">
-          {t("typeLabel")}
+          {label}
         </label>
         <div className="flex items-stretch gap-2">
           <input
@@ -65,7 +82,7 @@ export function ListeningActions({
             value={draft}
             maxLength={300}
             autoComplete="off"
-            placeholder={t("typePlaceholder")}
+            placeholder={placeholder}
             onChange={(e) => setDraft(e.target.value)}
             className="min-h-11 min-w-0 flex-1 rounded-pill border border-navy-700/30 bg-surface px-4 text-base placeholder:text-navy-700/70"
           />
@@ -79,6 +96,5 @@ export function ListeningActions({
           </button>
         </div>
       </form>
-    </div>
   );
 }

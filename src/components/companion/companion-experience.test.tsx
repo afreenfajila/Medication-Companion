@@ -154,7 +154,9 @@ describe("in-call flow", () => {
     expect(screen.getByText("Here is what your record says.")).toBeInTheDocument();
     expect(screen.getByText("Metformin helps manage blood sugar.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    // "Next" is said or typed, not a button.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "next" } });
+    fireEvent.submit(screen.getByRole("textbox").closest("form")!);
     expect(screen.getByText("Take 1 tablet twice daily with meals.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "中文" }));

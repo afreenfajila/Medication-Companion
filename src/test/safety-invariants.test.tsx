@@ -179,7 +179,8 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     expect(document.body.textContent).not.toMatch(INSTRUCTION);
     fireEvent.click(screen.getByRole("button", { name: /yes, this is my medicine/i }));
     await flush();
-    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "next" } });
+    fireEvent.submit(screen.getByRole("textbox").closest("form")!);
     await flush();
     expect(screen.getByText("Take 1 tablet twice daily with meals.")).toBeInTheDocument();
     noRawError();

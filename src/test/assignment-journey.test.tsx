@@ -22,6 +22,11 @@ const send = (text: string) => {
   fireEvent.change(screen.getByLabelText(/type your question/i), { target: { value: text } });
   fireEvent.submit(screen.getByLabelText(/type your question/i).closest("form")!);
 };
+const typeIn = (text: string) => {
+  const box = screen.getByRole("textbox");
+  fireEvent.change(box, { target: { value: text } });
+  fireEvent.submit(box.closest("form")!);
+};
 const click = (name: string | RegExp) => fireEvent.click(screen.getByRole("button", { name }));
 const INSTRUCTION = /Take 1 tablet|每日两次/;
 
@@ -57,13 +62,24 @@ describe("primary journey (deck): question → Show medicine → camera → poss
     expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument(); // possible match, not certain
     expect(screen.queryByText(INSTRUCTION)).toBeNull();
     click(/yes, this is my medicine/i);
-    click(/^next$/i);
+    // Moving on is said or typed — only the language switch is a button.
+    expect(screen.queryByRole("button", { name: /^(next|back|i understand)$/i })).toBeNull();
+    typeIn("next");
     expect(screen.getByText("Take 1 tablet twice daily with meals.")).toBeInTheDocument();
     click("中文");
     expect(screen.getByText("随餐每日服用一片，每日两次。")).toBeInTheDocument();
-    click("下一步");
-    click("我明白了");
+    typeIn("下一步");
+    typeIn("我明白了");
     expect(screen.getByText(t("zh-Hans", "completeHeading"))).toBeInTheDocument();
+  });
+
+  it("switches language by itself when the person uses Chinese, and back for English", () => {
+    render(<CompanionExperience />);
+    click(/call with companion/i);
+    typeIn("这个药是做什么用的？");
+    expect(screen.getByLabelText(t("zh-Hans", "typeLabel"))).toBeInTheDocument();
+    typeIn("What is this for please");
+    expect(screen.getByLabelText(t("en", "typeLabel"))).toBeInTheDocument();
   });
 });
 

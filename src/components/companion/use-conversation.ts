@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CopyKey } from "@/lib/content/translations";
+import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { dispatch } from "@/lib/session/session-store";
 import type { Session } from "@/lib/session/state-machine";
 import { runVoiceAction } from "@/lib/voice/actions";
 import { interpretUtterance } from "@/lib/voice/commands";
+import { detectInputLanguage } from "@/lib/voice/detect-language";
 import { isLikelySelfEcho } from "@/lib/voice/echo";
 import { VoiceError, type VoiceErrorCode } from "@/lib/voice/provider";
 import { getVoiceProvider, useVoiceCapabilities } from "@/lib/voice/use-voice";
@@ -62,6 +63,8 @@ export type ConversationView = {
   /** Plain-language status/error (copy key), or null. */
   notice: CopyKey | null;
   toggleMic: () => void;
+  /** Typed input: handled exactly like a spoken turn. */
+  submitText: (text: string) => void;
 };
 
 /**
@@ -144,27 +147,29 @@ export function useVoiceConversation(opts: {
   const enabled = session.callActive && caps.recognition && soundActive;
   const active = enabled && !muted && !paused && session.state !== "analyzing";
 
-  const handleTranscript = useCallback((text: string) => {
-    const { session: s, speaking: isSpeaking, speakNotice: say, t: tr, soundActive: soundOn } = latest.current;
-    if (isSpeaking) return; // never react to the companion's own voice
-    // ...nor to the tail of it, arriving from a mic that was open while it spoke.
-    if (
-      micOverlappedSpeech.current &&
-      isLikelySelfEcho(text, lastSpoken.current, Date.now() - speechEndedAt.current)
-    ) {
-      micOverlappedSpeech.current = false;
-      setInterim("");
-      return; // silently: nothing was said, so there is nothing to answer
-    }
-    setInterim("");
-    silentTurns.current = 0;
+  /**
+   * Acts on what the person said OR typed — the same interpreter for both, so
+   * "next", "I understand" or "下一步" work either way. Replies follow the
+   * language they used: Chinese input switches to Chinese, English to English.
+   */
+  const interpretText = useCallback((text: string) => {
+    const { speakNotice: say, soundActive: soundOn } = latest.current;
+    let s = latest.current.session;
     setNotice(null);
+
+    const detected = detectInputLanguage(text);
+    if (detected && detected !== s.language) {
+      dispatch({ type: "SET_LANGUAGE", language: detected });
+      s = { ...s, language: detected };
+    }
 
     // Notices are spoken from in here rather than from the session's line, so
     // they must be remembered for the echo guard too — otherwise the companion
     // can hear its own "I didn't quite catch that" and try to answer it.
-    const sayNotice = (line: string) => {
+    const sayNotice = (key: CopyKey) => {
+      setNotice(key);
       if (!soundOn) return;
+      const line = translate(s.language, key); // in the language they just used
       lastSpoken.current = line;
       say(line);
     };
@@ -188,14 +193,30 @@ export function useVoiceConversation(opts: {
       runVoiceAction(intent.action);
     } else if (intent.kind === "need-strength") {
       pendingSpokenName.current = intent.medicineName;
-      setNotice("askStrengthForSpokenLabel");
-      sayNotice(tr("askStrengthForSpokenLabel"));
+      sayNotice("askStrengthForSpokenLabel");
     } else {
-      const key = unclearGuidanceKey(s);
-      setNotice(key);
-      sayNotice(tr(key));
+      sayNotice(unclearGuidanceKey(s));
     }
   }, []);
+
+  const handleTranscript = useCallback(
+    (text: string) => {
+      if (latest.current.speaking) return; // never react to the companion's own voice
+      // ...nor to the tail of it, arriving from a mic that was open while it spoke.
+      if (
+        micOverlappedSpeech.current &&
+        isLikelySelfEcho(text, lastSpoken.current, Date.now() - speechEndedAt.current)
+      ) {
+        micOverlappedSpeech.current = false;
+        setInterim("");
+        return; // silently: nothing was said, so there is nothing to answer
+      }
+      setInterim("");
+      silentTurns.current = 0;
+      interpretText(text);
+    },
+    [interpretText],
+  );
 
   // Provider subscriptions.
   useEffect(() => {
@@ -265,5 +286,6 @@ export function useVoiceConversation(opts: {
     micOn: enabled && !muted && !paused,
     notice,
     toggleMic,
+    submitText: interpretText,
   };
 }

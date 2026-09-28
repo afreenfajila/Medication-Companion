@@ -21,10 +21,13 @@ export function LanguageControl({
   language,
   onChange,
   labels,
+  showMore = true,
 }: {
   language: UiLanguage;
   onChange: (language: UiLanguage) => void;
   labels: LanguageLabels;
+  /** The "More languages — coming soon" note; hidden mid-call to keep the step quiet. */
+  showMore?: boolean;
 }) {
   const option = (value: UiLanguage, text: string, lang: string) => (
     <button
@@ -52,6 +55,7 @@ export function LanguageControl({
         {option("en", labels.english, "en")}
         {option("zh-Hans", labels.chinese, "zh-Hans")}
       </div>
+      {showMore && (
       <details className="mt-1 text-sm text-navy-700">
         <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 underline underline-offset-4">
           {labels.moreLanguages}
@@ -67,6 +71,7 @@ export function LanguageControl({
           ))}
         </ul>
       </details>
+      )}
     </div>
   );
 }

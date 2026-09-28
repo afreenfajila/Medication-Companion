@@ -419,7 +419,7 @@ export function CompanionExperience() {
           t={t}
           session={session}
           hideChoices={voiceHeld}
-          onSend={(text) => dispatch({ type: "USER_MESSAGE", text })}
+          onSend={conversation.submitText}
           onSelectRoute={(route) => dispatch({ type: "SELECT_ROUTE", route })}
         />
       );
@@ -471,8 +471,7 @@ export function CompanionExperience() {
           language={language}
           step={session.explainStep}
           onLanguageChange={(l) => dispatch({ type: "SET_LANGUAGE", language: l })}
-          onStep={(direction) => dispatch({ type: "EXPLAIN_STEP", direction })}
-          onUnderstood={() => dispatch({ type: "UNDERSTOOD" })}
+          onSend={conversation.submitText}
         />
       ) : null;
       break;
@@ -534,6 +533,12 @@ export function CompanionExperience() {
           <div className="border-t border-line bg-canvas px-4 pb-2 pt-3">{pinnedActions}</div>
         )}
         {showVoiceBar && <VoiceBar view={conversation} t={t} />}
+        {/* Without speech recognition, typed "didn't catch that" guidance still needs a place. */}
+        {!showVoiceBar && session.callActive && conversation.notice && (
+          <p role="status" className="border-t border-line bg-canvas px-4 py-2 text-[13px] leading-snug text-navy-700">
+            {t(conversation.notice)}
+          </p>
+        )}
         {session.callActive && (
           <CallFooter
             labels={{
