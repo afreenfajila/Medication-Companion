@@ -83,3 +83,28 @@ describe("escalation view", () => {
     expect(view.actions.every((a) => !a.implemented)).toBe(true);
   });
 });
+
+describe("dose changes are caught however they're phrased", () => {
+  it.each([
+    "Can I double my dose?",
+    "Can I skip my tablet today?",
+    "Should I take an extra pill?",
+    "I forgot to take my medicine",
+    "Does it interact with my other pills?",
+    "Can I drink alcohol with it?",
+    "我可以吃双倍吗？",
+  ])("%s → unsupported (safety, no model)", (text) => {
+    expect(classifySafety(text)).toEqual({ level: "unsupported", reason: "unsupported-medical-question" });
+  });
+
+  it.each([
+    "What is this for? When do I take it?",
+    "When do I take it?",
+    "Can I change the language?",
+    "Can you repeat that more slowly?",
+    "I want to show my medicine",
+    "What is my medicine schedule?",
+  ])("%s → not a safety trigger", (text) => {
+    expect(classifySafety(text)).toEqual({ level: "none" });
+  });
+});

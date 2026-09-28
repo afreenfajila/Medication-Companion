@@ -46,6 +46,9 @@ const LINE_REPHRASE_BUDGET_MS = 800;
 const UNDERSTAND_BUDGET_MS = 4000;
 // How much of the conversation the understanding pass sees for context.
 const UNDERSTAND_HISTORY_TURNS = 6;
+// Longest the words are held back waiting for Gemini's voice to start before
+// switching to the browser voice instead.
+const VOICE_WAIT_MS = 3500;
 
 /**
  * The whole call — from "Call with companion" to "End call" — happens on this
@@ -345,29 +348,50 @@ export function CompanionExperience() {
   // installed. It never composes what is said — only the renderer differs.
   // Any failure (no key, network, blocked autoplay) falls back to the
   // browser's own speechSynthesis, which always still works.
-  const speakNow = useCallback((text: string, lang: typeof language) => {
+  // Resolves once the voice has actually started. Gemini gets VOICE_WAIT_MS to
+  // start playing; after that it's dropped for the (instant) browser voice, so
+  // the held-back words below never wait long.
+  const speakNow = useCallback(async (text: string, lang: typeof language, signal?: AbortSignal, slow = false) => {
     const player = getGeminiSpeechPlayer();
-    if (!player) {
-      getVoiceProvider()?.speak(text, lang);
-      return;
+    if (player) {
+      let timer = 0;
+      const cap = new Promise<false>((r) => (timer = window.setTimeout(() => r(false), VOICE_WAIT_MS)));
+      const ok = await Promise.race([player.speak(text, lang, slow), cap]);
+      window.clearTimeout(timer);
+      if (signal?.aborted) return;
+      if (ok) return;
+      player.stop();
     }
-    player.speak(text, lang).then((ok) => {
-      if (!ok) getVoiceProvider()?.speak(text, lang);
-    });
+    getVoiceProvider()?.speak(text, lang, slow);
   }, []);
 
+  // Words and voice arrive together: while this turn's audio is still being
+  // fetched, its text (and the choices that go with it) stay hidden behind a
+  // "connecting" indicator. No Gemini player → browser speech is instant, no hold.
+  const voiceKey = spoken ? `${session.repeatCount}:${language}:${spoken}` : null;
+  const [voicedKey, setVoicedKey] = useState<string | null>(null);
+  const voiceHeld = canSpeak && voiceKey !== null && voicedKey !== voiceKey && getGeminiSpeechPlayer() !== null;
+
+  // "Repeat slowly" re-says exactly the current approved line (never new text), slower.
+  const lastRepeat = useRef(session.repeatCount);
   useEffect(() => {
+    const slow = session.repeatCount !== lastRepeat.current;
+    lastRepeat.current = session.repeatCount;
     if (!canSpeak || !spoken) {
       getGeminiSpeechPlayer()?.stop();
       getVoiceProvider()?.stopSpeaking();
       return;
     }
-    speakNow(spoken, language);
+    const controller = new AbortController();
+    speakNow(spoken, language, controller.signal, slow).then(() => {
+      if (!controller.signal.aborted) setVoicedKey(voiceKey);
+    });
     return () => {
+      controller.abort();
       getGeminiSpeechPlayer()?.stop();
       getVoiceProvider()?.stopSpeaking();
     };
-  }, [canSpeak, spoken, language, session.repeatCount, speakNow]);
+  }, [canSpeak, spoken, language, session.repeatCount, speakNow, voiceKey]);
 
   const conversation = useVoiceConversation({
     session,
@@ -381,7 +405,7 @@ export function CompanionExperience() {
   const showVoiceBar = session.callActive && caps.recognition && session.state !== "start";
 
   // The one running transcript for the whole call — see use-call-feed.ts.
-  const feed = useCallFeed(session, t, displayedExplanation, listeningLine);
+  const feed = useCallFeed(session, t, displayedExplanation, listeningLine, voiceHeld);
   useEffect(() => {
     feedRef.current = feed;
   }, [feed]);
@@ -394,6 +418,7 @@ export function CompanionExperience() {
         <ListeningActions
           t={t}
           session={session}
+          hideChoices={voiceHeld}
           onSend={(text) => dispatch({ type: "USER_MESSAGE", text })}
           onSelectRoute={(route) => dispatch({ type: "SELECT_ROUTE", route })}
         />
@@ -481,6 +506,12 @@ export function CompanionExperience() {
             data-screen={session.state}
             className="flex flex-1 flex-col outline-none"
           >
+            {/* Always mounted, so every change is announced: exactly what the
+                companion is saying now — replies, confirm prompts, safety status —
+                released together with the voice. */}
+            <p data-announcer className="sr-only" aria-live="polite" aria-atomic="true">
+              {session.callActive && !voiceHeld ? (spoken ?? "") : ""}
+            </p>
             {session.state === "start" ? (
               <StartScreen
                 t={t}
@@ -494,12 +525,12 @@ export function CompanionExperience() {
                 <div className="flex flex-col items-center gap-1">
                   <CompanionOrb size="sm" state={orbState} />
                 </div>
-                <CallFeed entries={feed} interim={conversation.interim} thinking={companionThinking} t={t} />
+                <CallFeed entries={feed} interim={conversation.interim} thinking={companionThinking || voiceHeld} t={t} />
               </div>
             )}
           </main>
         </ScreenBody>
-        {pinnedActions && (
+        {pinnedActions && (session.state === "listening" || !voiceHeld) && (
           <div className="border-t border-line bg-canvas px-4 pb-2 pt-3">{pinnedActions}</div>
         )}
         {showVoiceBar && <VoiceBar view={conversation} t={t} />}

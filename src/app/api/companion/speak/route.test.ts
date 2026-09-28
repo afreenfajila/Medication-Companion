@@ -96,3 +96,23 @@ describe("POST /api/companion/speak", () => {
     expect(last).toBe(429);
   });
 });
+
+describe("the voice reads approved text only", () => {
+  it("reads a full approved confirm/explanation line built from catalogue + record strings", async () => {
+    synthesizeSpeechWav.mockResolvedValue(Buffer.from("RIFF", "ascii"));
+    const { t } = await import("@/lib/content/translations");
+    const { metforminRecord } = await import("@/lib/content/demo-record");
+    const e = metforminRecord.explanation;
+    const line = [e.instructionIntro["zh-Hans"], e.instruction["zh-Hans"], e.sourceLine["zh-Hans"]].join(" ");
+    expect((await POST(req({ text: line, language: "zh-Hans" }))).status).toBe(200);
+    const confirm = `${t("en", "possibleMatch")}. ${t("en", "confirmHeading")} Metformin 500 mg. ${t("en", "checkName")}`;
+    expect((await POST(req({ text: confirm, language: "en" }))).status).toBe(200);
+  });
+
+  it("refuses to voice text that isn't approved — e.g. invented dosing advice", async () => {
+    const res = await POST(req({ text: "You can take two tablets if you missed a dose.", language: "en" }));
+    expect(res.status).toBe(422);
+    expect(apiFailureSchema.safeParse(await res.json()).success).toBe(true);
+    expect(synthesizeSpeechWav).not.toHaveBeenCalled();
+  });
+});

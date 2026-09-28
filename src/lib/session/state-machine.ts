@@ -61,6 +61,8 @@ export type Session = {
   /** The companion's last question was "did you mean <medicine>?" — a bare yes/no answers it. */
   nameCheckPending: boolean;
   helpAction: HelpActionId | null;
+  /** Label retries used for the current medicine. One retry, then human help only. */
+  labelRetries: number;
   audit: AuditEvent[];
   auditSeq: number;
 };
@@ -106,6 +108,11 @@ export type SessionEvent =
 export type ReduceContext = { now: string };
 
 const AUDIT_LIMIT = 200;
+export const MAX_LABEL_RETRIES = 1;
+
+export function canRetryLabel(s: Pick<Session, "labelRetries">): boolean {
+  return s.labelRetries < MAX_LABEL_RETRIES;
+}
 
 export function createInitialSession(): Session {
   return {
@@ -131,6 +138,7 @@ export function createInitialSession(): Session {
     replyTo: null,
     nameCheckPending: false,
     helpAction: null,
+    labelRetries: 0,
     audit: [],
     auditSeq: 0,
   };
@@ -318,6 +326,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           safetyReason: null,
           explainStep: 0,
           helpAction: null,
+          labelRetries: 0,
         },
         ctx,
         { eventType: "call-started", summary: "Call started", details: { callCount } },
@@ -668,6 +677,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         candidate: null,
         matchStatus: null, // a new medicine must pass the confirmation gate again
         explainStep: 0,
+        labelRetries: 0,
       };
     }
 
@@ -683,11 +693,17 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
     }
 
     case "TRY_ANOTHER_LABEL": {
-      if (s.state !== "safety" || !s.labelRouteSelected || s.safetyReason === "urgent-risk") {
+      if (
+        s.state !== "safety" ||
+        !s.labelRouteSelected ||
+        s.safetyReason === "urgent-risk" ||
+        !canRetryLabel(s)
+      ) {
         return s;
       }
       return {
         ...s,
+        labelRetries: s.labelRetries + 1,
         state: "camera-guidance",
         safetyReason: null,
         helpAction: null,

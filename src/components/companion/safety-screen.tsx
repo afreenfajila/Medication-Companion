@@ -6,7 +6,7 @@ import { DemoNotice } from "@/components/ui/notices";
 import { SafetyCard } from "@/components/ui/safety-card";
 import type { CopyKey } from "@/lib/content/translations";
 import { buildEscalation, type HelpActionId } from "@/lib/safety/escalation";
-import type { Session } from "@/lib/session/state-machine";
+import { canRetryLabel, type Session } from "@/lib/session/state-machine";
 import type { T } from "./screen-chrome";
 
 const ACTION_ICONS: Record<HelpActionId, React.ReactNode> = {
@@ -37,7 +37,7 @@ export function SafetyScreen({
   onReturn: () => void;
 }) {
   const reason = session.safetyReason ?? "help-requested";
-  const view = buildEscalation(reason, session.labelRouteSelected);
+  const view = buildEscalation(reason, session.labelRouteSelected, canRetryLabel(session));
   const [main, ...rest] = view.actions;
 
   const run = (id: HelpActionId) =>
@@ -54,6 +54,7 @@ export function SafetyScreen({
         body={label(view.bodyKey)}
         reason={view.reasonKey ? label(view.reasonKey) : null}
       >
+        {view.retryUsedKey && <p className="mt-3 text-lg leading-snug">{t(view.retryUsedKey)}</p>}
         {!view.urgent && (
           <p className="mt-3 text-[15px] font-medium text-navy-700">{t("reasonNoInstructions")}</p>
         )}

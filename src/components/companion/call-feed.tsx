@@ -42,8 +42,11 @@ export function CallFeed({
       ))}
       {thinking && (
         <TranscriptCard speaker="companion" label={t("companionSays")}>
-          <span role="status" className="text-navy-700">
-            {t("companionThinking")}
+          <span role="status" className="inline-flex items-center gap-1.5 py-2 text-navy-700">
+            <span className="sr-only">{t("companionThinking")}</span>
+            <span className="call-dot" aria-hidden="true" />
+            <span className="call-dot" aria-hidden="true" />
+            <span className="call-dot" aria-hidden="true" />
           </span>
         </TranscriptCard>
       )}

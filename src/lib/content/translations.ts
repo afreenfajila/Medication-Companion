@@ -35,7 +35,7 @@ const en = {
   settingsDemo: "Demo mode is on. All information is fictional.",
 
   // Active call
-  repeat: "Repeat",
+  repeat: "Repeat slowly",
   getHelp: "Get help",
   endCall: "End call",
   listening: "I’m listening…",
@@ -221,6 +221,7 @@ const en = {
   reasonNoInstructions:
     "I will not show any medicine instructions until we are sure.",
   tryPhoto: "Try another photo",
+  retryUsed: "We have tried the label again. The safest next step is to ask a person to check it with you.",
   checkPharmacy: "Check with pharmacy — demo",
   contactClinic: "Contact clinic — demo",
   askHelper: "Ask a trusted helper — demo",
@@ -269,7 +270,7 @@ const zhHans: Copy = {
   settingsMotion: "动画会遵循您设备的“减少动态效果”设置。",
   settingsDemo: "示范模式已开启。所有信息均为虚构。",
 
-  repeat: "重复",
+  repeat: "慢速重复",
   getHelp: "寻求帮助",
   endCall: "结束通话",
   listening: "我在听…",
@@ -422,6 +423,7 @@ const zhHans: Copy = {
   reasonService: "我无法读取这张照片。您可以再试一次、输入标签上的文字，或使用示范标签。",
   reasonNoInstructions: "在确定之前，我不会显示任何用药指示。",
   tryPhoto: "再拍一张照片",
+  retryUsed: "我们已经再试过一次标签。最安全的做法是请一位真人和您一起核对。",
   checkPharmacy: "向药房确认 — 示范",
   contactClinic: "联系诊所 — 示范",
   askHelper: "询问可信任的人 — 示范",

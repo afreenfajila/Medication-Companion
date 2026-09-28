@@ -22,7 +22,7 @@ export function DisclosureFooter({ t }: { t: T }) {
       <p className="font-medium">{t("aiDisclosure")}</p>
       <p>
         {t("prototypeNotice")} ·{" "}
-        <Link href="/about" className="font-medium text-teal-800 underline underline-offset-2">
+        <Link href="/about" className="-my-3 inline-block py-3 font-medium text-teal-800 underline underline-offset-2">
           {t("aboutLink")}
         </Link>
       </p>

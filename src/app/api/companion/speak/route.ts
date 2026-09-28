@@ -2,6 +2,7 @@ import { SpeechUnavailableError, synthesizeSpeechWav } from "@/lib/ai/speech";
 import { fail, firstIssue, newRequestId } from "@/lib/api/envelope";
 import { rateLimit } from "@/lib/api/rate-limit";
 import { speakRequestSchema } from "@/lib/api/schemas";
+import { isApprovedSpeech } from "@/lib/content/speech-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,11 @@ export async function POST(request: Request): Promise<Response> {
   const parsed = speakRequestSchema.safeParse(body);
   if (!parsed.success) {
     return fail(400, "invalid_request", firstIssue(parsed.error), "retry", requestId);
+  }
+  // Enforced here, not just trusted from the client: this route is a renderer
+  // for approved wording, never a general-purpose voice.
+  if (!isApprovedSpeech(parsed.data.text)) {
+    return fail(422, "unapproved_text", "This text can’t be read aloud.", "retry", requestId);
   }
 
   try {

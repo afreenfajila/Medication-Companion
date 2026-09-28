@@ -45,6 +45,7 @@ export default function AboutPage() {
           <li>A label is only ever a “possible match” until you confirm it.</li>
           <li>No explanation is shown before you confirm.</li>
           <li>If a label is unreadable or does not match, no instructions are shown.</li>
+          <li>You can try the label once more. After that, only the human-help options remain.</li>
           <li>
             Urgent-risk wording and medical questions (doses, side effects, symptoms, pregnancy) are
             caught by fixed rules before any AI is involved, and lead to a “please ask a person”
@@ -75,6 +76,10 @@ export default function AboutPage() {
             Everything the app says about the medicine comes from the local demo record, in English
             or Simplified Chinese. It is never generated.
           </li>
+          <li>
+            When it is configured, <strong>Gemini</strong> only reads approved on-screen wording
+            aloud. The server refuses any other text, so the voice cannot give medical advice.
+          </li>
           <li>Typed labels and the demo label work without any AI.</li>
         </ul>
       </Section>
@@ -88,8 +93,8 @@ export default function AboutPage() {
           </li>
           <li>
             Voice input uses your browser’s speech recognition, which may send your voice to the
-            browser vendor’s speech service. Typing always works. Spoken replies are off until you
-            turn sound on.
+            browser vendor’s speech service. Typing always works. The companion only listens and
+            speaks after you tap “Call with companion”, and stops when you end the call.
           </li>
           <li>
             The activity list in the caregiver view is kept in your browser session only. It records

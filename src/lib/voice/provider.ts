@@ -34,7 +34,8 @@ export interface SpeechVoiceProvider extends VoiceProvider {
   /** Must only be called from a user action: this is what triggers the browser's mic prompt. */
   startListening(language: UiLanguage): void;
   stopListening(): void;
-  speak(text: string, language: UiLanguage): void;
+  /** `slow`: "Repeat slowly" — the same approved text at a slower rate. */
+  speak(text: string, language: UiLanguage, slow?: boolean): void;
   stopSpeaking(): void;
   onInterim(callback: (text: string) => void): () => void;
   onListeningChange(callback: (listening: boolean) => void): () => void;

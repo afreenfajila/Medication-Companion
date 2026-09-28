@@ -21,6 +21,8 @@ export type EscalationView = {
   headingKey: CopyKey;
   bodyKey: CopyKey;
   reasonKey: CopyKey | null;
+  /** Set when the one label retry is used up — only human help remains. */
+  retryUsedKey: CopyKey | null;
   actions: HelpAction[];
 };
 
@@ -47,11 +49,13 @@ const LABEL_REASONS: readonly SafetyReason[] = [
 /**
  * Builds what the safety screen may show. Never contains medicine instructions.
  * `labelRouteSelected` gates "Try another photo": it only makes sense once the
- * user has already chosen Show medicine in this call.
+ * user has already chosen Show medicine in this call. `canRetry` is false once
+ * the single retry is used — then only the human-help options remain.
  */
 export function buildEscalation(
   reason: SafetyReason,
   labelRouteSelected: boolean,
+  canRetry = true,
 ): EscalationView {
   if (reason === "urgent-risk") {
     return {
@@ -60,6 +64,7 @@ export function buildEscalation(
       headingKey: "urgentHeading",
       bodyKey: "urgentBody",
       reasonKey: "urgentNoCall",
+      retryUsedKey: null,
       actions: [
         { id: "urgent-care", labelKey: "emergencyDemo", implemented: false },
         { id: "trusted-helper-demo", labelKey: "askHelper", implemented: false },
@@ -68,7 +73,8 @@ export function buildEscalation(
   }
 
   const actions: HelpAction[] = [];
-  if (labelRouteSelected && LABEL_REASONS.includes(reason)) {
+  const labelProblem = labelRouteSelected && LABEL_REASONS.includes(reason);
+  if (labelProblem && canRetry) {
     actions.push({ id: "try-again", labelKey: "tryPhoto", implemented: true });
   }
   actions.push(
@@ -83,6 +89,7 @@ export function buildEscalation(
     headingKey: "safetyHeading",
     bodyKey: "safetyBody",
     reasonKey: REASON_LINE[reason],
+    retryUsedKey: labelProblem && !canRetry ? "retryUsed" : null,
     actions,
   };
 }

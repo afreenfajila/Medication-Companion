@@ -4,6 +4,7 @@ import { GeminiSpeechPlayer } from "./gemini-speech-player";
 
 class FakeAudio implements AudioLike {
   src = "";
+  playbackRate = 1;
   onplay: (() => void) | null = null;
   onended: (() => void) | null = null;
   onerror: (() => void) | null = null;
@@ -160,5 +161,29 @@ describe("GeminiSpeechPlayer", () => {
     stubFetch(null);
     expect(await player.speak("   ", "en")).toBe(false);
     expect(created).toHaveLength(0);
+  });
+});
+
+describe("Repeat slowly", () => {
+  it("plays the same audio at a slower rate only when asked", async () => {
+    const audios: FakeAudio[] = [];
+    const env = {
+      createAudio: () => {
+        const a = new FakeAudio();
+        audios.push(a);
+        return a;
+      },
+      createObjectUrl: () => "blob:x",
+      revokeObjectUrl: () => undefined,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Blob(["RIFF"], { type: "audio/wav" }), { headers: { "content-type": "audio/wav" } })),
+    );
+    const player = new GeminiSpeechPlayer(env);
+    await player.speak("Hello there", "en");
+    await player.speak("Hello there", "en", true);
+    expect(audios.map((a) => a.playbackRate)).toEqual([1, 0.8]);
+    vi.unstubAllGlobals();
   });
 });

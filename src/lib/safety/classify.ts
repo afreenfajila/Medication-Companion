@@ -28,13 +28,23 @@ export const adverseEffectPatterns: readonly RegExp[] = [/side effect/i, /副作
 
 export const unsupportedMedicalPatterns: readonly RegExp[] = [
   /should i (stop|start|change|double)/i,
+  // Dose changes phrased any other way: tied to a dose/medicine word so that
+  // e.g. "can I change the language" is not caught.
+  /\b(can|could|may) i (double|skip|halve)\b/i,
+  /\b(double|increase|decrease|reduce|skip|halve|cut)\b.*\b(dose|dosage|tablets?|pills?|medicine|medication)\b/i,
+  /\b(extra|more|less|another|half)\b.*\b(dose|tablets?|pills?)\b/i,
+  /forg[oe]t (to take|my (dose|medicine|tablet|pill))/i,
+  /interact/i,
+  /alcohol/i,
+  /symptom/i,
   /missed (a )?dose/i,
   /can i take.*with/i,
   /pregnan/i,
   /is this dangerous/i,
   /diagnos/i,
   /漏服|忘记吃药|忘了吃药/,
-  /停药|加倍|换药/,
+  /停药|加倍|换药|双倍|多吃|少吃|减量|加量/,
+  /喝酒|饮酒|症状/,
   /怀孕/,
   /有危险吗|危险吗/,
   /诊断/,

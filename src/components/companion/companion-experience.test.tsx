@@ -7,7 +7,7 @@ const FORBIDDEN_ON_HOME = [
   /show medicine/i,
   /ask about my schedule/i,
   /my schedule/i,
-  /^repeat$/i,
+  /repeat/i,
   /get help/i,
   /end call/i,
 ];
@@ -107,7 +107,7 @@ describe("in-call flow", () => {
 
     const footer = screen.getByRole("navigation", { name: "Medication Companion" });
     expect(within(footer).getAllByRole("button").map((b) => b.textContent)).toEqual([
-      "Repeat",
+      "Repeat slowly",
       "Get help",
       "End call",
     ]);

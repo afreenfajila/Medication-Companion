@@ -16,18 +16,21 @@ import type { T } from "./screen-chrome";
 export function ListeningActions({
   t,
   session,
+  hideChoices = false,
   onSend,
   onSelectRoute,
 }: {
   t: T;
   session: Session;
+  /** Held back until the companion's voice starts saying the question they answer. */
+  hideChoices?: boolean;
   onSend: (text: string) => void;
   onSelectRoute: (route: ContextualActionId) => void;
 }) {
   const [draft, setDraft] = useState("");
   const inputId = useId();
 
-  const choices = session.contextualActions.map((id) => ({
+  const choices = (hideChoices ? [] : session.contextualActions).map((id) => ({
     id,
     label: id === "show-medicine" ? t("showMedicine") : t("askSchedule"),
   }));

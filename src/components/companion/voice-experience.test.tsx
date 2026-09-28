@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t as translate } from "@/lib/content/translations";
 import { sessionStore } from "@/lib/session/session-store";
 import { BrowserVoiceProvider } from "@/lib/voice/browser-voice";
+import { type GeminiSpeechPlayer, setGeminiSpeechPlayer } from "@/lib/voice/gemini-speech-player";
 import { setVoiceProvider } from "@/lib/voice/use-voice";
 import { createFakeSpeech } from "@/test/fake-speech";
 import { CompanionExperience } from "./companion-experience";
@@ -496,5 +497,45 @@ describe("hands-free conversation — recovery and control", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     expect(fake.utterances).toHaveLength(2); // the greeting is spoken again, automatically
+  });
+});
+
+describe("words and voice arrive together", () => {
+  const GREETING = "Hello, Mei Ling. What would you like help with?";
+  function installSlowGemini() {
+    let start: (ok: boolean) => void = () => undefined;
+    const player = {
+      speak: vi.fn(() => new Promise<boolean>((r) => (start = r))),
+      stop: vi.fn(),
+      onSpeakingChange: () => () => undefined,
+    };
+    setGeminiSpeechPlayer(player as unknown as GeminiSpeechPlayer);
+    return { player, start: (ok: boolean) => start(ok) };
+  }
+  afterEach(() => setGeminiSpeechPlayer(null));
+
+  it("holds the companion's words behind a connecting indicator until its voice starts", async () => {
+    install();
+    const gemini = installSlowGemini();
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+
+    expect(screen.queryByText(GREETING)).not.toBeInTheDocument();
+    expect(screen.getByText(translate("en", "companionThinking"))).toBeInTheDocument();
+
+    await act(async () => gemini.start(true));
+    expect(screen.getByText(GREETING)).toBeInTheDocument();
+  });
+
+  it("if the voice is slow, switches to the browser voice and shows the words together", async () => {
+    const fake = install();
+    installSlowGemini();
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    expect(fake.utterances).toHaveLength(0);
+
+    await act(async () => vi.advanceTimersByTime(3500));
+    expect(fake.utterances.at(-1)?.text).toBe(GREETING);
+    expect(screen.getByText(GREETING)).toBeInTheDocument();
   });
 });

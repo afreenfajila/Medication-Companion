@@ -81,7 +81,7 @@ export function PersonaPicker() {
           pharmacist or doctor.
         </DemoNotice>
         <p className="mt-4 pb-2 text-center text-sm">
-          <Link href="/about" className="font-medium text-teal-800 underline underline-offset-2">
+          <Link href="/about" className="-my-3 inline-block py-3 font-medium text-teal-800 underline underline-offset-2">
             About this prototype
           </Link>
         </p>

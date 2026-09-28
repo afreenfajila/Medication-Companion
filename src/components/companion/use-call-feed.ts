@@ -51,6 +51,8 @@ export function useCallFeed(
   t: T,
   explanation: ExplanationView | null,
   listeningLine: string | null,
+  /** The companion's voice hasn't started yet — hold its new words until it does. */
+  held = false,
 ): FeedMessage[] {
   const [entries, setEntries] = useState<FeedMessage[]>([]);
   const seen = useRef<Seen>(initialSeen(session.callCount));
@@ -84,6 +86,7 @@ export function useCallFeed(
     const assistantSig = `${session.assistantKey}:${session.repeatCount}:${session.turnCount}`;
     if (
       session.callActive &&
+      !held &&
       session.state === "listening" &&
       assistantSig !== seen.current.assistantSig &&
       listeningLine !== null
@@ -92,7 +95,7 @@ export function useCallFeed(
       push("companion", listeningLine);
     }
 
-    if (session.state === "explain" && explanation) {
+    if (session.state === "explain" && explanation && !held) {
       if (!seen.current.inExplain) {
         seen.current.inExplain = true;
         seen.current.explainSig = "";
@@ -105,7 +108,7 @@ export function useCallFeed(
         seen.current.explainSig = explainSig;
         push("companion", ...explainStepLines(session.explainStep, explanation.explanation));
       }
-    } else {
+    } else if (session.state !== "explain") {
       seen.current.inExplain = false;
     }
 
@@ -115,7 +118,7 @@ export function useCallFeed(
     // `entries` intentionally excluded: this effect only ever reads the latest
     // value via closure to build the next one, and depending on it would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, t, explanation, listeningLine]);
+  }, [session, t, explanation, listeningLine, held]);
 
   return entries;
 }

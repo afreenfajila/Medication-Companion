@@ -5,6 +5,7 @@ export type AudioLike = {
   play(): Promise<void>;
   pause(): void;
   src: string;
+  playbackRate: number;
   onplay: (() => void) | null;
   onended: (() => void) | null;
   onerror: (() => void) | null;
@@ -65,7 +66,7 @@ export class GeminiSpeechPlayer {
     if (had) this.speaking.forEach((l) => l(false));
   }
 
-  async speak(text: string, language: UiLanguage): Promise<boolean> {
+  async speak(text: string, language: UiLanguage, slow = false): Promise<boolean> {
     this.stop();
     const controller = new AbortController();
     this.controller = controller;
@@ -81,6 +82,7 @@ export class GeminiSpeechPlayer {
     const audio = this.env.createAudio(url);
     this.audio = audio;
     this.objectUrl = url;
+    if (slow) audio.playbackRate = 0.8; // pitch is preserved by default
 
     audio.onplay = () => this.speaking.forEach((l) => l(true));
     const done = () => this.speaking.forEach((l) => l(false));

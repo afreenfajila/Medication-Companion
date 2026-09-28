@@ -202,7 +202,7 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
     this.recognition?.stop();
   }
 
-  speak(text: string, language: UiLanguage): void {
+  speak(text: string, language: UiLanguage, slow = false): void {
     const { speechSynthesis: synth, SpeechSynthesisUtterance: Utterance } = this.env;
     if (!synth || !Utterance || !text.trim()) return;
 
@@ -212,7 +212,7 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
     if (this.utterance) this.stopSpeaking();
     const utterance = new Utterance(text);
     utterance.lang = SPEECH_LANG[language];
-    utterance.rate = 0.95; // calm and unhurried
+    utterance.rate = slow ? 0.75 : 0.95; // calm and unhurried; slower still for "Repeat slowly"
     this.refreshVoices(); // pick up a list that finished loading since construction
     const voice = pickVoice(this.voicesCache, language);
     if (voice) utterance.voice = voice;

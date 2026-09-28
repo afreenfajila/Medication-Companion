@@ -1,7 +1,7 @@
 import type { ExplanationView } from "@/lib/content/explanation";
 import type { CopyKey } from "@/lib/content/translations";
 import { buildEscalation } from "@/lib/safety/escalation";
-import type { Session } from "@/lib/session/state-machine";
+import { MAX_LABEL_RETRIES, type Session } from "@/lib/session/state-machine";
 
 /**
  * What the companion may read aloud for the current screen. It is exactly the
@@ -13,7 +13,14 @@ import type { Session } from "@/lib/session/state-machine";
 export function speakableText(
   session: Pick<
     Session,
-    "state" | "assistantKey" | "safetyReason" | "labelRouteSelected" | "explainStep" | "candidate" | "cameraMode"
+    | "state"
+    | "assistantKey"
+    | "safetyReason"
+    | "labelRouteSelected"
+    | "explainStep"
+    | "candidate"
+    | "cameraMode"
+    | "labelRetries"
   >,
   t: (key: CopyKey) => string,
   explanation: ExplanationView | null,
@@ -57,10 +64,15 @@ export function speakableText(
       return join(e.caution, e.confirmationPrompt);
     }
     case "safety": {
-      const view = buildEscalation(session.safetyReason ?? "help-requested", session.labelRouteSelected);
+      const view = buildEscalation(
+        session.safetyReason ?? "help-requested",
+        session.labelRouteSelected,
+        session.labelRetries < MAX_LABEL_RETRIES,
+      );
       return join(
         t(view.headingKey),
         view.reasonKey ? t(view.reasonKey) : null,
+        view.retryUsedKey ? t(view.retryUsedKey) : null,
         t(view.bodyKey),
       );
     }
