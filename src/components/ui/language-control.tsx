@@ -58,7 +58,7 @@ export function LanguageControl({
         </summary>
         <ul className="px-3 pb-2">
           {[labels.malay, labels.tamil].map((name) => (
-            <li key={name} className="flex items-center justify-between py-1.5 opacity-70">
+            <li key={name} className="flex items-center justify-between py-1.5">
               <span>{name}</span>
               <span className="rounded-pill bg-line px-2 py-0.5 text-xs font-medium">
                 {labels.comingSoon}
