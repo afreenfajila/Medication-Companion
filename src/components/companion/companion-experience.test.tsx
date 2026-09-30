@@ -173,6 +173,10 @@ describe("in-call flow", () => {
     expect(screen.getByText("BrightCare Pharmacy — demo record · checked 21 September 2026")).toBeInTheDocument();
     const check = screen.getByRole("group", { name: "Does this match what’s printed on your label?" });
     expect(within(check).getByRole("button", { name: "Yes, it matches" })).toBeInTheDocument();
+    // Neither answer looks like the default: no filled "yes" to agree with without looking.
+    expect(primaryButtons(check)).toHaveLength(0);
+    // The pinned step scrolls on its own rather than being clipped or pushing the call controls away.
+    expect(document.querySelector("[data-pinned]")).toHaveClass("overflow-y-auto", "max-h-[60%]");
 
     fireEvent.click(within(check).getByRole("button", { name: "It looks different" }));
     expect(screen.getByText(/When the label and the record don’t agree, a pharmacist is the best person to look/)).toBeInTheDocument();
@@ -185,9 +189,16 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("I feel so lonely");
     expect(screen.getByText(/that sounds hard/)).toBeInTheDocument();
+    // Family help and carrying on get equal weight, each with its own icon (not a calendar).
+    const choices = screen.getByRole("group", { name: "Companion says:" });
+    expect(primaryButtons(choices)).toHaveLength(0);
+    expect(choices.querySelector(".lucide-users-round")).not.toBeNull();
+    expect(choices.querySelector(".lucide-arrow-right")).not.toBeNull();
+    expect(choices.querySelector(".lucide-calendar-clock")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Ask family to help — demo" }));
 
     const consent = screen.getByRole("group", { name: /Shall I let your family know/ });
+    expect(primaryButtons(consent)).toHaveLength(0); // consent never nudges towards "yes"
     expect(sessionStore.getSnapshot().audit.some((e) => e.eventType === "caregiver-help-requested")).toBe(false);
     fireEvent.click(within(consent).getByRole("button", { name: "Yes, ask them — demo" }));
     expect(sessionStore.getSnapshot().audit.some((e) => e.eventType === "caregiver-help-requested")).toBe(true);

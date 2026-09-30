@@ -436,7 +436,11 @@ export function CompanionExperience() {
           </main>
         </ScreenBody>
         {pinnedActions && (session.state === "listening" || !voiceHeld) && (
-          <div className="border-t border-line bg-canvas px-4 pb-2 pt-3">{pinnedActions}</div>
+          // Capped and scrollable: a tall step (safety options, an open sample picker)
+          // must never be clipped or push the call controls off the screen.
+          <div data-pinned className="max-h-[60%] shrink-0 overflow-y-auto border-t border-line bg-canvas px-4 pb-2 pt-3">
+            {pinnedActions}
+          </div>
         )}
         {showVoiceBar && <VoiceBar view={conversation} t={t} />}
         {/* Without speech recognition, typed "didn't catch that" guidance still needs a place. */}

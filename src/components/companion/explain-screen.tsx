@@ -54,10 +54,11 @@ export function ExplainScreen({
         <div role="group" aria-label={t("labelCheckPrompt")} className="flex flex-col gap-2">
           {sourceLine && <RecordSourceLine>{sourceLine}</RecordSourceLine>}
           <p className="text-lg font-bold leading-snug">{t("labelCheckPrompt")}</p>
+          {/* Equal weight on purpose: a filled "yes" would invite agreeing without looking. */}
           <div className="grid grid-cols-2 gap-2">
-            <PrimaryButton compact onClick={() => onLabelCheck(true)}>
+            <SecondaryButton compact onClick={() => onLabelCheck(true)}>
               {t("labelMatches")}
-            </PrimaryButton>
+            </SecondaryButton>
             <SecondaryButton compact onClick={() => onLabelCheck(false)}>
               {t("labelLooksDifferent")}
             </SecondaryButton>

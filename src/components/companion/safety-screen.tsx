@@ -28,9 +28,10 @@ export function FamilyConsent({ t, onAnswer }: { t: T; onAnswer: (granted: boole
   return (
     <div role="group" aria-label={t("familyConsent")} className="flex flex-col gap-3">
       <p className="text-lg font-bold leading-snug">{t("familyConsent")}</p>
-      <PrimaryButton icon={<UsersRound className="h-5 w-5" aria-hidden="true" />} onClick={() => onAnswer(true)}>
+      {/* Consent: "yes" and "not now" carry equal weight — nothing nudges towards sharing. */}
+      <SecondaryButton icon={<UsersRound className="h-5 w-5" aria-hidden="true" />} onClick={() => onAnswer(true)}>
         {t("familyConsentYes")}
-      </PrimaryButton>
+      </SecondaryButton>
       <SecondaryButton onClick={() => onAnswer(false)}>{t("notNow")}</SecondaryButton>
     </div>
   );
