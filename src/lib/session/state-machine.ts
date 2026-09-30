@@ -3,6 +3,7 @@ import type { LabelAnalysis } from "@/lib/api/schemas";
 import { metforminRecord } from "@/lib/content/demo-record";
 import { candidateDisplayFor, candidateIdFor, matchLabelInput } from "@/lib/matching/match-record";
 import type { HelpActionId } from "@/lib/safety/escalation";
+import type { StudyCondition } from "@/lib/study/study-mode";
 import type {
   AuditEvent,
   CandidateDisplay,
@@ -71,6 +72,8 @@ export type Session = {
   helpAction: HelpActionId | null;
   /** "Shall I let your family know…?" is on screen. Nothing is shared until "Yes". */
   familyConsentPending: boolean;
+  /** Study mode only (set from the server's cookie); null otherwise. Tags every audit event. */
+  studyCondition: StudyCondition | null;
   /** Label retries used for the current medicine. One retry, then human help only. */
   labelRetries: number;
   audit: AuditEvent[];
@@ -80,6 +83,8 @@ export type Session = {
 export type SessionEvent =
   | { type: "SELECT_PERSONA"; persona: Persona }
   | { type: "SET_LANGUAGE"; language: UiLanguage }
+  /** From the root layout, which reads the study cookie server-side (study mode only). */
+  | { type: "SET_STUDY_CONDITION"; condition: StudyCondition | null }
   | { type: "CALL_START" }
   | { type: "USER_MESSAGE"; text: string }
   | { type: "SELECT_ROUTE"; route: ContextualActionId }
@@ -159,6 +164,7 @@ export function createInitialSession(): Session {
     offTopicStreak: 0,
     helpAction: null,
     familyConsentPending: false,
+    studyCondition: null,
     labelRetries: 0,
     audit: [],
     auditSeq: 0,
@@ -188,7 +194,8 @@ function withAudit(s: Session, ctx: ReduceContext, ...events: AuditInput[]): Ses
       summary: e.summary,
       route: e.route ?? "deterministic-demo",
       validationStatus: e.validationStatus ?? "not-applicable",
-      details: e.details ?? {},
+      // Study sessions tag every event, so the six signals can be read off the timeline.
+      details: s.studyCondition ? { ...e.details, studyCondition: s.studyCondition } : (e.details ?? {}),
     };
   });
   return { ...s, auditSeq: seq, audit: [...s.audit, ...added].slice(-AUDIT_LIMIT) };
@@ -325,6 +332,11 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         summary: `Language changed to ${event.language}`,
         details: { language: event.language },
       });
+    }
+
+    case "SET_STUDY_CONDITION": {
+      if (s.studyCondition === event.condition) return s;
+      return { ...s, studyCondition: event.condition };
     }
 
     case "CALL_START": {
@@ -843,6 +855,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         ...createInitialSession(),
         persona: ended.persona,
         language: ended.language,
+        studyCondition: ended.studyCondition,
         callCount: ended.callCount,
         sessionId: ended.sessionId,
         audit: ended.audit,

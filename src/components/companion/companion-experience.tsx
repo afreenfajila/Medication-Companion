@@ -114,7 +114,7 @@ export function CompanionExperience() {
     mainRef.current?.focus({ preventScroll: true });
   }, [session.callActive]);
 
-  const explanation = resolveExplanation(session, language);
+  const explanation = resolveExplanation(session, language, session.studyCondition);
 
   // Optional visual-only polish: an English rephrase of the non-dosing "flavour"
   // text (title/purpose/caution/prompt), fetched once per confirmed medicine and

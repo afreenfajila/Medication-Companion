@@ -643,3 +643,7 @@ New safety reason `label-differs` (heading `labelSafetyHeading`, body `labelDiff
 | `familyConsent` | Shall I let your family know you'd like some help? I'll only do this if you say yes. | 需要我告诉您的家人您想请他们帮忙吗？只有您同意，我才会联系。 |
 | `familyConsentYes` | Yes, ask them — demo | 好，请告诉他们 — 示范 |
 | `unclearFamilyConsent` | I didn't quite catch that. You can say "yes" to ask your family, or "not now". | 我没太听清楚。您可以说「好」请家人帮忙，或说「现在不用」。 |
+
+### G. Study mode fixture
+
+`studyWrongInstruction` (`src/lib/content/fixtures.ts`): en `Take 1 tablet once daily at bedtime.`, zh-Hans `每日一次，睡前服用一片。` (needs native-speaker review). Used only in the `wrong-explanation` study condition, in place of the record's `instruction` after every gate has passed. It is never shown outside study mode, and participants are debriefed afterwards. Every audit event in a study session carries `details.studyCondition`.

@@ -1,5 +1,7 @@
 import { metforminPurposeEn, metforminRecord, recordSource } from "./demo-record";
 import { candidateIdFor } from "@/lib/matching/match-record";
+import type { StudyCondition } from "@/lib/study/study-mode";
+import { studyWrongInstruction } from "./fixtures";
 import type { RephraseFieldSet } from "./rephrase-guard";
 import type {
   CandidateDisplay,
@@ -39,12 +41,17 @@ function pick(text: LocalizedText, language: UiLanguage): string {
 export function resolveExplanation(
   session: { matchStatus: MatchStatus | null; candidate: CandidateDisplay | null },
   language: UiLanguage,
+  /** Study mode only: `wrong-explanation` swaps in a fixed wrong instruction, after the same gate. */
+  studyCondition: StudyCondition | null = null,
 ): ExplanationView | null {
   const { matchStatus, candidate } = session;
   if (matchStatus !== "confirmed" || !candidate) return null;
   if (candidate.candidateId !== candidateIdFor(metforminRecord)) return null;
 
-  const e = metforminRecord.explanation;
+  const e =
+    studyCondition === "wrong-explanation"
+      ? { ...metforminRecord.explanation, instruction: studyWrongInstruction }
+      : metforminRecord.explanation;
   return {
     recordSource: recordSource.displayLabel,
     medicine: {

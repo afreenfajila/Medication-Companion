@@ -11,6 +11,8 @@ export type DisplayEvent = {
   route: AuditEvent["route"];
   validationStatus: AuditEvent["validationStatus"];
   origin: "sample" | "session";
+  /** Study mode only: the condition the event happened under. */
+  studyCondition?: string;
 };
 
 const CHIP_BY_EVENT: Partial<Record<AuditEventType, StatusChip>> = {
@@ -37,6 +39,7 @@ export function buildTimeline(sessionEvents: readonly AuditEvent[]): DisplayEven
     route: e.route,
     validationStatus: e.validationStatus,
     origin: "session",
+    ...(typeof e.details.studyCondition === "string" ? { studyCondition: e.details.studyCondition } : {}),
   }));
   const samples: DisplayEvent[] = sampleAuditSeeds.map((e) => ({ ...e, origin: "sample" }));
   const merged = live.length > 0 ? live : samples;

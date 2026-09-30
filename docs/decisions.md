@@ -541,3 +541,22 @@ CLAUDE.md as an approved contract change. Implemented A–G in order, one commit
   considering later.
 - **Not on the urgent screen.** The urgent screen already has "Ask a trusted helper" and emergency
   services. A consent round-trip there would slow the one path where speed matters.
+
+## G. Study mode
+
+- **Two switches, both server-side.** `STUDY_MODE=true` alone isn't enough; `VERCEL_ENV=production`
+  always wins. Verified on a dev server: with both set, `/study` is a 404 and a hand-set cookie shows
+  no badge. With study mode on, `/study?condition=wrong-explanation` sets nothing, and a bogus cookie
+  value is ignored.
+- **The swap happens behind the gate, not instead of it.** `resolveExplanation` still returns null
+  without a confirmed match; the condition only changes which instruction string a confirmed match
+  resolves to. Everything that quotes the instruction (the feed, speech, the record-conflict reply)
+  reads that same view, so a participant never sees two different answers.
+- **The condition lives in the session so the audit log can carry it.** The layout reads the cookie
+  and hands it to the client once per page load. Every audit event is then tagged, and ending a call
+  keeps the tag. The badge says only "Study session", so participants can't tell which condition they
+  are in.
+- **Voice isn't a confound.** The wrong instruction is on the speech guard's approved list, so both
+  conditions use the same Gemini voice.
+- **Build-time caveat.** Pages are static unless study mode is on when the app is built, so setting
+  `STUDY_MODE` on a preview needs a redeploy. `next dev` reads it per request.

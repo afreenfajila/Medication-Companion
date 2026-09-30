@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
+import { StudyBadge } from "@/components/study-badge";
+import { getStudyCondition } from "@/lib/study/study-cookie";
 import "@/styles/globals.css";
 
 const dmSans = DM_Sans({
@@ -22,12 +24,16 @@ export const viewport: Viewport = {
   themeColor: "#FAF9F6",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const study = await getStudyCondition(); // always null unless study mode is on (never production)
   return (
     <html lang="en" className={dmSans.variable}>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <StudyBadge condition={study} />
+        {children}
+      </body>
     </html>
   );
 }

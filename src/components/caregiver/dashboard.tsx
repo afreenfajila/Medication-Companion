@@ -187,6 +187,11 @@ function TimelineItem({ event }: { event: DisplayEvent }) {
           {formatTime(event.timestamp)}
         </time>
         <span className="flex items-center gap-2">
+          {event.studyCondition && (
+            <span className="rounded-pill border border-line px-2 py-0.5 text-xs font-medium text-navy-700">
+              Study: {event.studyCondition}
+            </span>
+          )}
           {event.origin === "sample" && (
             <span className="rounded-pill border border-line px-2 py-0.5 text-xs font-medium text-navy-700">
               Sample

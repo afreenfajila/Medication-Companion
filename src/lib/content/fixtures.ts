@@ -4,6 +4,17 @@ import type {
   LabelExtraction,
 } from "@/types/content";
 
+/**
+ * Study mode only (`wrong-explanation` condition): a deliberately WRONG
+ * instruction, swapped in after every gate has passed, to test whether
+ * participants notice and challenge it. Participants are debriefed afterwards.
+ * The zh-Hans line needs native-speaker review before external testing.
+ */
+export const studyWrongInstruction = {
+  en: "Take 1 tablet once daily at bedtime.",
+  "zh-Hans": "每日一次，睡前服用一片。",
+} as const;
+
 export const demoFixtures = {
   matchingLabel: {
     mode: "demo",

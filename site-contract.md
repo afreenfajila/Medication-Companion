@@ -653,3 +653,11 @@ See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 
 - `FAMILY_CONSENT { granted }`, only while pending. `true` writes `caregiver-help-requested` and shows the demo notice; `false` just closes the question. Any new message, a safety entry or returning to the call also closes it without writing anything.
 - Voice: while pending, only a short clear "yes" consents; "no", "not now" or a hedge declines; anything else re-asks.
 - `HELP_ACTION` never carries `ask-family`, so no demo-action audit can bypass consent.
+
+### G. Study mode
+
+- Enabled only when `STUDY_MODE=true` **and** `VERCEL_ENV !== "production"` (`isStudyModeEnabled`). Otherwise `/study` is a 404 and the cookie is ignored. Add `STUDY_MODE` to local or Preview env only. It is read when the app is built and rendered, so redeploy the preview after setting it.
+- `/study` (not linked, `noindex`): a server-action form sets the httpOnly session cookie `mc_study` to `control` or `wrong-explanation`, or clears it. Query parameters cannot set it, and unknown values are ignored.
+- The root layout reads the cookie server-side and passes the condition to `StudyBadge`, which shows "Study session" on every screen (never the condition itself) and dispatches `SET_STUDY_CONDITION`.
+- `resolveExplanation(session, language, studyCondition)` swaps only the instruction, and only for a confirmed match. Call start, camera consent and confirmation all still apply.
+- The caregiver timeline shows a `Study: <condition>` tag on tagged events.

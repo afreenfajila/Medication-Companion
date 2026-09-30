@@ -1,6 +1,7 @@
 import { candidateDisplayFor } from "@/lib/matching/match-record";
 import { metforminPurposeEn, metforminRecord, recordSource } from "./demo-record";
 import { formatVerifiedDate } from "./explanation";
+import { studyWrongInstruction } from "./fixtures";
 import { copy } from "./translations";
 import { isSafeCompanionReply } from "./understand-guard";
 
@@ -14,6 +15,8 @@ const APPROVED: readonly string[] = [
   ...Object.values(metforminRecord.explanation).flatMap((field) => Object.values(field)),
   formatVerifiedDate("en"),
   formatVerifiedDate("zh-Hans"),
+  // Study mode's fixed wrong instruction: same voice in both conditions, so voice isn't a confound.
+  ...Object.values(studyWrongInstruction),
   candidateDisplayFor(metforminRecord).medicineName,
   metforminRecord.identity.genericName,
   metforminPurposeEn,
