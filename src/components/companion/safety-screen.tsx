@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Phone, Stethoscope, UserRound } from "lucide-react";
+import { Camera, Phone, Stethoscope, UserRound, UsersRound } from "lucide-react";
 import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
 import { DemoNotice } from "@/components/ui/notices";
 import { SafetyCard } from "@/components/ui/safety-card";
@@ -15,8 +15,26 @@ const ACTION_ICONS: Record<HelpActionId, React.ReactNode> = {
   "pharmacy-demo": <Phone className="h-5 w-5" aria-hidden="true" />,
   "clinic-demo": <Stethoscope className="h-5 w-5" aria-hidden="true" />,
   "trusted-helper-demo": <UserRound className="h-5 w-5" aria-hidden="true" />,
+  "ask-family": <UsersRound className="h-5 w-5" aria-hidden="true" />,
   "urgent-care": <Phone className="h-5 w-5" aria-hidden="true" />,
 };
+
+/**
+ * "Shall I let your family know you'd like some help?" — asked every time
+ * family help is chosen, from the safety options or the wellbeing reply.
+ * Only "Yes" records anything; "Not now" leaves no trace.
+ */
+export function FamilyConsent({ t, onAnswer }: { t: T; onAnswer: (granted: boolean) => void }) {
+  return (
+    <div role="group" aria-label={t("familyConsent")} className="flex flex-col gap-3">
+      <p className="text-lg font-bold leading-snug">{t("familyConsent")}</p>
+      <PrimaryButton icon={<UsersRound className="h-5 w-5" aria-hidden="true" />} onClick={() => onAnswer(true)}>
+        {t("familyConsentYes")}
+      </PrimaryButton>
+      <SecondaryButton onClick={() => onAnswer(false)}>{t("notNow")}</SecondaryButton>
+    </div>
+  );
+}
 
 /**
  * 07-safety-escalation, as the pinned card for that step on the same call
@@ -28,13 +46,15 @@ export function SafetyScreen({
   t,
   session,
   onTryAnother,
+  onAskFamily,
   onDemoAction,
   onReturn,
 }: {
   t: T;
   session: Session;
   onTryAnother: () => void;
-  onDemoAction: (id: Exclude<HelpActionId, "try-again">) => void;
+  onAskFamily: () => void;
+  onDemoAction: (id: Exclude<HelpActionId, "try-again" | "ask-family">) => void;
   onReturn: () => void;
 }) {
   const reason = session.safetyReason ?? "help-requested";
@@ -47,7 +67,7 @@ export function SafetyScreen({
   const [main, ...rest] = view.actions;
 
   const run = (id: HelpActionId) =>
-    id === "try-again" ? onTryAnother() : onDemoAction(id);
+    id === "try-again" ? onTryAnother() : id === "ask-family" ? onAskFamily() : onDemoAction(id);
 
   const label = (key: CopyKey) => t(key);
 

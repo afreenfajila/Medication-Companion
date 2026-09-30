@@ -12,6 +12,7 @@ import {
   toExplain,
   CTX,
 } from "@/test/helpers";
+import { buildTimeline, deriveRecordStatus } from "./audit-view";
 import { routeMessage } from "./intent";
 import {
   createInitialSession,
@@ -489,7 +490,11 @@ describe("off-topic cap, health signals and wellbeing (Assignment 3, E)", () => 
     expect(s.state).toBe("listening");
     expect(s.assistantKey).toBe("wellbeing");
     expect(s.contextualActions).toContain("carry-on");
-    expect(s.audit.at(-1)?.details).toEqual({ intent: "wellbeing", category: "wellbeing", actionsOffered: "carry-on" });
+    expect(s.audit.at(-1)?.details).toEqual({
+      intent: "wellbeing",
+      category: "wellbeing",
+      actionsOffered: "ask-family,carry-on",
+    });
 
     const on = run([{ type: "SELECT_ROUTE", route: "carry-on" }], s);
     expect(on.assistantKey).toBe("anotherMedicineGuide");
@@ -503,6 +508,46 @@ describe("off-topic cap, health signals and wellbeing (Assignment 3, E)", () => 
       category: "world",
       actionsOffered: "show-medicine,ask-schedule",
     });
+  });
+});
+
+describe("family help needs consent every time (Assignment 3, F)", () => {
+  const lonely = () => run([startCall, { type: "USER_MESSAGE", text: "I feel lonely" }]);
+  const asked = (s = lonely()) => run([{ type: "SELECT_ROUTE", route: "ask-family" }], s);
+  const familyEvents = (s: ReturnType<typeof run>) =>
+    s.audit.filter((e) => e.eventType === "caregiver-help-requested");
+
+  it("choosing 'Ask family to help' only asks — nothing is recorded yet", () => {
+    const s = asked();
+    expect(s.familyConsentPending).toBe(true);
+    expect(familyEvents(s)).toHaveLength(0);
+  });
+
+  it("'Not now' leaves no trace", () => {
+    const s = run([{ type: "FAMILY_CONSENT", granted: false }], asked());
+    expect(s.familyConsentPending).toBe(false);
+    expect(familyEvents(s)).toHaveLength(0);
+  });
+
+  it("only 'Yes' writes caregiver-help-requested, which the dashboard shows as Needs help", () => {
+    const s = run([{ type: "FAMILY_CONSENT", granted: true }], asked());
+    expect(familyEvents(s)).toHaveLength(1);
+    expect(familyEvents(s)[0].details).toEqual({ consent: true, implemented: false });
+    expect(deriveRecordStatus(buildTimeline(s.audit))).toBe("Needs help");
+  });
+
+  it("is on the non-urgent safety options too, and asks again every time", () => {
+    const safety = run([startCall, { type: "GET_HELP" }]);
+    const once = run([{ type: "ASK_FAMILY" }, { type: "FAMILY_CONSENT", granted: true }], safety);
+    expect(familyEvents(once)).toHaveLength(1);
+    const again = run([{ type: "ASK_FAMILY" }], once);
+    expect(again.familyConsentPending).toBe(true);
+    expect(familyEvents(again)).toHaveLength(1); // nothing new until a second "Yes"
+  });
+
+  it("can't be opened where it wasn't offered", () => {
+    expect(blocked([{ type: "ASK_FAMILY" }], run([startCall]))).toBe(true);
+    expect(blocked([{ type: "FAMILY_CONSENT", granted: true }], lonely())).toBe(true);
   });
 });
 

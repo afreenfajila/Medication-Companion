@@ -6,6 +6,7 @@ export type HelpActionId =
   | "pharmacy-demo"
   | "clinic-demo"
   | "trusted-helper-demo"
+  | "ask-family" // opens the family-consent question; nothing is shared without "Yes"
   | "urgent-care";
 
 export type HelpAction = {
@@ -94,6 +95,7 @@ export function buildEscalation(
   actions.push(
     { id: "pharmacy-demo", labelKey: "checkPharmacy", implemented: false },
     { id: "trusted-helper-demo", labelKey: "askHelper", implemented: false },
+    { id: "ask-family", labelKey: "askFamily", implemented: false },
     { id: "clinic-demo", labelKey: "contactClinic", implemented: false },
   );
 

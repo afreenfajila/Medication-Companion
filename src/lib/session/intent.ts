@@ -154,7 +154,12 @@ export function routeMessage(
   // and before the medicine patterns only because `classifyOffTopic` refuses to
   // fire on anything containing a medicine/label/dose term.
   if (isLowMood(text)) {
-    return { intent: "wellbeing", assistantKey: "wellbeing", contextualActions: ["carry-on"], category: "wellbeing" };
+    return {
+      intent: "wellbeing",
+      assistantKey: "wellbeing",
+      contextualActions: ["ask-family", "carry-on"],
+      category: "wellbeing",
+    };
   }
   const offTopic = classifyOffTopic(text);
   if (offTopic) {

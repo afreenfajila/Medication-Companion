@@ -18,6 +18,7 @@ const CHIP_BY_EVENT: Partial<Record<AuditEventType, StatusChip>> = {
   "candidate-denied": "Needs help",
   "help-requested": "Needs help",
   "urgent-safety-triggered": "Needs help",
+  "caregiver-help-requested": "Needs help",
   "label-submitted": "Pending",
   "candidate-presented": "Pending",
 };

@@ -335,3 +335,22 @@ describe("interpretUtterance — explanation answers", () => {
     expect(interpretUtterance("yes", raised)).toEqual({ kind: "unclear" });
   });
 });
+
+describe("interpretUtterance — family consent", () => {
+  const ctx = {
+    state: "listening" as const,
+    contextualActions: [],
+    candidateId: null,
+    explainStep: 0 as const,
+    cameraLive: false,
+    pendingSpokenMedicineName: null,
+    familyConsentPending: true,
+  };
+
+  it("only a clear, short yes consents; no or a hedge declines; anything else re-asks", () => {
+    expect(interpretUtterance("yes please", ctx)).toEqual({ kind: "event", event: { type: "FAMILY_CONSENT", granted: true } });
+    expect(interpretUtterance("not now", ctx)).toEqual({ kind: "event", event: { type: "FAMILY_CONSENT", granted: false } });
+    expect(interpretUtterance("maybe", ctx)).toEqual({ kind: "event", event: { type: "FAMILY_CONSENT", granted: false } });
+    expect(interpretUtterance("what would they be told about my medicine", ctx)).toEqual({ kind: "unclear" });
+  });
+});

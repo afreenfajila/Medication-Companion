@@ -91,6 +91,7 @@ describe("escalation view", () => {
       "try-again",
       "pharmacy-demo",
       "trusted-helper-demo",
+      "ask-family",
       "clinic-demo",
     ]);
     // No action other than "try again" pretends to be implemented.

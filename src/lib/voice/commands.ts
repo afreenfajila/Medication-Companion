@@ -33,6 +33,8 @@ export type CommandContext = {
   nameCheckPending?: boolean;
   /** The companion just answered "my doctor said…" and asked: pharmacist, or carry on? */
   recordConflict?: boolean;
+  /** The companion asked "Shall I let your family know…?" */
+  familyConsentPending?: boolean;
   /** Set once a spoken name has been heard and we're waiting on its strength. */
   pendingSpokenMedicineName: string | null;
 };
@@ -94,6 +96,13 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
   const hedge = HEDGE.test(n);
   const negative = NEGATIVE.test(n);
   const affirm = AFFIRM.test(n);
+
+  // "Shall I let your family know…?" Consent must be a clear, short yes.
+  if (ctx.familyConsentPending) {
+    if (negative || hedge) return { kind: "event", event: { type: "FAMILY_CONSENT", granted: false } };
+    if (affirm && isShort(n)) return { kind: "event", event: { type: "FAMILY_CONSENT", granted: true } };
+    return { kind: "unclear" };
+  }
 
   switch (ctx.state) {
     case "listening": {

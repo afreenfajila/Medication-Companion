@@ -62,9 +62,9 @@ export type UserIntent =
 /**
  * Temporary in-call choices. The two doors (`show-medicine`, `ask-schedule`) are
  * the only ones the understanding pass may offer; `end-call` follows the
- * off-topic wrap-up and `carry-on` follows the wellbeing reply.
+ * off-topic wrap-up; `ask-family` and `carry-on` follow the wellbeing reply.
  */
-export type ContextualActionId = "show-medicine" | "ask-schedule" | "end-call" | "carry-on";
+export type ContextualActionId = "show-medicine" | "ask-schedule" | "end-call" | "carry-on" | "ask-family";
 
 export type LocalizedText = Partial<Record<LanguageCode, string>>;
 
@@ -208,6 +208,7 @@ export type AuditEventType =
   | "understanding-confirmed" // extension
   | "record-conflict-raised" // extension: intent only, never the words
   | "label-check-answered" // extension: "Does this match your label?" → matches / differs
+  | "caregiver-help-requested" // extension: written ONLY after "Yes, ask them — demo"
   | "language-changed"
   | "help-requested"
   | "urgent-safety-triggered"

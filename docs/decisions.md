@@ -526,3 +526,18 @@ CLAUDE.md as an approved contract change. Implemented A–G in order, one commit
   point to tune in testing.
 - **Audit.** Off-topic and wellbeing events now drop even the character count and keep only the
   category.
+
+## F. Family help needs consent every time
+
+- **One question, two entry points.** The consent card is driven by a session flag rather than a state,
+  so the same card sits on top of the safety options or the wellbeing reply, and "Not now" returns to
+  exactly where the person was.
+- **Consent is never remembered.** Each "Ask family to help" asks again; a previous "Yes" doesn't carry
+  over. That is the point of the amendment, and it costs one tap.
+- **Voice consent errs towards no.** A hedge ("maybe") counts as "not now", and only a short, clear
+  "yes" consents. A long sentence that happens to contain "yes" re-asks.
+- **Added alongside "Ask a trusted helper — demo", not replacing it.** The spec says "add", and the
+  helper option predates consent. Merging the two into one consented family/helper action is worth
+  considering later.
+- **Not on the urgent screen.** The urgent screen already has "Ask a trusted helper" and emergency
+  services. A consent round-trip there would slow the one path where speed matters.

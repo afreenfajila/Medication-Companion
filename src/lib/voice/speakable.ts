@@ -25,6 +25,7 @@ export function speakableText(
     | "recordConflict"
     | "language"
     | "userText"
+    | "familyConsentPending"
   >,
   t: (key: CopyKey) => string,
   explanation: ExplanationView | null,
@@ -41,6 +42,9 @@ export function speakableText(
 ): string | null {
   const join = (...parts: Array<string | null | undefined>) =>
     parts.filter((p): p is string => Boolean(p)).join(" ");
+
+  // The family-consent question sits on top of whichever step asked it.
+  if (session.familyConsentPending) return t("familyConsent");
 
   switch (session.state) {
     case "listening":

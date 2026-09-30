@@ -180,6 +180,20 @@ describe("in-call flow", () => {
     expect(screen.queryByRole("button", { name: "Try another photo" })).toBeNull();
   });
 
+  it("low mood: a warm reply, and family help asks for consent before anything happens", () => {
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    send("I feel so lonely");
+    expect(screen.getByText(/that sounds hard/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ask family to help — demo" }));
+
+    const consent = screen.getByRole("group", { name: /Shall I let your family know/ });
+    expect(sessionStore.getSnapshot().audit.some((e) => e.eventType === "caregiver-help-requested")).toBe(false);
+    fireEvent.click(within(consent).getByRole("button", { name: "Yes, ask them — demo" }));
+    expect(sessionStore.getSnapshot().audit.some((e) => e.eventType === "caregiver-help-requested")).toBe(true);
+    expect(screen.getByText(/no call or message was sent/i)).toBeInTheDocument();
+  });
+
   it("self-harm wording shows the urgent screen with crisis line numbers as text, not a claimed call", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));

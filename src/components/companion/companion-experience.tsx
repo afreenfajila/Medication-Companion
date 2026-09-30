@@ -27,7 +27,7 @@ import { CompleteScreen } from "./complete-screen";
 import { ConfirmScreen } from "./confirm-screen";
 import { ExplainScreen } from "./explain-screen";
 import { ListeningActions } from "./listening-screen";
-import { SafetyScreen } from "./safety-screen";
+import { FamilyConsent, SafetyScreen } from "./safety-screen";
 import { DisclosureFooter, ScreenHeader } from "./screen-chrome";
 import { StartScreen } from "./start-screen";
 import { useCallFeed } from "./use-call-feed";
@@ -485,6 +485,7 @@ export function CompanionExperience() {
           t={t}
           session={session}
           onTryAnother={() => dispatch({ type: "TRY_ANOTHER_LABEL" })}
+          onAskFamily={() => dispatch({ type: "ASK_FAMILY" })}
           onDemoAction={(action) => dispatch({ type: "HELP_ACTION", action })}
           onReturn={() => dispatch({ type: "RETURN_TO_CALL" })}
         />
@@ -496,6 +497,10 @@ export function CompanionExperience() {
     case "start":
     default:
       pinnedActions = null;
+  }
+  // Family help is asked every time, on top of whichever step offered it.
+  if (session.familyConsentPending) {
+    pinnedActions = <FamilyConsent t={t} onAnswer={(granted) => dispatch({ type: "FAMILY_CONSENT", granted })} />;
   }
 
   return (

@@ -632,3 +632,14 @@ New safety reason `label-differs` (heading `labelSafetyHeading`, body `labelDiff
 | `wellbeing` | Thank you for telling me — that sounds hard. I'm only a medicine helper, but you don't have to manage things alone. Would you like me to let your family know you'd like some company, or shall we carry on together? | 谢谢您告诉我，这听起来不容易。我只是一个用药小帮手，但您不必一个人面对。需要我告诉您的家人您想有人陪陪您吗，还是我们一起继续？ |
 | `didntCatch` | Sorry, I didn't quite catch that. Could you say it again? Typing it works well too. | 不好意思，我没听清楚。可以再说一次吗？也可以直接打字。 |
 | `crisisLines` | Samaritans of Singapore (24 hours): 1767 · Emergency: 995 | 新加坡援人协会（24小时）：1767 · 紧急电话：995 |
+
+### F. Asking family for help needs consent every time
+
+`Ask family to help — demo` is on the non-urgent safety options and after the `wellbeing` reply. Tapping it shows `familyConsent` with `Yes, ask them — demo` and `Not now`. Only "Yes" writes `caregiver-help-requested` (details `{ consent: true, implemented: false }`), which the caregiver dashboard shows as `Needs help`. "Not now" writes nothing. Nothing is sent anywhere; the demo notice says so.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `askFamily` | Ask family to help — demo | 请家人帮忙 — 示范 |
+| `familyConsent` | Shall I let your family know you'd like some help? I'll only do this if you say yes. | 需要我告诉您的家人您想请他们帮忙吗？只有您同意，我才会联系。 |
+| `familyConsentYes` | Yes, ask them — demo | 好，请告诉他们 — 示范 |
+| `unclearFamilyConsent` | I didn't quite catch that. You can say "yes" to ask your family, or "not now". | 我没太听清楚。您可以说「好」请家人帮忙，或说「现在不用」。 |

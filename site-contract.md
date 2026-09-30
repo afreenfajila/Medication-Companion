@@ -646,3 +646,10 @@ See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 
 - Session `offTopicStreak`: +1 on an off-topic message, reset by any other message or a route taken; the wrap-up fires at `OFF_TOPIC_TURN_CAP` (2).
 - `VoiceProvider.onTranscript(callback: (text, confidence?) => void)`: the browser provider passes the lowest confidence of the final segments. Typed input has none.
 - `buildEscalation(..., selfHarm)` adds `crisisKey` on the urgent path; the caller derives it from the triggering message with `mentionsSelfHarm`.
+
+### F. Family help with consent
+
+- `ASK_FAMILY` (also `SELECT_ROUTE ask-family` when offered) sets `familyConsentPending`. Valid in non-urgent `safety`, or in `listening` when `ask-family` was offered.
+- `FAMILY_CONSENT { granted }`, only while pending. `true` writes `caregiver-help-requested` and shows the demo notice; `false` just closes the question. Any new message, a safety entry or returning to the call also closes it without writing anything.
+- Voice: while pending, only a short clear "yes" consents; "no", "not now" or a hedge declines; anything else re-asks.
+- `HELP_ACTION` never carries `ask-family`, so no demo-action audit can bypass consent.

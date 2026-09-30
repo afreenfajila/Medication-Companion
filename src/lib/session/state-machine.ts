@@ -69,6 +69,8 @@ export type Session = {
   /** Consecutive off-topic turns; the second gets a friendly wrap-up. Any other turn resets it. */
   offTopicStreak: number;
   helpAction: HelpActionId | null;
+  /** "Shall I let your family know…?" is on screen. Nothing is shared until "Yes". */
+  familyConsentPending: boolean;
   /** Label retries used for the current medicine. One retry, then human help only. */
   labelRetries: number;
   audit: AuditEvent[];
@@ -101,7 +103,10 @@ export type SessionEvent =
   | { type: "GET_HELP" }
   | { type: "TRY_ANOTHER_LABEL" }
   | { type: "RETURN_TO_CALL" }
-  | { type: "HELP_ACTION"; action: Exclude<HelpActionId, "try-again"> }
+  | { type: "HELP_ACTION"; action: Exclude<HelpActionId, "try-again" | "ask-family"> }
+  /** Opens the family-consent question (safety options, or the wellbeing reply). */
+  | { type: "ASK_FAMILY" }
+  | { type: "FAMILY_CONSENT"; granted: boolean }
   | { type: "REPEAT" }
   | { type: "END_CALL" }
   /**
@@ -153,6 +158,7 @@ export function createInitialSession(): Session {
     nameCheckPending: false,
     offTopicStreak: 0,
     helpAction: null,
+    familyConsentPending: false,
     labelRetries: 0,
     audit: [],
     auditSeq: 0,
@@ -228,6 +234,7 @@ function enterSafety(
     safetyReason: reason,
     contextualActions: [],
     helpAction: null,
+    familyConsentPending: false,
     recordConflict: false,
   };
   return withAudit(next, ctx, {
@@ -366,6 +373,8 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         replyTo: null,
         nameCheckPending: false,
         offTopicStreak: routed.intent === "off-topic" ? s.offTopicStreak + 1 : 0,
+        familyConsentPending: false, // moving on without answering is a "not now"
+        helpAction: null,
       };
 
       // Urgent-risk overrides the normal path from ANY active-call state.
@@ -475,6 +484,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       if (event.route === "carry-on") {
         return { ...s, assistantKey: "anotherMedicineGuide", contextualActions: [], replyTo: null };
       }
+      if (event.route === "ask-family") return reduceSession(s, { type: "ASK_FAMILY" }, ctx);
       return applyRoute(s, ctx, event.route, "button");
     }
 
@@ -779,6 +789,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         state: "listening",
         safetyReason: null,
         helpAction: null,
+        familyConsentPending: false,
         assistantKey: "anotherMedicineGuide",
         contextualActions: [],
         replyTo: null,
@@ -793,6 +804,29 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         eventType: "help-requested",
         summary: `Demo help action selected: ${event.action} (nothing was sent)`,
         details: { action: event.action, implemented: false },
+      });
+    }
+
+    case "ASK_FAMILY": {
+      // Offered on the non-urgent safety options, and after the wellbeing reply.
+      const fromSafety = s.state === "safety" && s.safetyReason !== "urgent-risk";
+      const fromWellbeing = s.state === "listening" && s.contextualActions.includes("ask-family");
+      if (!s.callActive || !(fromSafety || fromWellbeing)) return s;
+      return { ...s, familyConsentPending: true, helpAction: null };
+    }
+
+    case "FAMILY_CONSENT": {
+      if (!s.familyConsentPending) return s;
+      const after: Partial<Session> =
+        s.state === "listening"
+          ? { assistantKey: "anotherMedicineGuide", contextualActions: [], replyTo: null }
+          : {};
+      if (!event.granted) return { ...s, ...after, familyConsentPending: false };
+      // The only place this event is written: after an explicit "Yes".
+      return withAudit({ ...s, ...after, familyConsentPending: false, helpAction: "ask-family" }, ctx, {
+        eventType: "caregiver-help-requested",
+        summary: "Mei Ling agreed to ask family for help (demo — nothing was sent)",
+        details: { consent: true, implemented: false },
       });
     }
 
