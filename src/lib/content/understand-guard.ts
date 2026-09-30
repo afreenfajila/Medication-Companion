@@ -1,5 +1,5 @@
 import type { CopyKey } from "@/lib/content/translations";
-import { introducesUnsafeLanguage } from "@/lib/content/rephrase-guard";
+import { unsupportedMedicalPatterns, urgentPatterns } from "@/lib/safety/classify";
 import type { ContextualActionId, UiLanguage } from "@/types/content";
 
 /**
@@ -34,6 +34,30 @@ export function actionsForOffer(offer: UnderstandOffer): ContextualActionId[] {
   if (offer === "show-medicine") return ["show-medicine"];
   if (offer === "show-medicine-or-schedule") return ["show-medicine", "ask-schedule"];
   return [];
+}
+
+// Patterns aimed at AI-AUTHORED text specifically: an invented claim can be phrased
+// as a plain statement ("...may cause dizziness"), not just a user-style question,
+// so this is broader than the safety classifier's user-question patterns.
+const AI_INVENTED_CLAIM_PATTERNS: readonly RegExp[] = [
+  /\byou should (stop|start|change|double|skip)\b/i,
+  /\b(may|can|could|might)\s+cause\b/i,
+  /\bside effects?\b/i,
+  /\ballerg(y|ic|ies)\b/i,
+  /\binteracts?\s+with\b/i,
+  /\boverdose\b/i,
+  /\bwarning\b/i,
+  /\bdo not (take|use|combine)\b/i,
+  /可能(导致|引起)|副作用|过敏|警告/,
+];
+
+/** The safety classifier's patterns plus AI-output-specific ones, as a negative filter. */
+export function introducesUnsafeLanguage(candidate: string): boolean {
+  return (
+    urgentPatterns.some((p) => p.test(candidate)) ||
+    unsupportedMedicalPatterns.some((p) => p.test(candidate)) ||
+    AI_INVENTED_CLAIM_PATTERNS.some((p) => p.test(candidate))
+  );
 }
 
 // Anything that reads as a dose, timing, or strength. The model only ever
@@ -81,7 +105,7 @@ const CJK = /[一-鿿]/;
 /**
  * Accepts a model-written companion reply only when it cannot carry medicine
  * information: no numbers or dosing/timing words, no advice or invented
- * clinical claims (the same filters the rephrase path uses), no claim that a
+ * clinical claims (`introducesUnsafeLanguage`), no claim that a
  * medicine is confirmed, no markup, and a short spoken length. Anything else
  * is rejected and the caller uses the deterministic approved line.
  *

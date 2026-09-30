@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { dispatch } from "@/lib/session/session-store";
 import type { Session } from "@/lib/session/state-machine";
-import { runVoiceAction } from "@/lib/voice/actions";
+import { runCapture } from "@/lib/voice/actions";
 import { interpretUtterance } from "@/lib/voice/commands";
 import { detectInputLanguage } from "@/lib/voice/detect-language";
 import { isLikelySelfEcho } from "@/lib/voice/echo";
@@ -206,7 +206,7 @@ export function useVoiceConversation(opts: {
       pendingSpokenName.current = null;
       dispatch({ type: "USER_MESSAGE", text: text.slice(0, 300) });
     } else if (intent.kind === "ui") {
-      runVoiceAction(intent.action);
+      runCapture();
     } else if (intent.kind === "need-strength") {
       pendingSpokenName.current = intent.medicineName;
       sayNotice("askStrengthForSpokenLabel");

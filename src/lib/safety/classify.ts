@@ -1,5 +1,3 @@
-import type { SafetyReason } from "@/types/content";
-
 // Deterministic prototype safety net (content-model.md §14). Not clinical triage.
 // Runs before any model is ever consulted; a hit means "do not ask a model".
 
@@ -90,8 +88,4 @@ export function classifySafety(text: string): SafetyClassification {
     return { level: "unsupported", reason: "unsupported-medical-question" };
   }
   return { level: "none" };
-}
-
-export function isUrgentReason(reason: SafetyReason): boolean {
-  return reason === "urgent-risk";
 }

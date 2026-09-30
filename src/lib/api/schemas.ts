@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { CONVERSATIONAL_REPHRASE_KEYS } from "@/lib/content/rephrase-guard";
 import { UNDERSTAND_KEYS } from "@/lib/content/understand-guard";
 
 // Shared request/response contracts (site-contract.md §8). Used by the route
@@ -62,30 +61,6 @@ export const labelAnalyzeFieldsSchema = z.object({
   inputMode: z.literal("image"),
 });
 
-export const rephraseRequestSchema = z.object({
-  sessionId: z.string().min(1).max(64),
-});
-
-const rephraseFieldSetSchema = z.object({
-  title: z.string(),
-  purpose: z.string(),
-  instructionIntro: z.string(),
-  caution: z.string(),
-  confirmationPrompt: z.string(),
-});
-
-/** Always `ok`: worst case is `source: "fallback"` with the exact approved text. */
-export const rephraseResponseDataSchema = z.object({
-  fields: rephraseFieldSetSchema,
-  source: z.enum(["claude", "fallback"]),
-});
-export type RephraseResponseData = z.infer<typeof rephraseResponseDataSchema>;
-
-export const rephraseResponseSchema = z.discriminatedUnion("ok", [
-  apiSuccessSchema(rephraseResponseDataSchema),
-  apiFailureSchema,
-]);
-
 /**
  * Speech output: renders already-approved text to audio (never generates
  * content). Success returns the raw WAV bytes directly (Content-Type:
@@ -95,26 +70,6 @@ export const speakRequestSchema = z.object({
   text: z.string().min(1).max(600),
   language: z.enum(["en", "zh-Hans"]),
 });
-
-/**
- * In-call conversational rephrase: the client names WHICH approved line it
- * wants naturalised (never sends its own text) — the server looks up the
- * canonical English copy itself, so a client can't smuggle arbitrary text
- * through as if it were already-approved. English only, same as the
- * explanation rephrase (Chinese already has reviewed static translations).
- */
-export const replyRephraseRequestSchema = z.object({
-  key: z.enum(CONVERSATIONAL_REPHRASE_KEYS),
-});
-export const replyRephraseResponseDataSchema = z.object({
-  text: z.string(),
-  source: z.enum(["claude", "fallback"]),
-});
-export type ReplyRephraseResponseData = z.infer<typeof replyRephraseResponseDataSchema>;
-export const replyRephraseResponseSchema = z.discriminatedUnion("ok", [
-  apiSuccessSchema(replyRephraseResponseDataSchema),
-  apiFailureSchema,
-]);
 
 /**
  * In-call understanding (Claude task 3): the person's own message plus a short

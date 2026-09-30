@@ -80,7 +80,6 @@ AI makes the companion easier to talk to, but every decision that matters is mad
 |---|---|---|
 | **Claude: label reading** | Reads the visible name, strength and form from a label photo into strict JSON. | Decide whether the label matches the record, or write medicine information. |
 | **Claude: understanding** | Works out what the person meant, including a misheard medicine name, and replies in natural words using the recent conversation. It chooses which of the two in-call options to offer. | See the medicine's instructions, mention any dose, timing or advice, claim a medicine is confirmed, open the camera, or answer a safety question. |
-| **Claude: rephrasing** | Rewords a few approved lines so repeated replies don't sound scripted. | Add or remove any fact. |
 | **Gemini: voice** | Reads the approved text aloud in a consistent voice. | Decide what is said. |
 | **Fixed code** | Safety classification, conversation routing, label matching, confirmation, and every record explanation. | — |
 
@@ -117,7 +116,7 @@ npm run dev                  # http://localhost:3000
 
 | Variable | Turns on | Notes |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Label photo reading, conversational understanding, rephrasing | Server-only. Never prefix with `NEXT_PUBLIC_`. |
+| `ANTHROPIC_API_KEY` | Label photo reading and conversational understanding | Server-only. Never prefix with `NEXT_PUBLIC_`. |
 | `ANTHROPIC_MODEL` | Optional model override | Defaults to `claude-opus-5`. |
 | `GEMINI_API_KEY` | Consistent spoken voice (Gemini text-to-speech) | Server-only. Without it, the browser's own voice is used. |
 | `GEMINI_TTS_MODEL` | Optional voice model override | Defaults to `gemini-3.1-flash-tts-preview`. |
@@ -165,7 +164,7 @@ requested after the person taps something.
 src/
   app/                  pages (/, /companion, /caregiver, /about) and API routes
     api/label/analyze   label photo → Claude extraction → deterministic match
-    api/companion/*     understand · rephrase · reply-rephrase · speak
+    api/companion/*     understand · speak
   components/           companion call UI, caregiver view, shared UI (orb, cards, buttons)
   lib/
     session/            state machine, intent routing, off-topic handling

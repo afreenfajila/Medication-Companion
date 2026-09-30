@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { t } from "@/lib/content/translations";
-import { actionsForOffer, isSafeCompanionReply, isUnderstandKey } from "./understand-guard";
+import { actionsForOffer, introducesUnsafeLanguage, isSafeCompanionReply, isUnderstandKey } from "./understand-guard";
+
+describe("introducesUnsafeLanguage", () => {
+  it("flags phrasing that resembles unsupported medical advice", () => {
+    expect(introducesUnsafeLanguage("You should stop taking this if you feel unwell.")).toBe(true);
+    expect(introducesUnsafeLanguage("This may cause a side effect.")).toBe(true);
+  });
+  it("does not flag the ordinary approved wording", () => {
+    expect(introducesUnsafeLanguage("Metformin helps manage blood sugar.")).toBe(false);
+    expect(introducesUnsafeLanguage("I can explain this record, but I cannot change your medicine instructions.")).toBe(false);
+  });
+});
 
 describe("isSafeCompanionReply — what a model-written reply may never carry", () => {
   it("accepts a natural, information-free reply", () => {

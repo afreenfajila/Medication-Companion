@@ -562,7 +562,7 @@ const demoFixtures = {
 
 ## 19. Assignment 3 experience amendments
 
-Approved changes from the Assignment 3 experience design (CLAUDE.md § Assignment 3 experience amendments). None relaxes a safety rule. All new copy keys are fixed approved copy, never model-written, and are not in `UNDERSTAND_KEYS` or `CONVERSATIONAL_REPHRASE_KEYS`. zh-Hans lines need native-speaker review before external testing.
+Approved changes from the Assignment 3 experience design (CLAUDE.md § Assignment 3 experience amendments). None relaxes a safety rule. All new copy keys are fixed approved copy, never model-written, and are not in `UNDERSTAND_KEYS`. zh-Hans lines need native-speaker review before external testing.
 
 ### A. Companion tone contract
 

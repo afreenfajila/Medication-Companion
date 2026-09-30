@@ -560,3 +560,23 @@ CLAUDE.md as an approved contract change. Implemented A–G in order, one commit
   conditions use the same Gemini voice.
 - **Build-time caveat.** Pages are static unless study mode is on when the app is built, so setting
   `STUDY_MODE` on a preview needs a redeploy. `next dev` reads it per request.
+
+---
+
+# Decisions (removing the two rephrase paths)
+
+An over-engineering audit found both rephrase features largely redundant once the understanding pass
+(Claude task 3) existed. The product owner chose to remove them.
+
+- **Explanation rephrase (`/api/companion/rephrase`) removed.** It only reworded English "flavour"
+  text on screen (never spoken, never the instruction or source line). CLAUDE.md's task 2 covers
+  translating when local translations are insufficient, which English never was. The explanation is
+  now always the approved record text.
+- **Reply rephrase (`/api/companion/reply-rephrase`) removed.** Five of its seven keys were already
+  understanding keys, and both needed the same Anthropic key, so in practice it only reworded
+  `scheduleNeedsRecord` and `anotherMedicineGuide`. Those two now use their approved lines.
+- **What stays:** the understanding pass still words replies to what the person said, behind the same
+  guard. `introducesUnsafeLanguage`, which that guard uses, moved from the deleted `rephrase-guard.ts`
+  into `understand-guard.ts`.
+- **CLAUDE.md is unchanged.** Task 2 is still permitted, just not used; re-adding it for a real
+  translation gap (for example Malay or Tamil) would be a new, narrower route.

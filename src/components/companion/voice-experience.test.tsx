@@ -240,9 +240,6 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     act(() => fake.recognitions[0].say("What will happen if I ask about the weather today?", true));
-    // This redirect is rephrase-eligible, so the turn's wording is decided within
-    // the 800 ms budget; with no rephrase service here that decision is the
-    // approved line itself.
     tick(1000);
 
     // Acknowledged first — not bounced with a bare refusal — then walked back.

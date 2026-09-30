@@ -633,7 +633,7 @@ See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 
 - `RECORD_CONFLICT_CHOICE`: `pharmacist` → `safety` (`help-requested`, confirmed candidate kept, audit detail `from: record-conflict`); `carry-on` → clears the flag, same step. Ignored when no conflict is raised.
 - Moving a step, `UNDERSTOOD`, `NEW_MEDICINE` and any safety entry clear the flag.
 - Voice/typed: in `explain`, a dispute is sent as a message; while the flag is set, "pharmacist" or "carry on / next" answers it, and a bare "yes" re-asks.
-- No model is called: the understanding pass and rephrase only run in `listening`.
+- No model is called: the understanding pass only runs in `listening`.
 
 ### D. Label check on the explanation
 

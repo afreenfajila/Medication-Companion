@@ -184,7 +184,6 @@ describe("INVARIANT: a record conflict is answered from the record, never by a m
 
     const posts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST");
     expect(posts.map(([u]) => u)).not.toContain("/api/companion/understand");
-    expect(posts.map(([u]) => u)).not.toContain("/api/companion/reply-rephrase");
 
     fireEvent.click(screen.getByRole("button", { name: "Check with pharmacist — demo" }));
     expect(screen.getByText("Here are some ways to reach a person.")).toBeInTheDocument();

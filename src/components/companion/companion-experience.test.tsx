@@ -388,79 +388,18 @@ describe("in-call flow", () => {
   });
 });
 
-describe("natural rephrasing of eligible in-call conversational lines", () => {
-  function stubReplyRephrase(response: unknown | "hang") {
-    const fn = vi.fn(async (url: string) => {
-      if (String(url) === "/api/companion/reply-rephrase") {
-        if (response === "hang") return new Promise(() => undefined); // never resolves
-        return { ok: true, json: async () => response };
-      }
-      throw new Error(`unexpected fetch in this test: ${url}`);
-    });
-    vi.stubGlobal("fetch", fn);
-    return fn;
-  }
-
-  const flush = () =>
-    act(async () => {
-      await vi.advanceTimersByTimeAsync(1000);
-    });
-
-  it("uses the Claude-naturalised wording for an eligible line when it arrives in time", async () => {
-    const naturalised =
-      "Before we talk about timing, I need to check your medicine against the record — want to show me the label?";
-    const fetchFn = stubReplyRephrase({
-      ok: true,
-      data: { text: naturalised, source: "claude" },
-      requestId: "req_test",
-    });
+describe("lines outside the understanding pass", () => {
+  it("are the exact approved copy, shown at once, with no model call", () => {
+    const fetchFn = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, data: { enabled: true }, requestId: "r" }) }));
+    vi.stubGlobal("fetch", fetchFn);
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
-    send("tell me my medicine schedule"); // → scheduleNeedsRecord, an eligible line
-    await flush();
-
-    expect(screen.getByText(naturalised)).toBeInTheDocument();
-    expect(screen.queryByText(/To talk about your schedule, I first need to check/)).toBeNull();
-    expect(fetchFn.mock.calls.some(([u]) => u === "/api/companion/reply-rephrase")).toBe(true);
-  });
-
-  it("falls back to the exact approved line if the rephrase doesn't arrive within the budget", async () => {
-    stubReplyRephrase("hang");
-    render(<CompanionExperience />);
-    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
-    send("tell me my medicine schedule");
-    await flush(); // well past the budget
+    send("tell me my medicine schedule"); // → scheduleNeedsRecord, not an understanding key
 
     expect(
       screen.getByText(/To talk about your schedule, I first need to check a medicine against your record/),
     ).toBeInTheDocument();
-  });
-
-  it("falls back to the exact approved line on a malformed or failed response", async () => {
-    stubReplyRephrase({ nonsense: true });
-    render(<CompanionExperience />);
-    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
-    send("tell me my medicine schedule");
-    await flush();
-
-    expect(
-      screen.getByText(/To talk about your schedule, I first need to check a medicine against your record/),
-    ).toBeInTheDocument();
-  });
-
-  it("never calls the rephrase endpoint for CLAUDE.md's verbatim-required routing sentences", async () => {
-    const fetchFn = stubReplyRephrase({
-      ok: true,
-      data: { text: "something else entirely", source: "claude" },
-      requestId: "req_test",
-    });
-    render(<CompanionExperience />);
-    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
-    send("What is this for?"); // → showLabelQuestion, pinned verbatim — never rephrased
-    await flush();
-
-    expect(screen.getByText(/Let’s check this together/)).toBeInTheDocument();
-    expect(fetchFn.mock.calls.some(([u]) => u === "/api/companion/reply-rephrase")).toBe(false);
+    expect(fetchFn.mock.calls.every((call) => (call as unknown[])[1] === undefined || ((call as unknown[])[1] as RequestInit).method === "GET")).toBe(true);
   });
 });
 

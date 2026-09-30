@@ -7,7 +7,7 @@ import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/butt
 import { CameraPreview } from "@/components/ui/camera-preview";
 import { samplePhotos } from "@/lib/content/samples";
 import { setPendingImage } from "@/lib/label/pending-image";
-import { registerVoiceAction } from "@/lib/voice/actions";
+import { registerCapture } from "@/lib/voice/actions";
 import { validateImage } from "@/lib/label/image-validation";
 import type { CameraIssue, CameraMode } from "@/lib/session/state-machine";
 import type { LabelInput } from "@/types/content";
@@ -113,8 +113,8 @@ export function CameraGuidanceScreen({
   });
   useEffect(() => {
     if (!preview || !live) return;
-    registerVoiceAction("capture", () => captureRef.current());
-    return () => registerVoiceAction("capture", null);
+    registerCapture(() => captureRef.current());
+    return () => registerCapture(null);
   }, [preview, live]);
 
   const chooseSample = async (src: string) => {

@@ -2,7 +2,6 @@ import { metforminPurposeEn, metforminRecord, recordSource } from "./demo-record
 import { candidateIdFor } from "@/lib/matching/match-record";
 import type { StudyCondition } from "@/lib/study/study-mode";
 import { studyWrongInstruction } from "./fixtures";
-import type { RephraseFieldSet } from "./rephrase-guard";
 import type {
   CandidateDisplay,
   LocalizedText,
@@ -90,29 +89,4 @@ export function fillRecordFacts(template: string, view: ExplanationView, languag
   return template
     .replace("{instruction}", view.explanation.instruction)
     .replace("{verifiedDate}", formatVerifiedDate(language));
-}
-
-/**
- * Optionally swaps in a Claude-rephrased (and already-validated) version of the
- * non-dosing "flavour" text. English only — Chinese keeps the reviewed static
- * translation, per CLAUDE.md's preference for local translations where they
- * exist. `instruction` and `sourceLine` are never touched by this function.
- */
-export function withRephrasedFlavor(
-  view: ExplanationView,
-  language: UiLanguage,
-  fields: Partial<RephraseFieldSet> | null,
-): ExplanationView {
-  if (language !== "en" || !fields) return view;
-  return {
-    ...view,
-    explanation: {
-      ...view.explanation,
-      title: fields.title ?? view.explanation.title,
-      purpose: fields.purpose ?? view.explanation.purpose,
-      instructionIntro: fields.instructionIntro ?? view.explanation.instructionIntro,
-      caution: fields.caution ?? view.explanation.caution,
-      confirmationPrompt: fields.confirmationPrompt ?? view.explanation.confirmationPrompt,
-    },
-  };
 }
