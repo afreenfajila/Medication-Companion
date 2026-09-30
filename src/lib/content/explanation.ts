@@ -65,6 +65,26 @@ export function resolveExplanation(
   };
 }
 
+/** The record's verified date, e.g. "21 September 2026" / "2026年9月21日". */
+export function formatVerifiedDate(language: UiLanguage): string {
+  return new Intl.DateTimeFormat(language === "en" ? "en-GB" : "zh-CN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(recordSource.verifiedAt));
+}
+
+/**
+ * Fills `{instruction}` and `{verifiedDate}` in approved copy from the confirmed
+ * explanation. Copy never contains these facts itself, and a model never writes them.
+ */
+export function fillRecordFacts(template: string, view: ExplanationView, language: UiLanguage): string {
+  return template
+    .replace("{instruction}", view.explanation.instruction)
+    .replace("{verifiedDate}", formatVerifiedDate(language));
+}
+
 /**
  * Optionally swaps in a Claude-rephrased (and already-validated) version of the
  * non-dosing "flavour" text. English only — Chinese keeps the reviewed static

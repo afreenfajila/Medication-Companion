@@ -1,4 +1,4 @@
-import type { ExplanationView } from "@/lib/content/explanation";
+import { fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
 import type { CopyKey } from "@/lib/content/translations";
 import { buildEscalation } from "@/lib/safety/escalation";
 import { MAX_LABEL_RETRIES, type Session } from "@/lib/session/state-machine";
@@ -21,6 +21,8 @@ export function speakableText(
     | "candidate"
     | "cameraMode"
     | "labelRetries"
+    | "recordConflict"
+    | "language"
   >,
   t: (key: CopyKey) => string,
   explanation: ExplanationView | null,
@@ -58,6 +60,7 @@ export function speakableText(
       );
     case "explain": {
       if (!explanation) return null; // gate: no confirmed match → nothing medical is spoken
+      if (session.recordConflict) return fillRecordFacts(t("recordConflict"), explanation, session.language);
       const e = explanation.explanation;
       if (session.explainStep === 0) return join(e.title, e.purpose, e.sourceLine);
       if (session.explainStep === 1) return join(e.instructionIntro, e.instruction, e.sourceLine);

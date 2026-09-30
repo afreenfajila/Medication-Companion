@@ -5,6 +5,7 @@ import {
 } from "@/lib/label/spoken-label";
 import { parseTypedLabel } from "@/lib/label/typed-label";
 import { classifySafety } from "@/lib/safety/classify";
+import { isRecordConflict } from "@/lib/session/intent";
 import type { SessionEvent } from "@/lib/session/state-machine";
 import type { CompanionState, ContextualActionId } from "@/types/content";
 
@@ -30,6 +31,8 @@ export type CommandContext = {
   cameraLive: boolean;
   /** The companion just asked "did you mean <medicine>?" — "yes" answers that, not an offered button. */
   nameCheckPending?: boolean;
+  /** The companion just answered "my doctor said…" and asked: pharmacist, or carry on? */
+  recordConflict?: boolean;
   /** Set once a spoken name has been heard and we're waiting on its strength. */
   pendingSpokenMedicineName: string | null;
 };
@@ -62,6 +65,7 @@ const BACK = /\b(back|previous|go back)\b|上一步|返回/;
 const UNDERSTOOD = /\b(i understand|understood|got it|thank(s| you)|that's all|makes sense|all clear)\b|明白|谢谢|懂了/;
 const TRY_AGAIN = /\b((try|another|new).*(photo|picture|again|label)|again)\b|再拍|再试/;
 const BACK_TO_CALL = /\b(back to (the )?(conversation|call)|carry on|continue (the )?(call|conversation)|talk (to you )?more)\b|回到对话/;
+const PHARMACIST = /\b(pharmacist|pharmacy|check with)\b|药剂师|药房/;
 const ANOTHER_MEDICINE = /\b(another|other|new|different|next)( medicine| one)?\b|另一种|另一个/;
 
 /** A bare yes/no is only trusted in a short utterance ("ok what is this for" is a question). */
@@ -169,6 +173,15 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
     }
 
     case "explain": {
+      // Answering "help checking with the pharmacist, or carry on?". A bare "yes"
+      // doesn't say which, so it re-asks rather than guessing.
+      if (ctx.recordConflict) {
+        if (PHARMACIST.test(n)) return { kind: "event", event: { type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" } };
+        if (NEXT.test(n)) return { kind: "event", event: { type: "RECORD_CONFLICT_CHOICE", choice: "carry-on" } };
+        return { kind: "unclear" };
+      }
+      // "My doctor said…" goes to the reducer, which answers from the record.
+      if (isRecordConflict(raw)) return { kind: "message", text: raw };
       if (BACK.test(n) && ctx.explainStep > 0) return { kind: "event", event: { type: "EXPLAIN_STEP", direction: "back" } };
       if (ctx.explainStep === 2) {
         if (UNDERSTOOD.test(n) || (affirm && !negative && isShort(n))) return { kind: "event", event: { type: "UNDERSTOOD" } };

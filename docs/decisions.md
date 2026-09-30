@@ -472,3 +472,19 @@ CLAUDE.md as an approved contract change. Implemented A–G in order, one commit
 - **Known rough edge.** After the single retry is used, the gentle body still asks "would you like to try
   another photo", while the card shows `retryUsed` and no photo button. The spec fixes the body text, so
   this is left as specified; a retry-used variant of the body would fix it.
+
+## C. Record conflict
+
+- **A flag, not a new state.** The person is still looking at the confirmed explanation; the conflict
+  reply and its two actions sit on top of it. A new `CompanionState` would have meant re-guarding every
+  explain-only event, for no benefit.
+- **The safety classifier had a hole the spec's own example found.** "My doctor said I can stop it"
+  matched no unsupported pattern (only "should I stop" did), so it would have landed as a record
+  conflict and been answered with "carry on?". Added a pattern for stopping/skipping the medicine
+  with an object attached, so "stop the call" still isn't caught.
+- **The instruction in the reply is the displayed one.** `fillRecordFacts` reads the confirmed
+  `ExplanationView`, the same object the screen shows, so the conflict reply can never quote something
+  different from the record on screen.
+- **Speech guard.** Copy with placeholders is now approved fragment by fragment for Gemini voice, with
+  the record fields and the formatted verified date approved separately. Without this, the filled line
+  would fail the guard and drop to browser speech.

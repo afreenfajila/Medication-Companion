@@ -53,6 +53,7 @@ export type UserIntent =
   | "unsure-match"
   | "general"
   | "off-topic" // recognised as off-spine: acknowledged, then redirected (never answered)
+  | "record-conflict" // extension: "my doctor said…" while the record is explained — answered from the record
   | "unsupported-medical-question"
   | "urgent-risk";
 
@@ -198,6 +199,7 @@ export type AuditEventType =
   | "candidate-denied"
   | "explanation-viewed"
   | "understanding-confirmed" // extension
+  | "record-conflict-raised" // extension: intent only, never the words
   | "language-changed"
   | "help-requested"
   | "urgent-safety-triggered"

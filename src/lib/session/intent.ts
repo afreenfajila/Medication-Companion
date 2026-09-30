@@ -56,6 +56,16 @@ const RECORD_MEDICINE_NAME = /\bmetformin\b|二甲双胍/i;
 const RECORD_MEDICINE_SOUNDALIKE =
   /\bmet\s?-?form\w*|\b(met|med|meth)\s?(for|four|fore)\s?(min|mins|men|man|mean|main|mine|ming|pain)\b|\bmetphormin\w*|\bmedformin\w*/i;
 
+// The person disagrees with what the record says (CLAUDE.md § Assignment 3, C).
+// Only read while a confirmed record is being explained, and only AFTER the
+// safety classifier: "my doctor said I can stop it" is a dose question first.
+const RECORD_CONFLICT =
+  /\bdoctor (said|told|says)\b|\bthat'?s not (right|what)\b|\bi thought (it was|i take)\b|\bnot the same as\b|医生(说|告诉)|不是这样|我以为/i;
+
+export function isRecordConflict(text: string): boolean {
+  return RECORD_CONFLICT.test(text.replace(/[’‘]/g, "'"));
+}
+
 // Answers to "Did you mean Metformin?" — only read on the turn right after it.
 const NAME_CHECK_YES =
   /^\s*(yes|yeah|yep|yup|correct|right|that's (it|right)|that is (it|right)|exactly|i did|i do)\b|^\s*(是|对|没错)/i;
@@ -79,7 +89,7 @@ const SCHEDULE =
 
 /**
  * Deterministic in-call routing (site-contract.md §4). Order matters:
- * safety → human help → off-spine talk → explicit route requests →
+ * safety → record conflict (explain only) → human help → off-spine talk → explicit route requests →
  * list-my-prescriptions → medicine named / misheard / in hand → unknown medicine →
  * schedule → broad/unclear.
  * "What is this for? When do I take it?" is an unknown-medicine question:
@@ -94,6 +104,8 @@ export function routeMessage(
     matchConfirmed: boolean;
     /** The companion just asked "did you mean <medicine>?" — a bare "yes"/"no" answers it. */
     nameCheckPending?: boolean;
+    /** A confirmed record is on screen, so "that's not right" disputes it. */
+    explaining?: boolean;
   },
 ): RoutedMessage {
   const safety = classifySafety(text);
@@ -112,6 +124,9 @@ export function routeMessage(
       contextualActions: [],
       safetyReason: safety.reason,
     };
+  }
+  if (ctx.explaining && ctx.matchConfirmed && isRecordConflict(text)) {
+    return { intent: "record-conflict", assistantKey: "recordConflict", contextualActions: [] };
   }
   if (HELP_REQUEST.test(text)) {
     return {

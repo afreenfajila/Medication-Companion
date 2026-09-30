@@ -33,6 +33,9 @@ export const unsupportedMedicalPatterns: readonly RegExp[] = [
   /\b(can|could|may) i (double|skip|halve)\b/i,
   /\b(double|increase|decrease|reduce|skip|halve|cut)\b.*\b(dose|dosage|tablets?|pills?|medicine|medication)\b/i,
   /\b(extra|more|less|another|half)\b.*\b(dose|tablets?|pills?)\b/i,
+  // Stopping the medicine, however it's reported ("my doctor said I can stop it").
+  // Tied to an object so "stop the call" is not caught.
+  /\b(stop|skip|quit)\s+(taking\s+)?(it|them|this|that|my (medicine|medication|tablets?|pills?)|metformin)\b/i,
   /forg[oe]t (to take|my (dose|medicine|tablet|pill))/i,
   /interact/i,
   /alcohol/i,

@@ -1,5 +1,6 @@
 import { candidateDisplayFor } from "@/lib/matching/match-record";
 import { metforminPurposeEn, metforminRecord, recordSource } from "./demo-record";
+import { formatVerifiedDate } from "./explanation";
 import { copy } from "./translations";
 import { isSafeCompanionReply } from "./understand-guard";
 
@@ -7,8 +8,12 @@ import { isSafeCompanionReply } from "./understand-guard";
 // languages) and the record's own explanation fields. Longest first, so a
 // longer phrase is consumed before any shorter phrase inside it.
 const APPROVED: readonly string[] = [
-  ...Object.values(copy).flatMap((c) => Object.values(c)),
+  // Copy with {placeholders} is approved piece by piece; the filled-in facts are
+  // approved below (record fields and the verified date).
+  ...Object.values(copy).flatMap((c) => Object.values(c).flatMap((line) => line.split(/\{\w+\}/))),
   ...Object.values(metforminRecord.explanation).flatMap((field) => Object.values(field)),
+  formatVerifiedDate("en"),
+  formatVerifiedDate("zh-Hans"),
   candidateDisplayFor(metforminRecord).medicineName,
   metforminRecord.identity.genericName,
   metforminPurposeEn,

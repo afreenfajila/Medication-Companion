@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ExplanationView } from "@/lib/content/explanation";
+import { fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
 import type { Session } from "@/lib/session/state-machine";
 import type { T } from "./screen-chrome";
 
@@ -13,10 +13,11 @@ type Seen = {
   userSig: string;
   inExplain: boolean;
   explainSig: string;
+  conflictSig: string;
 };
 
 function initialSeen(callCount: number): Seen {
-  return { callCount, assistantSig: "", userSig: "", inExplain: false, explainSig: "" };
+  return { callCount, assistantSig: "", userSig: "", inExplain: false, explainSig: "", conflictSig: "" };
 }
 
 function explainStepLines(step: 0 | 1 | 2, e: ExplanationView["explanation"]): string[] {
@@ -107,6 +108,12 @@ export function useCallFeed(
       if (explainSig !== seen.current.explainSig) {
         seen.current.explainSig = explainSig;
         push("companion", ...explainStepLines(session.explainStep, explanation.explanation));
+      }
+      // "My doctor said…" is answered from the record, once per turn and language.
+      const conflictSig = `${session.turnCount}:${session.language}`;
+      if (session.recordConflict && conflictSig !== seen.current.conflictSig) {
+        seen.current.conflictSig = conflictSig;
+        push("companion", fillRecordFacts(t("recordConflict"), explanation, session.language));
       }
     } else if (session.state !== "explain") {
       seen.current.inExplain = false;

@@ -110,6 +110,8 @@ describe("dose changes are caught however they're phrased", () => {
     "I forgot to take my medicine",
     "Does it interact with my other pills?",
     "Can I drink alcohol with it?",
+    "My doctor said I can stop it",
+    "I want to stop taking my medicine",
     "我可以吃双倍吗？",
   ])("%s → unsupported (safety, no model)", (text) => {
     expect(classifySafety(text)).toEqual({ level: "unsupported", reason: "unsupported-medical-question" });
@@ -120,6 +122,7 @@ describe("dose changes are caught however they're phrased", () => {
     "When do I take it?",
     "Can I change the language?",
     "Can you repeat that more slowly?",
+    "Can we stop the call now?",
     "I want to show my medicine",
     "What is my medicine schedule?",
   ])("%s → not a safety trigger", (text) => {

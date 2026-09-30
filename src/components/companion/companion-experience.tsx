@@ -470,6 +470,8 @@ export function CompanionExperience() {
           t={t}
           language={language}
           step={session.explainStep}
+          recordConflict={session.recordConflict}
+          onConflictChoice={(choice) => dispatch({ type: "RECORD_CONFLICT_CHOICE", choice })}
           onLanguageChange={(l) => dispatch({ type: "SET_LANGUAGE", language: l })}
           onSend={conversation.submitText}
         />

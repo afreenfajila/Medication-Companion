@@ -405,6 +405,58 @@ describe("safety states block instructions", () => {
   });
 });
 
+describe("record conflict (“my doctor said…”)", () => {
+  const dispute = (text: string, from = toExplain()) => run([{ type: "USER_MESSAGE", text }], from);
+
+  it.each([
+    "My doctor said to take it at night",
+    "That's not right",
+    "I thought it was once a day",
+    "It's not the same as my label",
+    "医生说要晚上吃",
+    "不是这样的",
+  ])("'%s' stays on the explanation and answers from the record", (text) => {
+    const s = dispute(text);
+    expect(s.state).toBe("explain");
+    expect(s.recordConflict).toBe(true);
+    expect(s.matchStatus).toBe("confirmed"); // the record is never hidden
+    const last = s.audit.at(-1)!;
+    expect(last.eventType).toBe("record-conflict-raised");
+    expect(last.details).toEqual({ intent: "record-conflict" }); // intent only, never the words
+    expect(JSON.stringify(s.audit)).not.toContain(text);
+  });
+
+  it("'My doctor said I can stop it' is a dose question first: unsupported-medical, not record-conflict", () => {
+    const s = dispute("My doctor said I can stop it");
+    expect(s.state).toBe("safety");
+    expect(s.safetyReason).toBe("unsupported-medical-question");
+    expect(s.recordConflict).toBe(false);
+  });
+
+  it("only applies while a confirmed record is explained", () => {
+    const listening = run([{ type: "USER_MESSAGE", text: "My doctor said something else" }], run([startCall]));
+    expect(listening.recordConflict).toBe(false);
+    expect(routeMessage("That's not right", { matchConfirmed: false, explaining: true }).intent).not.toBe("record-conflict");
+  });
+
+  it("offers pharmacist help (→ safety) or carrying on (stay on the explanation)", () => {
+    const raised = dispute("That's not right");
+    const help = run([{ type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" }], raised);
+    expect(help.state).toBe("safety");
+    expect(help.safetyReason).toBe("help-requested");
+    expect(help.recordConflict).toBe(false);
+
+    const carry = run([{ type: "RECORD_CONFLICT_CHOICE", choice: "carry-on" }], raised);
+    expect(carry.state).toBe("explain");
+    expect(carry.recordConflict).toBe(false);
+    expect(carry.explainStep).toBe(raised.explainStep);
+  });
+
+  it("a choice with no conflict raised is ignored", () => {
+    expect(blocked([{ type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" }], toExplain())).toBe(true);
+  });
+});
+
 describe("URL cannot bypass state guards", () => {
   it("a requested state that is not the session's authoritative state is redirected", () => {
     const fresh = createInitialSession();

@@ -141,6 +141,56 @@ describe("INVARIANT: the URL cannot open a gated screen (rendered app)", () => {
   });
 });
 
+describe("INVARIANT: a record conflict is answered from the record, never by a model (rendered app)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // The understanding pass IS configured here, so any call to it would show up.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify(
+              url === "/api/companion/understand" && init?.method === "GET"
+                ? { ok: true, data: { enabled: true }, requestId: "r" }
+                : { ok: false, error: { code: "x", message: "x", safeNextAction: "retry" }, requestId: "r" },
+            ),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      ),
+    );
+    sessionStore.setForTest(toExplain());
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    sessionStore.reset();
+  });
+
+  it("shows the record's own instruction and date, offers pharmacist or carry on, and makes no model call", async () => {
+    render(<CompanionExperience />);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(100)));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "My doctor said to take it at night" } });
+    fireEvent.submit(screen.getByRole("textbox").closest("form")!);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
+
+    const reply = screen.getByText(/Thank you for telling me — it’s good to double-check/);
+    expect(reply).toHaveTextContent("checked on 21 September 2026");
+    expect(reply).toHaveTextContent("“Take 1 tablet twice daily with meals.”");
+    expect(reply.textContent).not.toMatch(/\{\w+\}/);
+    expect(screen.getByRole("button", { name: "Check with pharmacist — demo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Carry on" })).toBeInTheDocument();
+
+    const posts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(posts.map(([u]) => u)).not.toContain("/api/companion/understand");
+    expect(posts.map(([u]) => u)).not.toContain("/api/companion/reply-rephrase");
+
+    fireEvent.click(screen.getByRole("button", { name: "Check with pharmacist — demo" }));
+    expect(screen.getByText("Here are some ways to reach a person.")).toBeInTheDocument();
+  });
+});
+
 describe("DEMO HARDENING: works with no network, no AI key, no camera, no microphone", () => {
   beforeEach(() => {
     vi.useFakeTimers();

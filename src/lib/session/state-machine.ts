@@ -44,6 +44,12 @@ export type Session = {
   matchStatus: MatchStatus | null;
   safetyReason: SafetyReason | null;
   explainStep: 0 | 1 | 2;
+  /**
+   * The person disputed the record while it was explained ("my doctor said…").
+   * The explanation stays; the companion answers from the record and offers
+   * pharmacist help or carrying on.
+   */
+  recordConflict: boolean;
   repeatCount: number;
   /**
    * Increments on every accepted user message. The transcript keys each turn by
@@ -85,6 +91,7 @@ export type SessionEvent =
       decision: "confirmed" | "denied" | "unsure";
     }
   | { type: "EXPLAIN_STEP"; direction: "next" | "back" }
+  | { type: "RECORD_CONFLICT_CHOICE"; choice: "pharmacist" | "carry-on" }
   | { type: "UNDERSTOOD" }
   | { type: "NEW_MEDICINE" }
   | { type: "GET_HELP" }
@@ -133,6 +140,7 @@ export function createInitialSession(): Session {
     matchStatus: null,
     safetyReason: null,
     explainStep: 0,
+    recordConflict: false,
     repeatCount: 0,
     turnCount: 0,
     replyTo: null,
@@ -213,6 +221,7 @@ function enterSafety(
     safetyReason: reason,
     contextualActions: [],
     helpAction: null,
+    recordConflict: false,
   };
   return withAudit(next, ctx, {
     eventType: urgent ? "urgent-safety-triggered" : "help-requested",
@@ -339,6 +348,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       const routed = routeMessage(text, {
         matchConfirmed: isMatchConfirmed(s),
         nameCheckPending: s.state === "listening" && s.nameCheckPending,
+        explaining: s.state === "explain",
       });
       // One accepted message = one turn, whatever it routes to. Counted here so
       // every path below (safety, route, explain, ordinary reply) carries it.
@@ -371,6 +381,15 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           },
           { intent: routed.intent },
         );
+      }
+      // "My doctor said…": stay on the explanation and answer from the record itself.
+      // The record is never changed, hidden or softened, and no model is asked.
+      if (routed.intent === "record-conflict" && s.state === "explain" && isMatchConfirmed(s)) {
+        return withAudit({ ...heard, recordConflict: true }, ctx, {
+          eventType: "record-conflict-raised",
+          summary: "Person said the record differs from what they were told; record shown with pharmacist option",
+          details: { intent: routed.intent },
+        });
       }
       if (s.state !== "listening") return s;
 
@@ -650,12 +669,18 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       if (s.state !== "explain" || !isMatchConfirmed(s)) return s;
       const step = Math.min(2, Math.max(0, s.explainStep + (event.direction === "next" ? 1 : -1)));
       if (step === s.explainStep) return s;
-      return { ...s, explainStep: step as 0 | 1 | 2 };
+      return { ...s, explainStep: step as 0 | 1 | 2, recordConflict: false };
+    }
+
+    case "RECORD_CONFLICT_CHOICE": {
+      if (s.state !== "explain" || !s.recordConflict || !isMatchConfirmed(s)) return s;
+      if (event.choice === "carry-on") return { ...s, recordConflict: false };
+      return enterSafety(s, ctx, "help-requested", {}, { from: "record-conflict" });
     }
 
     case "UNDERSTOOD": {
       if (s.state !== "explain" || !isMatchConfirmed(s)) return s;
-      return withAudit({ ...s, state: "complete" }, ctx, {
+      return withAudit({ ...s, state: "complete", recordConflict: false }, ctx, {
         eventType: "understanding-confirmed",
         summary: "User said “I understand”",
       });
@@ -677,6 +702,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         candidate: null,
         matchStatus: null, // a new medicine must pass the confirmation gate again
         explainStep: 0,
+        recordConflict: false,
         labelRetries: 0,
       };
     }

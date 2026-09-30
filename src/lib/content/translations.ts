@@ -92,6 +92,8 @@ const en = {
     "I didn’t quite catch that. You can say “next” to hear the rest, “go back”, or “repeat that”.",
   unclearExplainLast:
     "I didn’t quite catch that. That’s everything your record says. You can say “I understand” when you’re ready, or “repeat that”.",
+  unclearRecordConflict:
+    "I didn’t quite catch that. You can say “pharmacist” for help checking, or “carry on”.",
   unclearConfirmMatch:
     "I didn’t quite catch that. Is this your medicine? You can say “yes”, “no”, or “I’m not sure”.",
   unclearCameraPermission:
@@ -193,6 +195,12 @@ const en = {
   iUnderstand: "I understand",
   explainHintNext: "Say or type “next” to continue, or “go back”",
   explainHintDone: "When you’re ready, say or type “I understand”",
+  // The person disputes the record. {verifiedDate} and {instruction} are filled
+  // by code from the verified record — never typed here, never model-written.
+  recordConflict:
+    "Thank you for telling me — it’s good to double-check. Your pharmacy record, checked on {verifiedDate}, says: “{instruction}” Sometimes a doctor changes things and the record takes a little while to catch up, so it’s no trouble to ask. Would you like help checking with the pharmacist, or shall we carry on for now?",
+  checkWithPharmacist: "Check with pharmacist — demo",
+  carryOn: "Carry on",
   languageControlLabel: "Explanation language",
   languageEnglish: "English",
   languageChinese: "中文",
@@ -318,6 +326,7 @@ const zhHans: Copy = {
     "我没太听清楚。您可以说「继续」听下一部分，或说「返回」、「重复」。",
   unclearExplainLast:
     "我没太听清楚。这就是您记录中的全部内容。准备好时可以说「我明白了」，或说「重复」。",
+  unclearRecordConflict: "我没太听清楚。您可以说「药剂师」请人帮忙确认，或说「继续」。",
   unclearConfirmMatch:
     "我没太听清楚。这是您的药物吗？您可以说「是」、「不是」，或「我不确定」。",
   unclearCameraPermission:
@@ -408,6 +417,10 @@ const zhHans: Copy = {
   iUnderstand: "我明白了",
   explainHintNext: "请说或输入「下一步」继续，或说「返回」",
   explainHintDone: "准备好后，请说或输入「我明白了」",
+  recordConflict:
+    "谢谢您告诉我，多确认一下是很好的。您的药房记录（{verifiedDate}确认）写着：“{instruction}” 有时候医生会调整用药，记录可能还没来得及更新，所以问一问完全没关系。您想让我帮您联系药剂师确认一下，还是我们先继续？",
+  checkWithPharmacist: "向药剂师确认 — 示范",
+  carryOn: "先继续",
   languageControlLabel: "说明语言",
   languageEnglish: "English",
   languageChinese: "中文",

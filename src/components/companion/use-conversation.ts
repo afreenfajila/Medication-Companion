@@ -44,8 +44,9 @@ const UNCLEAR_GUIDANCE: Partial<Record<Session["state"], CopyKey>> = {
   complete: "unclearComplete",
 };
 
-export function unclearGuidanceKey(session: Pick<Session, "state" | "explainStep">): CopyKey {
+export function unclearGuidanceKey(session: Pick<Session, "state" | "explainStep"> & { recordConflict?: boolean }): CopyKey {
   if (session.state === "explain") {
+    if (session.recordConflict) return "unclearRecordConflict";
     return session.explainStep === 2 ? "unclearExplainLast" : "unclearExplain";
   }
   return UNCLEAR_GUIDANCE[session.state] ?? "voiceDidntCatch";
@@ -180,6 +181,7 @@ export function useVoiceConversation(opts: {
       contextualActions: s.contextualActions,
       candidateId: s.candidate?.candidateId ?? null,
       explainStep: s.explainStep,
+      recordConflict: s.recordConflict,
       cameraLive: latest.current.cameraLive,
       pendingSpokenMedicineName: pendingSpokenName.current,
     });

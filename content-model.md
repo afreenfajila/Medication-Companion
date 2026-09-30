@@ -585,3 +585,20 @@ For the non-urgent label reasons (`unreadable-label`, `record-mismatch`, `multip
 |---|---|---|
 | `labelSafetyHeading` | Let's check this one together. | 我们一起再确认一下。 |
 | `labelSafetyBody` | Thank you for checking. That happens sometimes, and I'd rather be careful than guess. Would you like to try another photo, or ask someone to check it with you? | 谢谢您的确认。这种情况很常见，我宁可小心一点也不想猜。您想再拍一张，还是请人和您一起核对？ |
+
+### C. Record conflict
+
+New intent `record-conflict`, valid only while a confirmed record is explained (`explain`). Deterministic, case-insensitive patterns: `doctor (said|told|says)`, `that'?s not (right|what)`, `i thought (it was|i take)`, `not the same as`, `医生(说|告诉)`, `不是这样`, `我以为`.
+
+Order: `urgent-risk` → `unsupported-medical-question` → `record-conflict` → human help → off-topic. "My doctor said I can stop it" is therefore a dose question; a new unsupported pattern catches stopping the medicine however it's reported (`stop|skip|quit (taking) it|them|my medicine…`).
+
+The reply is fixed copy. `{instruction}` and `{verifiedDate}` are filled by `fillRecordFacts` from the confirmed explanation and `recordSource.verifiedAt`; they are never typed into copy and never model-written. The record stays on screen, unchanged.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `recordConflict` | Thank you for telling me — it's good to double-check. Your pharmacy record, checked on {verifiedDate}, says: "{instruction}" Sometimes a doctor changes things and the record takes a little while to catch up, so it's no trouble to ask. Would you like help checking with the pharmacist, or shall we carry on for now? | 谢谢您告诉我，多确认一下是很好的。您的药房记录（{verifiedDate}确认）写着：“{instruction}” 有时候医生会调整用药，记录可能还没来得及更新，所以问一问完全没关系。您想让我帮您联系药剂师确认一下，还是我们先继续？ |
+| `checkWithPharmacist` | Check with pharmacist — demo | 向药剂师确认 — 示范 |
+| `carryOn` | Carry on | 先继续 |
+| `unclearRecordConflict` | I didn't quite catch that. You can say "pharmacist" for help checking, or "carry on". | 我没太听清楚。您可以说「药剂师」请人帮忙确认，或说「继续」。 |
+
+Audit event `record-conflict-raised` (details: `{ intent: "record-conflict" }` only, never the words).
