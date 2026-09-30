@@ -502,3 +502,27 @@ CLAUDE.md as an approved contract change. Implemented A–G in order, one commit
   back into the explanation. They can check another label from the conversation.
 - **`RecordCard` is unchanged.** It is deliberately identity-only (it has no field that can hold an
   instruction), so the dated source line is a separate `RecordSourceLine` in the same file.
+
+## E. Off-topic, health signals and wellbeing
+
+- **Reversal: feeling words no longer fall through.** The spine-redirection decision above kept "I feel
+  tired" and "I'm dizzy" out of the social pattern so they would reach the ordinary clarification
+  prompt. In practice that prompt is "would you like to show me a medicine label?", which brushes off
+  something that may matter to an older adult on a medicine. These phrases now go to the existing
+  limitation + pharmacist/clinic path. They are deliberately not urgent: "I feel tired" isn't an
+  emergency, and treating it as one would make the urgent screen cry wolf.
+- **Low mood is its own path, not off-topic and not medical.** A redirect would be cold and a safety
+  screen would be alarming. The fixed `wellbeing` line acknowledges it and offers family help (with
+  consent, F) or carrying on. Self-harm wording stays urgent; that screen now also shows Samaritans of
+  Singapore and 995 as plain text, never as a call the demo claims to make.
+- **Crisis lines are derived, not stored.** `mentionsSelfHarm(session.userText)` reads the message that
+  triggered the urgent screen (it is still in memory). Nothing new enters the session or the audit log.
+- **Wrap-up at the second off-topic turn.** One friendly redirect is enough; the second one would sound
+  like a loop. The wrap-up hands the choice back, with ending the call as a legitimate option.
+- **Low-confidence speech is re-asked before anything else, even safety.** This follows the spec. The
+  trade-off: an urgent phrase heard with low confidence gets "could you say it again?" rather than the
+  urgent screen. That is one extra turn, and acting on a guess is how "I have chest pain" and "I have
+  just been in" get confused. Typed input is never gated this way. The 0.5 threshold is a starting
+  point to tune in testing.
+- **Audit.** Off-topic and wellbeing events now drop even the character count and keep only the
+  category.

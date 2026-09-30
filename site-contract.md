@@ -639,3 +639,10 @@ See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 
 
 - `LABEL_CHECK { matches }`, valid only in `explain` at step 1 with a confirmed match and no open record conflict. `matches: true` → step 2. `matches: false` → `safety` (`label-differs`), candidate and match status cleared, so the explanation is unreachable until a new label is confirmed.
 - Voice/typed at step 1: "different / doesn't match / 不一样" or a short "no" → differs; "matches / same / 一样" or a short "yes" → matches; "next" still moves on without answering.
+
+### E. Off-topic, health signals and wellbeing
+
+- `ContextualActionId` adds `end-call` (after the wrap-up) and `carry-on` (after wellbeing). `SELECT_ROUTE` accepts them only when offered: `end-call` → `END_CALL`; `carry-on` → `anotherMedicineGuide`, no actions. The understanding pass still offers only the two doors.
+- Session `offTopicStreak`: +1 on an off-topic message, reset by any other message or a route taken; the wrap-up fires at `OFF_TOPIC_TURN_CAP` (2).
+- `VoiceProvider.onTranscript(callback: (text, confidence?) => void)`: the browser provider passes the lowest confidence of the final segments. Typed input has none.
+- `buildEscalation(..., selfHarm)` adds `crisisKey` on the urgent path; the caller derives it from the triggering message with `mentionsSelfHarm`.

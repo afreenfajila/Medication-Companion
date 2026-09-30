@@ -450,6 +450,22 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
 });
 
 describe("hands-free conversation — recovery and control", () => {
+  it("a low-confidence result is asked again before anything is classified; 0 means 'not provided'", () => {
+    const fake = install();
+    render(<CompanionExperience />);
+    startCall(fake);
+
+    // Would otherwise be an urgent-risk turn: nothing is acted on from a guess.
+    act(() => fake.recognitions.at(-1)!.say("I have chest pain", true, 0.3));
+    expect(screen.getByText("Sorry, I didn’t quite catch that. Could you say it again? Typing it works well too.")).toBeInTheDocument();
+    expect(screen.queryByText("This may need urgent help.")).toBeNull();
+    expect(screen.queryByText("I have chest pain")).toBeNull();
+    finishSpeaking(fake);
+
+    act(() => fake.recognitions.at(-1)!.say("What is this for?", true, 0));
+    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+  });
+
   it("mic errors pause the loop with a plain-language message; typing keeps working", () => {
     const fake = install();
     render(<CompanionExperience />);

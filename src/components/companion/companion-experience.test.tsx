@@ -180,6 +180,15 @@ describe("in-call flow", () => {
     expect(screen.queryByRole("button", { name: "Try another photo" })).toBeNull();
   });
 
+  it("self-harm wording shows the urgent screen with crisis line numbers as text, not a claimed call", () => {
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    send("I want to die");
+    expect(screen.getByRole("alert")).toHaveTextContent("This may need urgent help.");
+    expect(screen.getByText("Samaritans of Singapore (24 hours): 1767 · Emergency: 995")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /1767|995/ })).toBeNull();
+  });
+
   it("typed-label fallback: a mismatching strength blocks instructions and offers demo-labelled human help", async () => {
     render(<CompanionExperience />);
     toGuidance("decline");

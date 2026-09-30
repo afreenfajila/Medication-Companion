@@ -68,6 +68,14 @@ const en = {
     "I’d enjoy talking about that, but it’s outside what I know. What I can help with is the medicine information in your pharmacy record. Would you like to show me a medicine label, or ask about your schedule?",
   offTopicCapability:
     "I can’t do that in this demo — I’m not connected to a pharmacy or a phone. Tap Get help to reach a real person. I can also help you understand the medicine information in your record.",
+  // After two off-topic turns in a row: warm, and hands the choice back.
+  offTopicWrapUp:
+    "It’s been lovely chatting with you. Shall we look at your medicine together, or would you like to end the call for now?",
+  // Loneliness or low mood: not brushed off, not treated as a medical question.
+  wellbeing:
+    "Thank you for telling me — that sounds hard. I’m only a medicine helper, but you don’t have to manage things alone. Would you like me to let your family know you’d like some company, or shall we carry on together?",
+  // Speech recognition wasn't confident: ask again before acting on a guess.
+  didntCatch: "Sorry, I didn’t quite catch that. Could you say it again? Typing it works well too.",
   showMedicine: "Show medicine",
   askSchedule: "Ask about my schedule",
   youSay: "Mei Ling says:",
@@ -258,6 +266,8 @@ const en = {
   demoActionNotice:
     "Demo only — no call or message was sent. In a real service this would connect you to a person.",
   urgentNoCall: "This prototype cannot place emergency calls.",
+  // Shown as text on the self-harm path — never as a call the app claims to make.
+  crisisLines: "Samaritans of Singapore (24 hours): 1767 · Emergency: 995",
 
   // Caregiver
   caregiverTitle: "Caregiver view — prototype",
@@ -317,6 +327,10 @@ const zhHans: Copy = {
     "我也很想聊这个，不过这超出了我知道的范围。我能帮您了解的是您药房记录中的药物信息。您想给我看药物标签，还是询问您的服药时间？",
   offTopicCapability:
     "在这个示范中我做不到——我没有连接药房或电话。请点击「寻求帮助」联系真人。我也可以帮您了解记录中的药物信息。",
+  offTopicWrapUp: "和您聊天很开心。我们一起看看您的药，还是先结束通话？",
+  wellbeing:
+    "谢谢您告诉我，这听起来不容易。我只是一个用药小帮手，但您不必一个人面对。需要我告诉您的家人您想有人陪陪您吗，还是我们一起继续？",
+  didntCatch: "不好意思，我没听清楚。可以再说一次吗？也可以直接打字。",
   showMedicine: "显示药物",
   askSchedule: "询问我的服药时间",
   youSay: "Mei Ling 说：",
@@ -477,6 +491,7 @@ const zhHans: Copy = {
   demoActionNotice:
     "仅为示范 — 没有拨出电话或发送信息。在真实服务中，这里会为您联系真人。",
   urgentNoCall: "此原型无法拨打紧急电话。",
+  crisisLines: "新加坡援人协会（24小时）：1767 · 紧急电话：995",
 
   caregiverTitle: "照护者视图 — 原型",
 };

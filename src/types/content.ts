@@ -55,10 +55,16 @@ export type UserIntent =
   | "general"
   | "off-topic" // recognised as off-spine: acknowledged, then redirected (never answered)
   | "record-conflict" // extension: "my doctor said…" while the record is explained — answered from the record
+  | "wellbeing" // extension: loneliness / low mood — warm fixed reply, family help with consent
   | "unsupported-medical-question"
   | "urgent-risk";
 
-export type ContextualActionId = "show-medicine" | "ask-schedule";
+/**
+ * Temporary in-call choices. The two doors (`show-medicine`, `ask-schedule`) are
+ * the only ones the understanding pass may offer; `end-call` follows the
+ * off-topic wrap-up and `carry-on` follows the wellbeing reply.
+ */
+export type ContextualActionId = "show-medicine" | "ask-schedule" | "end-call" | "carry-on";
 
 export type LocalizedText = Partial<Record<LanguageCode, string>>;
 

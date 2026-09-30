@@ -5,6 +5,7 @@ import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/butt
 import { DemoNotice } from "@/components/ui/notices";
 import { SafetyCard } from "@/components/ui/safety-card";
 import type { CopyKey } from "@/lib/content/translations";
+import { mentionsSelfHarm } from "@/lib/safety/classify";
 import { buildEscalation, type HelpActionId } from "@/lib/safety/escalation";
 import { canRetryLabel, type Session } from "@/lib/session/state-machine";
 import type { T } from "./screen-chrome";
@@ -37,7 +38,12 @@ export function SafetyScreen({
   onReturn: () => void;
 }) {
   const reason = session.safetyReason ?? "help-requested";
-  const view = buildEscalation(reason, session.labelRouteSelected, canRetryLabel(session));
+  const view = buildEscalation(
+    reason,
+    session.labelRouteSelected,
+    canRetryLabel(session),
+    mentionsSelfHarm(session.userText),
+  );
   const [main, ...rest] = view.actions;
 
   const run = (id: HelpActionId) =>
@@ -55,6 +61,7 @@ export function SafetyScreen({
         reason={view.reasonKey ? label(view.reasonKey) : null}
       >
         {view.retryUsedKey && <p className="mt-3 text-lg leading-snug">{t(view.retryUsedKey)}</p>}
+        {view.crisisKey && <p className="mt-3 text-lg font-bold leading-snug">{t(view.crisisKey)}</p>}
         {!view.urgent && (
           <p className="mt-3 text-[15px] font-medium text-navy-700">{t("reasonNoInstructions")}</p>
         )}

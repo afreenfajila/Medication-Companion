@@ -66,6 +66,8 @@ export type Session = {
   replyTo: number | null;
   /** The companion's last question was "did you mean <medicine>?" — a bare yes/no answers it. */
   nameCheckPending: boolean;
+  /** Consecutive off-topic turns; the second gets a friendly wrap-up. Any other turn resets it. */
+  offTopicStreak: number;
   helpAction: HelpActionId | null;
   /** Label retries used for the current medicine. One retry, then human help only. */
   labelRetries: number;
@@ -118,6 +120,8 @@ export type ReduceContext = { now: string };
 
 const AUDIT_LIMIT = 200;
 export const MAX_LABEL_RETRIES = 1;
+/** After this many consecutive off-topic turns, the companion gently wraps up. */
+export const OFF_TOPIC_TURN_CAP = 2;
 
 export function canRetryLabel(s: Pick<Session, "labelRetries">): boolean {
   return s.labelRetries < MAX_LABEL_RETRIES;
@@ -147,6 +151,7 @@ export function createInitialSession(): Session {
     turnCount: 0,
     replyTo: null,
     nameCheckPending: false,
+    offTopicStreak: 0,
     helpAction: null,
     labelRetries: 0,
     audit: [],
@@ -258,10 +263,10 @@ function enterExplain(s: Session, ctx: ReduceContext, step: 0 | 1): Session {
 function applyRoute(
   s: Session,
   ctx: ReduceContext,
-  route: ContextualActionId,
+  route: "show-medicine" | "ask-schedule",
   via: "button" | "message",
 ): Session {
-  s = { ...s, replyTo: null, nameCheckPending: false };
+  s = { ...s, replyTo: null, nameCheckPending: false, offTopicStreak: 0 };
   const audit: AuditInput = {
     eventType: "route-selected",
     summary:
@@ -360,6 +365,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         turnCount: s.turnCount + 1,
         replyTo: null,
         nameCheckPending: false,
+        offTopicStreak: routed.intent === "off-topic" ? s.offTopicStreak + 1 : 0,
       };
 
       // Urgent-risk overrides the normal path from ANY active-call state.
@@ -404,13 +410,17 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       if (routed.toExplain && isMatchConfirmed(base)) {
         return enterExplain(base, ctx, 1);
       }
+      // Two off-topic turns in a row: a friendly wrap-up instead of a third redirect.
+      const wrapUp = base.offTopicStreak >= OFF_TOPIC_TURN_CAP;
+      const assistantKey: CopyKey = wrapUp ? "offTopicWrapUp" : routed.assistantKey;
+      const contextualActions: ContextualActionId[] = wrapUp ? ["show-medicine", "end-call"] : routed.contextualActions;
       return withAudit(
         {
           ...base,
-          assistantKey: routed.assistantKey,
-          contextualActions: routed.contextualActions,
+          assistantKey,
+          contextualActions,
           replyTo: base.turnCount,
-          nameCheckPending: routed.assistantKey === "medicineNameCheck",
+          nameCheckPending: assistantKey === "medicineNameCheck",
         },
         ctx,
         {
@@ -419,11 +429,14 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           actor: "system",
           route: "typed-input",
           validationStatus: "passed",
-          details: {
-            intent: routed.intent,
-            actionsOffered: routed.contextualActions.join(",") || "none",
-            characters: text.length, // length only — never the raw text
-          },
+          // Off-topic and wellbeing turns keep the category only — nothing personal.
+          details: routed.category
+            ? { intent: routed.intent, category: routed.category, actionsOffered: contextualActions.join(",") }
+            : {
+                intent: routed.intent,
+                actionsOffered: contextualActions.join(",") || "none",
+                characters: text.length, // length only — never the raw text
+              },
         },
       );
     }
@@ -458,6 +471,10 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       // Button path: the action must have been offered during this active call.
       if (!s.callActive || s.state !== "listening") return s;
       if (!s.contextualActions.includes(event.route)) return s;
+      if (event.route === "end-call") return reduceSession(s, { type: "END_CALL" }, ctx);
+      if (event.route === "carry-on") {
+        return { ...s, assistantKey: "anotherMedicineGuide", contextualActions: [], replyTo: null };
+      }
       return applyRoute(s, ctx, event.route, "button");
     }
 

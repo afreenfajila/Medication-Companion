@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifySafety } from "./classify";
+import { classifySafety, mentionsSelfHarm } from "./classify";
 import { buildEscalation } from "./escalation";
 
 describe("safety classifier", () => {
@@ -52,6 +52,35 @@ describe("safety classifier", () => {
       expect(classifySafety(text)).toEqual({ level: "none" });
     },
   );
+});
+
+describe("health signals in casual talk (Assignment 3, E2)", () => {
+  it.each([
+    "I feel tired",
+    "I've been feeling really dizzy",
+    "I feel so weak today",
+    "I keep forgetting things",
+    "I can't sleep",
+    "我最近头晕",
+    "我睡不着",
+  ])("'%s' → unsupported (pharmacist/clinic path), not urgent", (text) => {
+    expect(classifySafety(text)).toEqual({ level: "unsupported", reason: "unsupported-medical-question" });
+  });
+
+  it("self-harm wording stays urgent and is recognised for the crisis lines", () => {
+    for (const text of ["I want to die", "I feel suicidal", "我想自杀"]) {
+      expect(classifySafety(text).level).toBe("urgent");
+      expect(mentionsSelfHarm(text)).toBe(true);
+    }
+    expect(mentionsSelfHarm("I have chest pain")).toBe(false);
+    expect(mentionsSelfHarm(null)).toBe(false);
+  });
+
+  it("the crisis lines appear only on the self-harm urgent screen", () => {
+    expect(buildEscalation("urgent-risk", false, true, true).crisisKey).toBe("crisisLines");
+    expect(buildEscalation("urgent-risk", false, true, false).crisisKey).toBeNull();
+    expect(buildEscalation("unsupported-medical-question", false, true, true).crisisKey).toBeNull();
+  });
 });
 
 describe("escalation view", () => {

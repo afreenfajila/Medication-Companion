@@ -52,8 +52,22 @@ export const unsupportedMedicalPatterns: readonly RegExp[] = [
   /有危险吗|危险吗/,
   /诊断/,
   /可以和.*一起/,
+  // Health signals in casual talk (CLAUDE.md § Assignment 3, E2). A redirect to
+  // "show me a label" would brush off something that may matter, so these get the
+  // limitation + pharmacist/clinic path. Not urgent: urgent wording is above.
+  /\b(feel|feeling|been) (so |very |really )?(tired|dizzy|weak|unwell|sick|confused)\b/i,
+  /\bkeep forgetting\b|\bso forgetful\b/i,
+  /\bcan'?t sleep\b|\bnot sleeping\b/i,
+  /头晕|很累|没力气|不舒服|睡不着|老是忘/,
   ...adverseEffectPatterns,
 ];
+
+/** Self-harm wording (a subset of `urgentPatterns`): the urgent screen also lists crisis lines. */
+export const selfHarmPatterns: readonly RegExp[] = [/want to (die|hurt myself)/i, /suicid/i, /想死|自杀|伤害自己/];
+
+export function mentionsSelfHarm(text: string | null): boolean {
+  return text !== null && selfHarmPatterns.some((p) => p.test(text));
+}
 
 export type SafetyClassification =
   | { level: "urgent"; reason: "urgent-risk" }

@@ -3,9 +3,17 @@
 import { Send } from "lucide-react";
 import { useId, useState } from "react";
 import { ContextualChoiceGroup } from "@/components/ui/contextual-choice-group";
+import type { CopyKey } from "@/lib/content/translations";
 import type { Session } from "@/lib/session/state-machine";
 import type { ContextualActionId } from "@/types/content";
 import type { T } from "./screen-chrome";
+
+const CHOICE_LABEL: Record<ContextualActionId, CopyKey> = {
+  "show-medicine": "showMedicine",
+  "ask-schedule": "askSchedule",
+  "end-call": "endCall",
+  "carry-on": "carryOn",
+};
 
 /**
  * Pinned controls for the `listening` state: the temporary contextual choices
@@ -29,7 +37,7 @@ export function ListeningActions({
 }) {
   const choices = (hideChoices ? [] : session.contextualActions).map((id) => ({
     id,
-    label: id === "show-medicine" ? t("showMedicine") : t("askSchedule"),
+    label: t(CHOICE_LABEL[id]),
   }));
 
   return (

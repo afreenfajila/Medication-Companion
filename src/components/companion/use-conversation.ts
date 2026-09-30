@@ -13,6 +13,8 @@ import { getVoiceProvider, useVoiceCapabilities } from "@/lib/voice/use-voice";
 
 const LISTEN_DELAY_MS = 350; // let the speaker finish before the mic opens (no echo)
 const MAX_SILENT_TURNS = 3; // then pause politely instead of listening forever
+// ponytail: starting threshold from the spec; tune against real older-adult speech in testing.
+export const MIN_SPEECH_CONFIDENCE = 0.5;
 
 const ERROR_KEY: Record<VoiceErrorCode, CopyKey> = {
   "permission-denied": "voiceDenied",
@@ -154,16 +156,10 @@ export function useVoiceConversation(opts: {
    * "next", "I understand" or "下一步" work either way. Replies follow the
    * language they used: Chinese input switches to Chinese, English to English.
    */
-  const interpretText = useCallback((text: string) => {
+  const interpretText = useCallback((text: string, confidence?: number) => {
     const { speakNotice: say, soundActive: soundOn } = latest.current;
     let s = latest.current.session;
     setNotice(null);
-
-    const detected = detectInputLanguage(text);
-    if (detected && detected !== s.language) {
-      dispatch({ type: "SET_LANGUAGE", language: detected });
-      s = { ...s, language: detected };
-    }
 
     // Notices are spoken from in here rather than from the session's line, so
     // they must be remembered for the echo guard too — otherwise the companion
@@ -175,6 +171,19 @@ export function useVoiceConversation(opts: {
       lastSpoken.current = line;
       say(line);
     };
+
+    // The recogniser wasn't sure what it heard: ask again before classifying
+    // (or switching language on) a guess. Exactly 0 means "not provided".
+    if (confidence !== undefined && confidence > 0 && confidence < MIN_SPEECH_CONFIDENCE) {
+      sayNotice("didntCatch");
+      return;
+    }
+
+    const detected = detectInputLanguage(text);
+    if (detected && detected !== s.language) {
+      dispatch({ type: "SET_LANGUAGE", language: detected });
+      s = { ...s, language: detected };
+    }
 
     const intent = interpretUtterance(text, {
       state: s.state,
@@ -203,7 +212,7 @@ export function useVoiceConversation(opts: {
   }, []);
 
   const handleTranscript = useCallback(
-    (text: string) => {
+    (text: string, confidence?: number) => {
       if (latest.current.speaking) return; // never react to the companion's own voice
       // ...nor to the tail of it, arriving from a mic that was open while it spoke.
       if (
@@ -216,7 +225,7 @@ export function useVoiceConversation(opts: {
       }
       setInterim("");
       silentTurns.current = 0;
-      interpretText(text);
+      interpretText(text, confidence);
     },
     [interpretText],
   );

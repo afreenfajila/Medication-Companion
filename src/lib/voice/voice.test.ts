@@ -91,7 +91,11 @@ describe("BrowserVoiceProvider", () => {
     rec.say("what is", false);
     rec.say("What is this for?", true);
     expect(interim).toHaveBeenCalledWith("what is");
-    expect(final).toHaveBeenCalledWith("What is this for?");
+    expect(final).toHaveBeenCalledWith("What is this for?", undefined); // no confidence reported
+
+    p.startListening("en");
+    fake.recognitions.at(-1)!.say("met for pain", true, 0.31);
+    expect(final).toHaveBeenLastCalledWith("met for pain", 0.31);
 
     rec.stop();
     expect(listening).toHaveBeenLastCalledWith(false);

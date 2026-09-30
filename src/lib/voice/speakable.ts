@@ -1,5 +1,6 @@
 import { fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
 import type { CopyKey } from "@/lib/content/translations";
+import { mentionsSelfHarm } from "@/lib/safety/classify";
 import { buildEscalation } from "@/lib/safety/escalation";
 import { MAX_LABEL_RETRIES, type Session } from "@/lib/session/state-machine";
 
@@ -23,6 +24,7 @@ export function speakableText(
     | "labelRetries"
     | "recordConflict"
     | "language"
+    | "userText"
   >,
   t: (key: CopyKey) => string,
   explanation: ExplanationView | null,
@@ -78,12 +80,14 @@ export function speakableText(
         session.safetyReason ?? "help-requested",
         session.labelRouteSelected,
         session.labelRetries < MAX_LABEL_RETRIES,
+        mentionsSelfHarm(session.userText),
       );
       return join(
         t(view.headingKey),
         view.reasonKey ? t(view.reasonKey) : null,
         view.retryUsedKey ? t(view.retryUsedKey) : null,
         t(view.bodyKey),
+        view.crisisKey ? t(view.crisisKey) : null,
       );
     }
     case "complete":

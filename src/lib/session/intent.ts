@@ -1,6 +1,6 @@
 import type { CopyKey } from "@/lib/content/translations";
 import { classifySafety } from "@/lib/safety/classify";
-import { classifyOffTopic, type OffTopicKind } from "./off-topic";
+import { classifyOffTopic, isLowMood, type OffTopicKind } from "./off-topic";
 import type {
   ContextualActionId,
   SafetyReason,
@@ -17,7 +17,9 @@ export type RoutedMessage = {
   /** Only true when a confirmed record already authorises schedule content. */
   toExplain?: boolean;
   /** The person asked for a route outright ("I want to show the medicine"): act as if they chose it. */
-  route?: ContextualActionId;
+  route?: "show-medicine" | "ask-schedule";
+  /** Off-spine and wellbeing turns: the only thing the audit log records about them. */
+  category?: OffTopicKind | "wellbeing";
 };
 
 const OFF_TOPIC_KEYS: Record<OffTopicKind, CopyKey> = {
@@ -151,10 +153,14 @@ export function routeMessage(
   // safety-classified message can never be answered with a friendly deflection,
   // and before the medicine patterns only because `classifyOffTopic` refuses to
   // fire on anything containing a medicine/label/dose term.
+  if (isLowMood(text)) {
+    return { intent: "wellbeing", assistantKey: "wellbeing", contextualActions: ["carry-on"], category: "wellbeing" };
+  }
   const offTopic = classifyOffTopic(text);
   if (offTopic) {
     return {
       intent: "off-topic",
+      category: offTopic,
       assistantKey: OFF_TOPIC_KEYS[offTopic],
       // Still offering the spine's two doors, exactly as the clarification does.
       contextualActions: ["show-medicine", "ask-schedule"],

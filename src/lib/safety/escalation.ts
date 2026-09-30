@@ -23,6 +23,8 @@ export type EscalationView = {
   reasonKey: CopyKey | null;
   /** Set when the one label retry is used up — only human help remains. */
   retryUsedKey: CopyKey | null;
+  /** Self-harm wording: crisis line numbers shown (and read) as text — never a claimed call. */
+  crisisKey: CopyKey | null;
   actions: HelpAction[];
 };
 
@@ -66,6 +68,7 @@ export function buildEscalation(
   reason: SafetyReason,
   labelRouteSelected: boolean,
   canRetry = true,
+  selfHarm = false,
 ): EscalationView {
   if (reason === "urgent-risk") {
     return {
@@ -75,6 +78,7 @@ export function buildEscalation(
       bodyKey: "urgentBody",
       reasonKey: "urgentNoCall",
       retryUsedKey: null,
+      crisisKey: selfHarm ? "crisisLines" : null,
       actions: [
         { id: "urgent-care", labelKey: "emergencyDemo", implemented: false },
         { id: "trusted-helper-demo", labelKey: "askHelper", implemented: false },
@@ -101,6 +105,7 @@ export function buildEscalation(
     bodyKey: reason === "label-differs" ? "labelDiffers" : gentle ? "labelSafetyBody" : "safetyBody",
     reasonKey: REASON_LINE[reason],
     retryUsedKey: labelProblem && !canRetry ? "retryUsed" : null,
+    crisisKey: null,
     actions,
   };
 }

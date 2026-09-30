@@ -457,6 +457,55 @@ describe("record conflict (“my doctor said…”)", () => {
   });
 });
 
+describe("off-topic cap, health signals and wellbeing (Assignment 3, E)", () => {
+  const say = (text: string) => ({ type: "USER_MESSAGE", text }) as const;
+
+  it("the second off-topic turn in a row wraps up, offering Show medicine and End call", () => {
+    const once = run([startCall, say("What's the weather like?")]);
+    expect(once.assistantKey).toBe("offTopicWorld");
+    const twice = run([say("Do you like football?")], once);
+    expect(twice.assistantKey).toBe("offTopicWrapUp");
+    expect(twice.contextualActions).toEqual(["show-medicine", "end-call"]);
+
+    const ended = run([{ type: "SELECT_ROUTE", route: "end-call" }], twice);
+    expect(ended.state).toBe("start");
+    expect(ended.callActive).toBe(false);
+  });
+
+  it("any on-spine turn resets the count", () => {
+    const s = run([startCall, say("What's the weather like?"), say("What is this for?"), say("Do you like football?")]);
+    expect(s.assistantKey).toBe("offTopicWorld");
+    expect(s.offTopicStreak).toBe(1);
+  });
+
+  it("health-signal talk gets the limitation + pharmacist/clinic path, not a label redirect", () => {
+    const s = run([startCall, say("I've been feeling really tired lately")]);
+    expect(s.state).toBe("safety");
+    expect(s.safetyReason).toBe("unsupported-medical-question");
+  });
+
+  it("loneliness gets the warm wellbeing reply with Carry on, and the audit keeps the category only", () => {
+    const s = run([startCall, say("I feel so lonely these days")]);
+    expect(s.state).toBe("listening");
+    expect(s.assistantKey).toBe("wellbeing");
+    expect(s.contextualActions).toContain("carry-on");
+    expect(s.audit.at(-1)?.details).toEqual({ intent: "wellbeing", category: "wellbeing", actionsOffered: "carry-on" });
+
+    const on = run([{ type: "SELECT_ROUTE", route: "carry-on" }], s);
+    expect(on.assistantKey).toBe("anotherMedicineGuide");
+    expect(on.contextualActions).toEqual([]);
+  });
+
+  it("off-topic audit keeps the category, never the words or their length", () => {
+    const s = run([startCall, say("What's the weather like?")]);
+    expect(s.audit.at(-1)?.details).toEqual({
+      intent: "off-topic",
+      category: "world",
+      actionsOffered: "show-medicine,ask-schedule",
+    });
+  });
+});
+
 describe("label check beside the instruction", () => {
   const atInstruction = () => run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain());
 

@@ -617,3 +617,18 @@ Beside the instruction (explanation step 1) the companion shows where the record
 | `unclearLabelCheck` | I didn't quite catch that. Does this match your label? You can say "yes, it matches" or "it looks different". | 我没太听清楚。这和您的标签一样吗？您可以说「一样」或「不一样」。 |
 
 New safety reason `label-differs` (heading `labelSafetyHeading`, body `labelDiffers`, no reason line, no photo retry). New audit event `label-check-answered` (details: `{ matches }`).
+
+### E. Off-topic, health signals and wellbeing
+
+1. **Turn cap.** The second consecutive off-topic turn gets `offTopicWrapUp` with `Show medicine` and `End call`. Any other turn resets the count.
+2. **Health signals.** Added to `unsupportedMedicalPatterns` (the limitation + pharmacist/clinic path, not urgent): `(feel|feeling|been) (so |very |really )?(tired|dizzy|weak|unwell|sick|confused)`, `keep forgetting|so forgetful`, `can'?t sleep|not sleeping`, `头晕|很累|没力气|不舒服|睡不着|老是忘`.
+3. **Wellbeing.** `lonely|all alone|no one to talk|feel(ing)? sad`, `孤单|寂寞|没人陪|难过` → intent `wellbeing`, fixed `wellbeing` copy with `Carry on` (and the family option, F). Self-harm stays urgent, and that screen also shows `crisisLines` as text.
+4. **Misheard speech.** A browser result with confidence above 0 and below `MIN_SPEECH_CONFIDENCE` (0.5) gets `didntCatch` before any classification. Exactly 0 means "not provided".
+5. **Nothing personal is kept.** Off-topic and wellbeing audit events carry `{ intent, category, actionsOffered }` only (no text, no length).
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `offTopicWrapUp` | It's been lovely chatting with you. Shall we look at your medicine together, or would you like to end the call for now? | 和您聊天很开心。我们一起看看您的药，还是先结束通话？ |
+| `wellbeing` | Thank you for telling me — that sounds hard. I'm only a medicine helper, but you don't have to manage things alone. Would you like me to let your family know you'd like some company, or shall we carry on together? | 谢谢您告诉我，这听起来不容易。我只是一个用药小帮手，但您不必一个人面对。需要我告诉您的家人您想有人陪陪您吗，还是我们一起继续？ |
+| `didntCatch` | Sorry, I didn't quite catch that. Could you say it again? Typing it works well too. | 不好意思，我没听清楚。可以再说一次吗？也可以直接打字。 |
+| `crisisLines` | Samaritans of Singapore (24 hours): 1767 · Emergency: 995 | 新加坡援人协会（24小时）：1767 · 紧急电话：995 |
