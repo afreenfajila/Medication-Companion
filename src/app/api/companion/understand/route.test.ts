@@ -1,4 +1,4 @@
-// @vitest-environment node
+﻿// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const understandMessage = vi.hoisted(() => vi.fn());
@@ -47,7 +47,7 @@ afterEach(() => {
 describe("POST /api/companion/understand", () => {
   it("returns Claude's reply and its offer when the reply passes the guard", async () => {
     understandMessage.mockResolvedValue({
-      reply: "I think you said Metformin — is that right? You can also type it, or show me the label.",
+      reply: "I think you said Metformin — is that right? Would you like to type it, or show me the label?",
       offer: "show-medicine",
       checkingMedicineName: true,
     });

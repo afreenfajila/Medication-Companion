@@ -4,6 +4,7 @@ import { toExplain } from "@/test/helpers";
 import { metforminRecord } from "./demo-record";
 import { resolveExplanation } from "./explanation";
 import { copy, t } from "./translations";
+import { usesBlameWords } from "./understand-guard";
 
 describe("explanation data resolver", () => {
   const candidate = toExplain().candidate!;
@@ -54,6 +55,17 @@ describe("copy catalogue", () => {
       "Please contact local emergency services or urgent medical care now. If you can, ask someone near you to help.",
     );
     expect(t("zh-Hans", "callWithCompanion")).toBe("呼叫助手");
+  });
+
+  it("never uses a blaming or commanding word (tone contract rule 6)", () => {
+    for (const lang of ["en", "zh-Hans"] as const) {
+      for (const [key, line] of Object.entries(copy[lang])) {
+        expect(usesBlameWords(line), `${lang}.${key}`).toBe(false);
+      }
+    }
+    for (const field of Object.values(metforminRecord.explanation)) {
+      for (const line of Object.values(field)) expect(usesBlameWords(line!)).toBe(false);
+    }
   });
 
   it("labels every unimplemented human action as a demo", () => {

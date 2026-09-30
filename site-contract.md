@@ -614,3 +614,11 @@ Rules:
 7. Promote to production after manual checklist passes.
 
 The deployed site must include a visible prototype disclaimer and a link to `/about`.
+
+## 16. Assignment 3 experience amendments
+
+See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 for the copy.
+
+### A. Companion tone contract
+
+- `POST /api/companion/understand` validates the model reply with `isSafeCompanionReply(reply, language)`: the existing number/dosing/advice/match-claim/markup filters, plus the tone-contract blame words, advice phrased as an instruction, the requested language, and a closing question. Any failure returns the deterministic approved line (`source: "fallback"`).

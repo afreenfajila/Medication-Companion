@@ -1,6 +1,6 @@
 import type { CopyKey } from "@/lib/content/translations";
 import { introducesUnsafeLanguage } from "@/lib/content/rephrase-guard";
-import type { ContextualActionId } from "@/types/content";
+import type { ContextualActionId, UiLanguage } from "@/types/content";
 
 /**
  * Companion replies that Claude's bounded "understanding" pass may replace
@@ -57,7 +57,26 @@ const MATCH_CLAIM_PATTERNS: readonly RegExp[] = [
 // The reply is plain text read aloud and shown in a card — no markup, links or tool-ish output.
 const FORMAT_PATTERNS: readonly RegExp[] = [/https?:|www\./i, /[<>*#`[\]{}|]/];
 
+// Tone contract rule 6 (CLAUDE.md § Assignment 3, A): nobody is at fault, and we
+// never tell her what to do. Applies to fixed copy too (see content.test.ts).
+const TONE_PATTERNS: readonly RegExp[] = [
+  /\b(error|fail(ed)?|invalid|wrong|incorrect|mistakes?|must|should)\b/i,
+  /错误|失败|无效|不对|错了|必须|应该/,
+];
+
+export function usesBlameWords(text: string): boolean {
+  return TONE_PATTERNS.some((p) => p.test(text));
+}
+
+// Advice phrased as an instruction. "take a look" is the common harmless exception.
+const ADVICE_PATTERNS: readonly RegExp[] = [
+  /\byou (need to|have to|ought to)\b/i,
+  /\b(take(?! a (quick |little )?look)|stop|skip|double|increase|reduce|halve)\b[^.?!]{0,30}\b(tablets?|pills?|capsules?|dose|medicine|medication)\b/i,
+  /停药|停止服用|不要吃|别吃|不用吃|加倍|多吃|少吃|减量|加量/,
+];
+
 const MAX_REPLY_CHARS = 320;
+const CJK = /[一-鿿]/;
 
 /**
  * Accepts a model-written companion reply only when it cannot carry medicine
@@ -65,13 +84,22 @@ const MAX_REPLY_CHARS = 320;
  * clinical claims (the same filters the rephrase path uses), no claim that a
  * medicine is confirmed, no markup, and a short spoken length. Anything else
  * is rejected and the caller uses the deterministic approved line.
+ *
+ * With `language` (a fresh model reply for this turn), it must also be written
+ * in that language and end with a gentle question, as the prompt's tone rules ask.
  */
-export function isSafeCompanionReply(text: string): boolean {
+export function isSafeCompanionReply(text: string, language?: UiLanguage): boolean {
   const reply = text.trim();
   if (reply.length === 0 || reply.length > MAX_REPLY_CHARS) return false;
   if (introducesUnsafeLanguage(reply)) return false;
   if (DOSING_PATTERNS.some((p) => p.test(reply))) return false;
   if (MATCH_CLAIM_PATTERNS.some((p) => p.test(reply))) return false;
   if (FORMAT_PATTERNS.some((p) => p.test(reply))) return false;
+  if (usesBlameWords(reply)) return false;
+  if (ADVICE_PATTERNS.some((p) => p.test(reply))) return false;
+  if (language) {
+    if (CJK.test(reply) !== (language === "zh-Hans")) return false;
+    if (!/[?？]$/.test(reply)) return false;
+  }
   return true;
 }

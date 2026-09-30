@@ -441,3 +441,23 @@ deterministic fallback wording rather than the only wording. The actions and eve
 **Trade-off accepted.** Replies now vary and can take a moment. While Claude works, the transcript
 shows "Let me think about that…" so the pause reads as the companion thinking, not as the app
 ignoring the person.
+
+---
+
+# Decisions (Assignment 3 experience amendments)
+
+Source: the Assignment 3 experience design (correction, recovery and uncertainty states), added to
+CLAUDE.md as an approved contract change. Implemented A–G in order, one commit each.
+
+## A. Tone contract
+
+- **Enforced where it can be, prompted where it can't.** Rule 6 (no blaming or commanding words) is a
+  regex in `isSafeCompanionReply`, so a model reply that says "wrong" or "should" falls back to the
+  approved line. Rules 1–5 are about warmth and shape, which a regex can't judge, so they live in the
+  understanding prompt with three existing approved lines as tone examples. Rule 4 (end with a question)
+  is also checked for fresh model replies only; it isn't applied to `isApprovedSpeech`, because several
+  fixed lines the voice reads (for example "Reading the label…") correctly don't end in a question.
+- **Fixed copy is tested, not trusted.** A test runs every copy line and record field through the same
+  blame-word check, so a future copy edit can't reintroduce "must" unnoticed.
+- **"Take a look" is allowed.** The advice pattern (`take … medicine`) would otherwise reject "let's take
+  a look at the medicine label", a natural phrase that gives no instruction.

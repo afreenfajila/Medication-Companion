@@ -503,6 +503,7 @@ Audit events must avoid storing raw image data, raw audio, or unredacted free-te
 - Make it clear that the companion cannot change instructions.
 - Provide a human-help route for uncertainty.
 - Start with the single `Call with companion` entry point; offer label/schedule choices only after active-call conversation context exists.
+- Follow the companion tone contract (§19.A) in every companion line, fixed or model-written.
 
 ### Prohibited
 
@@ -558,3 +559,20 @@ const demoFixtures = {
 - [ ] Every uncertain outcome has a clear next action.
 - [ ] Gemini and Claude system instructions repeat the no-medical-advice boundary.
 - [ ] Audit log records route and validation status without storing raw sensitive media.
+
+## 19. Assignment 3 experience amendments
+
+Approved changes from the Assignment 3 experience design (CLAUDE.md § Assignment 3 experience amendments). None relaxes a safety rule. All new copy keys are fixed approved copy, never model-written, and are not in `UNDERSTAND_KEYS` or `CONVERSATIONAL_REPHRASE_KEYS`. zh-Hans lines need native-speaker review before external testing.
+
+### A. Companion tone contract
+
+Every companion line, fixed copy and model-written replies alike:
+
+1. Thank or reassure first. A doubt, retry or question is a good habit.
+2. Say what the record says, never what the person should do. Quoting the verified instruction verbatim is the only exception.
+3. Nobody is at fault. Things "didn't come through clearly" or "take a little while to update".
+4. Offer a choice and end with a gentle question, except when closing the call.
+5. At most four short sentences, one idea each. Use "we" and "let's".
+6. Never use: error, failed, invalid, wrong, incorrect, mistake, must, should (错误, 失败, 无效, 不对, 错了, 必须, 应该).
+
+Rule 6 is enforced in code: `usesBlameWords` rejects a model reply in `isSafeCompanionReply`, and a test checks every fixed copy line and record field. A model reply for the current turn must also be in the requested language and end with a question.

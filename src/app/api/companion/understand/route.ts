@@ -65,7 +65,7 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const out = await understandMessage({ language, message, history, routerReply: approved });
-    if (!isSafeCompanionReply(out.reply)) return fallback();
+    if (!isSafeCompanionReply(out.reply, language)) return fallback();
     return ok(
       understandResponseDataSchema.parse({
         text: out.reply.trim(),
