@@ -21,6 +21,8 @@ Before implementing or changing behaviour, read:
 
 These documents are the source of truth. If an implementation request conflicts with them, preserve the safety/content contract and explain the conflict.
 
+The section **Assignment 3 experience amendments** below is an approved change to these contracts. When implementing it, update `content-model.md`, `site-contract.md` and `docs/decisions.md` in the same change so all four documents agree. Nothing in it relaxes a safety constraint: every amendment either adds a gentler path that still shows no medicine instructions, or routes more input toward human help.
+
 ## Product goal
 
 Deliver a polished, mobile-first web prototype that demonstrates this scenario:
@@ -222,6 +224,7 @@ LISTENING is impossible until Call with companion has been selected.
 CAMERA_PERMISSION is impossible until Show medicine is selected inside an active call.
 EXPLAIN is impossible without confirmed candidate match.
 No match / unreadable / ambiguous always transition to SAFETY.
+A record conflict raised in EXPLAIN never changes or hides the record; it offers pharmacist help or carrying on.
 Camera permission denial opens typed/demo-label fallback, not a dead end.
 AI/API failure opens a local deterministic fallback.
 END_CALL returns to START and removes active call controls.
@@ -417,6 +420,94 @@ If triggered:
 - Render `SafetyCard`.
 - Present clear next actions.
 
+## Assignment 3 experience amendments
+
+These come from the Assignment 3 experience design (correction, recovery and uncertainty states). Implement them in this order; each is small and independently testable.
+
+### A. Companion tone contract
+
+Every companion line — fixed copy and model-written replies — follows these rules:
+
+1. Thank or reassure first. A doubt, retry or question is treated as a good habit.
+2. Say what the record says, never what the person should do (`content-model.md`: "record says", not "you should"). Quoting the verified instruction verbatim is the only exception.
+3. Nobody is at fault — not the person, the doctor, or the camera. Things "didn't come through clearly" or "take a little while to update".
+4. Offer a choice and end with a gentle question, except when closing the call.
+5. Short and calm: at most four short sentences, one idea each. Use "we" and "let's".
+6. Never use: error, failed, invalid, wrong, incorrect, mistake, must, should (and 错误, 失败, 无效, 不对, 错了, 必须, 应该).
+
+Enforce rule 6 in code: add these words to `isSafeCompanionReply` so a model reply that uses them falls back to the approved line. Add the six rules to Claude task 3's system prompt, with two or three existing approved lines as tone examples.
+
+### B. Gentler label-failure copy (correction)
+
+The one-retry mechanism already exists (`buildEscalation` → `try-again`, then `retryUsed`). Do not change the state machine. Only soften the words for non-urgent label reasons (`unreadable-label`, `record-mismatch`, `multiple-candidates`, `user-unsure`), so a blurry photo does not feel like an alarm. The urgent path and `service-failure` keep their current copy.
+
+| Key | EN | zh-Hans |
+|---|---|---|
+| `labelSafetyHeading` | Let's check this one together. | 我们一起再确认一下。 |
+| `labelSafetyBody` | Thank you for checking. That happens sometimes, and I'd rather be careful than guess. Would you like to try another photo, or ask someone to check it with you? | 谢谢您的确认。这种情况很常见，我宁可小心一点也不想猜。您想再拍一张，还是请人和您一起核对？ |
+
+`buildEscalation` uses these keys instead of `safetyHeading` / `safetyBody` when the reason is one of the four label reasons above.
+
+### C. Record conflict (correction when the person disagrees with the record)
+
+New intent `record-conflict`, valid only in `explain`. Patterns (deterministic, case-insensitive): `doctor (said|told|says)`, `that'?s not (right|what)`, `i thought (it was|i take)`, `not the same as`, `医生(说|告诉)`, `不是这样`, `我以为`.
+
+Classifier order: `urgent-risk` → `unsupported-medical-question` → `record-conflict` → off-topic. So "my doctor said I can stop it" still escalates as a dose question.
+
+Response is fixed approved copy. `{instruction}` and `{verifiedDate}` are filled by code from the verified record — never typed into copy and never model-written. The record is never changed, hidden or softened. Actions: `Check with pharmacist — demo` (→ `safety`, help options) and `Carry on` (stay in `explain`). Audit event: `record-conflict-raised` (intent only, no free text).
+
+| Key | EN | zh-Hans |
+|---|---|---|
+| `recordConflict` | Thank you for telling me — it's good to double-check. Your pharmacy record, checked on {verifiedDate}, says: "{instruction}" Sometimes a doctor changes things and the record takes a little while to catch up, so it's no trouble to ask. Would you like help checking with the pharmacist, or shall we carry on for now? | 谢谢您告诉我，多确认一下是很好的。您的药房记录（{verifiedDate}确认）写着：“{instruction}” 有时候医生会调整用药，记录可能还没来得及更新，所以问一问完全没关系。您想让我帮您联系药剂师确认一下，还是我们先继续？ |
+
+### D. Label check on the explanation (silent-error defence)
+
+The explanation screen must show its source (`BrightCare Pharmacy — demo record · checked {verifiedDate}`) and ask the person to compare it with the physical label, because a wrong answer nobody questions is the most dangerous failure.
+
+- Prompt: `labelCheckPrompt` with actions `Yes, it matches` and `It looks different`.
+- `It looks different` → `safety` with `labelDiffers`.
+
+| Key | EN | zh-Hans |
+|---|---|---|
+| `labelCheckPrompt` | Does this match what's printed on your label? | 这和您标签上印的一样吗？ |
+| `labelDiffers` | Thank you for checking — that's really helpful. When the label and the record don't agree, a pharmacist is the best person to look. Would you like help contacting them? | 谢谢您仔细核对，这很有帮助。标签和记录不一样的时候，最好请药剂师看一看。需要我帮您联系他们吗？ |
+
+### E. Off-topic, health signals and wellbeing
+
+The conversational-spine behaviour in `docs/decisions.md` stays. Add:
+
+1. **Turn cap.** After two consecutive off-topic turns, reply with `offTopicWrapUp` and offer `Show medicine` and `End call`. Any on-spine turn resets the count.
+2. **Health signals in casual talk.** This reverses one earlier decision: feeling and symptom language no longer falls through to the clarification prompt, because a redirect to "show me a label" brushes off something that may matter. Add to `unsupportedMedicalPatterns`: `(feel|feeling|been) (so |very |really )?(tired|dizzy|weak|unwell|sick|confused)`, `keep forgetting|so forgetful`, `can'?t sleep|not sleeping`, `头晕|很累|没力气|不舒服|睡不着|老是忘`. These go to the existing limitation + pharmacist/clinic path, not the urgent path. Record the reversal in `docs/decisions.md`.
+3. **Wellbeing.** Loneliness or low mood (`lonely|all alone|no one to talk|feel sad`, `孤单|寂寞|没人陪|难过`) → fixed `wellbeing` copy with the family-consent action (F) and `Carry on`. Self-harm language stays in `urgentPatterns`; for that case also show `Samaritans of Singapore (24 hours): 1767` and `Emergency: 995` as text — never as a claimed call.
+4. **Misheard speech.** When the browser speech result reports a confidence above 0 and below `MIN_SPEECH_CONFIDENCE` (start at 0.5), reply with `didntCatch` before any classification. A result reporting exactly 0 means "not provided" and is classified normally.
+5. **Nothing personal is kept.** Off-topic and wellbeing audit events record the category only, never the words.
+
+| Key | EN | zh-Hans |
+|---|---|---|
+| `offTopicWrapUp` | It's been lovely chatting with you. Shall we look at your medicine together, or would you like to end the call for now? | 和您聊天很开心。我们一起看看您的药，还是先结束通话？ |
+| `wellbeing` | Thank you for telling me — that sounds hard. I'm only a medicine helper, but you don't have to manage things alone. Would you like me to let your family know you'd like some company, or shall we carry on together? | 谢谢您告诉我，这听起来不容易。我只是一个用药小帮手，但您不必一个人面对。需要我告诉您的家人您想有人陪陪您吗，还是我们一起继续？ |
+| `didntCatch` | Sorry, I didn't quite catch that. Could you say it again? Typing it works well too. | 不好意思，我没听清楚。可以再说一次吗？也可以直接打字。 |
+
+### F. Asking family for help needs consent every time
+
+Add `Ask family to help — demo` to the safety options and to `wellbeing`. Tapping it shows `familyConsent` with `Yes, ask them — demo` and `Not now`. Only `Yes` writes the audit event `caregiver-help-requested`, which the caregiver dashboard shows as `Needs help`. Nothing is shared with family without that tap.
+
+| Key | EN | zh-Hans |
+|---|---|---|
+| `familyConsent` | Shall I let your family know you'd like some help? I'll only do this if you say yes. | 需要我告诉您的家人您想请他们帮忙吗？只有您同意，我才会联系。 |
+
+### G. Study mode for failure-injection testing
+
+User testing needs controlled, repeatable AI errors. Live model output cannot be compared across participants, so study conditions use fixed fixtures.
+
+- Enabled only when server env `STUDY_MODE=true` **and** `VERCEL_ENV !== "production"`. Never set `STUDY_MODE` on production.
+- A researcher page `/study` (not linked anywhere) sets the condition in a server-side session cookie: `control` or `wrong-explanation`. Query parameters must not set it.
+- `wrong-explanation` swaps the confirmed explanation for the fixture `studyWrongInstruction` (`Take 1 tablet once daily at bedtime`). Every gate still applies — the participant still starts the call, consents, and confirms the match.
+- A small `Study session` badge is visible on every screen in study mode, and the audit log tags each event with the condition, so the six signals (detection, verification, challenge, blind acceptance, recovery, decision quality) can be read off the timeline.
+- Participants are debriefed after the session: they are told which explanation was wrong.
+
+All new copy keys (B–F) are fixed approved copy and are **not** added to `UNDERSTAND_KEYS` or `CONVERSATIONAL_REPHRASE_KEYS`. zh-Hans lines need native-speaker review before external testing.
+
 ## Caregiver dashboard
 
 Build a compact, convincing one-patient demo dashboard:
@@ -549,6 +640,15 @@ Minimum test coverage:
 - Explanation data resolver.
 - API response schema validation.
 - Fallback state behavior.
+- Label-failure safety screens use the gentler copy; urgent and service-failure screens do not.
+- Record conflict: shows the record's own instruction, offers pharmacist or carry on, and never reaches the model.
+- "My doctor said I can stop it" routes to unsupported-medical, not record-conflict.
+- Label check: "It looks different" reaches safety.
+- Tone words in a model reply fail `isSafeCompanionReply`.
+- Health-signal and wellbeing patterns route correctly; self-harm stays urgent.
+- Off-topic turn cap after two turns.
+- Family help writes an audit event only after consent.
+- Study mode is off in production even when `STUDY_MODE=true`.
 
 ## Definition of done
 
@@ -567,6 +667,12 @@ The app is ready for a prototype review only when:
 - [ ] It keeps secrets server-side.
 - [ ] It builds successfully with `npm run build`.
 - [ ] It deploys to Vercel and communicates prototype limitations.
+- [ ] Label failures use gentle, no-fault wording; the existing single retry is unchanged.
+- [ ] A record conflict is answered from the record, warmly, with pharmacist help one tap away.
+- [ ] The explanation shows its source and asks the person to compare it with their label.
+- [ ] Casual health signals and low mood are not brushed off; family help needs consent.
+- [ ] Every companion line follows the tone contract.
+- [ ] Study mode works locally and on preview, and cannot run on production.
 
 ## Working style
 
