@@ -329,7 +329,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     });
     finishSpeaking(fake);
     respond(fake, "yes but I am not sure");
-    expect(screen.getByText("I’m not sure enough to explain this safely.")).toBeInTheDocument();
+    expect(screen.getByText("Let’s check this one together.")).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
 
@@ -445,7 +445,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
 
     respond(fake, "It's Aspirin, 300 milligrams");
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText(/i’m not sure enough/i)).toBeInTheDocument();
+    expect(screen.getByText("Let’s check this one together.")).toBeInTheDocument();
   });
 });
 

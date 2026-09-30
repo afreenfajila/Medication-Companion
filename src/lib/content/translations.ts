@@ -210,6 +210,10 @@ const en = {
   safetyHeading: "I’m not sure enough to explain this safely.",
   safetyBody:
     "Please check the label with your pharmacist, clinic, or a trusted helper.",
+  // Non-urgent label outcomes (unreadable, mismatch, ambiguous, unsure): no-fault and unhurried.
+  labelSafetyHeading: "Let’s check this one together.",
+  labelSafetyBody:
+    "Thank you for checking. That happens sometimes, and I’d rather be careful than guess. Would you like to try another photo, or ask someone to check it with you?",
   reasonUnreadable: "I couldn’t read the label clearly.",
   reasonMismatch:
     "The label doesn’t match a medicine in your current demo record.",
@@ -418,6 +422,9 @@ const zhHans: Copy = {
   safetyLabel: "让我们请人协助确认",
   safetyHeading: "我不够确定，不能安全地解释这个药物。",
   safetyBody: "请让药剂师、诊所或您信任的人检查标签。",
+  labelSafetyHeading: "我们一起再确认一下。",
+  labelSafetyBody:
+    "谢谢您的确认。这种情况很常见，我宁可小心一点也不想猜。您想再拍一张，还是请人和您一起核对？",
   reasonUnreadable: "我无法清楚地阅读标签。",
   reasonMismatch: "标签与您当前示范记录中的药物不符。",
   reasonUnsure: "由于这可能不是对应的药物，我不会解释它。",

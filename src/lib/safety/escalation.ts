@@ -38,6 +38,15 @@ const REASON_LINE: Record<SafetyReason, CopyKey | null> = {
   "help-requested": "reasonHelp",
 };
 
+// Non-urgent label outcomes get gentler, no-fault wording (CLAUDE.md § Assignment 3, B):
+// a blurry photo shouldn't feel like an alarm. Urgent and service-failure keep theirs.
+const GENTLE_LABEL_REASONS: readonly SafetyReason[] = [
+  "unreadable-label",
+  "record-mismatch",
+  "multiple-candidates",
+  "user-unsure",
+];
+
 const LABEL_REASONS: readonly SafetyReason[] = [
   "unreadable-label",
   "record-mismatch",
@@ -83,11 +92,12 @@ export function buildEscalation(
     { id: "clinic-demo", labelKey: "contactClinic", implemented: false },
   );
 
+  const gentle = GENTLE_LABEL_REASONS.includes(reason);
   return {
     urgent: false,
     labelKey: "safetyLabel",
-    headingKey: "safetyHeading",
-    bodyKey: "safetyBody",
+    headingKey: gentle ? "labelSafetyHeading" : "safetyHeading",
+    bodyKey: gentle ? "labelSafetyBody" : "safetyBody",
     reasonKey: REASON_LINE[reason],
     retryUsedKey: labelProblem && !canRetry ? "retryUsed" : null,
     actions,

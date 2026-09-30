@@ -576,3 +576,12 @@ Every companion line, fixed copy and model-written replies alike:
 6. Never use: error, failed, invalid, wrong, incorrect, mistake, must, should (错误, 失败, 无效, 不对, 错了, 必须, 应该).
 
 Rule 6 is enforced in code: `usesBlameWords` rejects a model reply in `isSafeCompanionReply`, and a test checks every fixed copy line and record field. A model reply for the current turn must also be in the requested language and end with a question.
+
+### B. Gentler label-failure copy
+
+For the non-urgent label reasons (`unreadable-label`, `record-mismatch`, `multiple-candidates`, `user-unsure`) the safety card uses these instead of `safetyHeading` / `safetyBody`. The reason line, the no-instructions line and the single retry are unchanged. `urgent-risk`, `service-failure`, medical questions and help requests keep their existing copy.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `labelSafetyHeading` | Let's check this one together. | 我们一起再确认一下。 |
+| `labelSafetyBody` | Thank you for checking. That happens sometimes, and I'd rather be careful than guess. Would you like to try another photo, or ask someone to check it with you? | 谢谢您的确认。这种情况很常见，我宁可小心一点也不想猜。您想再拍一张，还是请人和您一起核对？ |

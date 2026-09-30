@@ -622,3 +622,7 @@ See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 
 ### A. Companion tone contract
 
 - `POST /api/companion/understand` validates the model reply with `isSafeCompanionReply(reply, language)`: the existing number/dosing/advice/match-claim/markup filters, plus the tone-contract blame words, advice phrased as an instruction, the requested language, and a closing question. Any failure returns the deterministic approved line (`source: "fallback"`).
+
+### B. Gentler label-failure copy
+
+- `buildEscalation` picks `labelSafetyHeading` / `labelSafetyBody` for the four non-urgent label reasons. No state, transition, action or retry rule changes.

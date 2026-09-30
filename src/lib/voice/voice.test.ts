@@ -277,7 +277,7 @@ describe("speakableText — spoken output is approved wording only, and gated", 
   it("safety states speak the limitation and human help, never instructions", () => {
     const blocked = run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo("sample_mismatch_label"), resolve]);
     const said = speakableText(blocked, t, resolveExplanation(blocked, "en"))!;
-    expect(said).toContain("I’m not sure enough to explain this safely.");
+    expect(said).toContain("Let’s check this one together.");
     expect(said).not.toMatch(/Take 1 tablet|twice daily|blood sugar/i);
 
     const urgent = run([startCall, { type: "USER_MESSAGE", text: "I have chest pain" }]);

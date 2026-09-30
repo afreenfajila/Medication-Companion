@@ -174,7 +174,9 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
     await flush();
 
-    expect(screen.getByText("I’m not sure enough to explain this safely.")).toBeInTheDocument();
+    // A label that doesn't match gets the gentler, no-fault wording — not an alarm.
+    expect(screen.getByText("Let’s check this one together.")).toBeInTheDocument();
+    expect(screen.queryByText("I’m not sure enough to explain this safely.")).toBeNull();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
     expect(screen.getByRole("button", { name: "Check with pharmacy — demo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ask a trusted helper — demo" })).toBeInTheDocument();
@@ -250,7 +252,7 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /upload a photo — demo/i }));
     fireEvent.click(screen.getByRole("button", { name: /blurry label photo/i }));
     await flush();
-    expect(screen.getByText("I’m not sure enough to explain this safely.")).toBeInTheDocument();
+    expect(screen.getByText("Let’s check this one together.")).toBeInTheDocument();
     expect(screen.getByText("I couldn’t read the label clearly.")).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
@@ -278,6 +280,7 @@ describe("in-call flow", () => {
       fireEvent.click(screen.getByRole("button", { name: /upload a photo — demo/i }));
       fireEvent.click(screen.getByRole("button", { name: /clear label photo/i }));
       await flush();
+      // A service failure keeps its original wording (only label outcomes are softened).
       expect(screen.getByText("I’m not sure enough to explain this safely.")).toBeInTheDocument();
       expect(screen.getByText(/I couldn’t read that photo/)).toBeInTheDocument();
       expect(screen.queryByText(/Take 1 tablet/)).toBeNull();

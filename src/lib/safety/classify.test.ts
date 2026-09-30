@@ -75,6 +75,24 @@ describe("escalation view", () => {
     );
   });
 
+  it.each(["unreadable-label", "record-mismatch", "multiple-candidates", "user-unsure"] as const)(
+    "label outcome %s uses the gentler, no-fault copy",
+    (reason) => {
+      const view = buildEscalation(reason, true);
+      expect(view.headingKey).toBe("labelSafetyHeading");
+      expect(view.bodyKey).toBe("labelSafetyBody");
+    },
+  );
+
+  it.each(["service-failure", "unsupported-medical-question", "help-requested"] as const)(
+    "%s keeps its original copy",
+    (reason) => {
+      const view = buildEscalation(reason, true);
+      expect(view.headingKey).toBe("safetyHeading");
+      expect(view.bodyKey).toBe("safetyBody");
+    },
+  );
+
   it("urgent escalation is flagged, has no try-again, and no implemented (real) actions", () => {
     const view = buildEscalation("urgent-risk", true);
     expect(view.urgent).toBe(true);

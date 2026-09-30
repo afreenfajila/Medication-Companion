@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { t } from "@/lib/content/translations";
 import { actionsForOffer, isSafeCompanionReply, isUnderstandKey } from "./understand-guard";
 

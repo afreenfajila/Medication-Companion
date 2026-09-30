@@ -461,3 +461,14 @@ CLAUDE.md as an approved contract change. Implemented A–G in order, one commit
   blame-word check, so a future copy edit can't reintroduce "must" unnoticed.
 - **"Take a look" is allowed.** The advice pattern (`take … medicine`) would otherwise reject "let's take
   a look at the medicine label", a natural phrase that gives no instruction.
+
+## B. Gentler label-failure copy
+
+- **Words only.** The one-retry mechanism was already right, so the state machine is untouched; only
+  `buildEscalation`'s heading/body keys change for the four label reasons.
+- **`service-failure` keeps the old copy on purpose.** It shares the "try another photo" action with the
+  label reasons, but it means the reader didn't answer, not that the label looked wrong, and the spec
+  keeps it as is.
+- **Known rough edge.** After the single retry is used, the gentle body still asks "would you like to try
+  another photo", while the card shows `retryUsed` and no photo button. The spec fixes the body text, so
+  this is left as specified; a retry-used variant of the body would fix it.
