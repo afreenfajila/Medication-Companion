@@ -3,6 +3,7 @@
 import { Phone } from "lucide-react";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/buttons";
 import { LanguageControl } from "@/components/ui/language-control";
+import { RecordSourceLine } from "@/components/ui/record-card";
 import type { UiLanguage } from "@/types/content";
 import { TypedInput } from "./listening-screen";
 import type { T } from "./screen-chrome";
@@ -21,12 +22,18 @@ export function ExplainScreen({
   step,
   recordConflict = false,
   onConflictChoice,
+  sourceLine,
+  onLabelCheck,
   onLanguageChange,
   onSend,
 }: {
   t: T;
   language: UiLanguage;
   step: 0 | 1 | 2;
+  /** "BrightCare Pharmacy — demo record · checked <date>", filled from the record. */
+  sourceLine?: string;
+  /** Answer to "Does this match what's printed on your label?" (step 1). */
+  onLabelCheck?: (matches: boolean) => void;
   /** The person disputed the record: offer pharmacist help or carrying on. */
   recordConflict?: boolean;
   onConflictChoice?: (choice: "pharmacist" | "carry-on") => void;
@@ -41,6 +48,20 @@ export function ExplainScreen({
             {t("checkWithPharmacist")}
           </PrimaryButton>
           <SecondaryButton onClick={() => onConflictChoice("carry-on")}>{t("carryOn")}</SecondaryButton>
+        </div>
+      )}
+      {step === 1 && !recordConflict && onLabelCheck && (
+        <div role="group" aria-label={t("labelCheckPrompt")} className="flex flex-col gap-2">
+          {sourceLine && <RecordSourceLine>{sourceLine}</RecordSourceLine>}
+          <p className="text-lg font-bold leading-snug">{t("labelCheckPrompt")}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <PrimaryButton compact onClick={() => onLabelCheck(true)}>
+              {t("labelMatches")}
+            </PrimaryButton>
+            <SecondaryButton compact onClick={() => onLabelCheck(false)}>
+              {t("labelLooksDifferent")}
+            </SecondaryButton>
+          </div>
         </div>
       )}
       <LanguageControl

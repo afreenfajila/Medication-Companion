@@ -602,3 +602,18 @@ The reply is fixed copy. `{instruction}` and `{verifiedDate}` are filled by `fil
 | `unclearRecordConflict` | I didn't quite catch that. You can say "pharmacist" for help checking, or "carry on". | 我没太听清楚。您可以说「药剂师」请人帮忙确认，或说「继续」。 |
 
 Audit event `record-conflict-raised` (details: `{ intent: "record-conflict" }` only, never the words).
+
+### D. Label check on the explanation
+
+Beside the instruction (explanation step 1) the companion shows where the record comes from and when it was checked, and asks the person to compare it with the physical label. `{verifiedDate}` is filled from `recordSource.verifiedAt`.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `recordCheckedOn` | BrightCare Pharmacy — demo record · checked {verifiedDate} | BrightCare Pharmacy — 示范记录 · {verifiedDate}核对 |
+| `labelCheckPrompt` | Does this match what's printed on your label? | 这和您标签上印的一样吗？ |
+| `labelMatches` | Yes, it matches | 是的，一样 |
+| `labelLooksDifferent` | It looks different | 看起来不一样 |
+| `labelDiffers` | Thank you for checking — that's really helpful. When the label and the record don't agree, a pharmacist is the best person to look. Would you like help contacting them? | 谢谢您仔细核对，这很有帮助。标签和记录不一样的时候，最好请药剂师看一看。需要我帮您联系他们吗？ |
+| `unclearLabelCheck` | I didn't quite catch that. Does this match your label? You can say "yes, it matches" or "it looks different". | 我没太听清楚。这和您的标签一样吗？您可以说「一样」或「不一样」。 |
+
+New safety reason `label-differs` (heading `labelSafetyHeading`, body `labelDiffers`, no reason line, no photo retry). New audit event `label-check-answered` (details: `{ matches }`).

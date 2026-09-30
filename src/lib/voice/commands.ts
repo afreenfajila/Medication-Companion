@@ -65,7 +65,9 @@ const BACK = /\b(back|previous|go back)\b|上一步|返回/;
 const UNDERSTOOD = /\b(i understand|understood|got it|thank(s| you)|that's all|makes sense|all clear)\b|明白|谢谢|懂了/;
 const TRY_AGAIN = /\b((try|another|new).*(photo|picture|again|label)|again)\b|再拍|再试/;
 const BACK_TO_CALL = /\b(back to (the )?(conversation|call)|carry on|continue (the )?(call|conversation)|talk (to you )?more)\b|回到对话/;
-const PHARMACIST = /\b(pharmacist|pharmacy|check with)\b|药剂师|药房/;
+const DIFFERENT = /\b(different|differs|doesn't match|does not match|don't match)\b|不一样|不同|不符/;
+const MATCHES = /\b(it matches|matches|same|the same)\b|一样|相同/;
+const PHARMACIST =/\b(pharmacist|pharmacy|check with)\b|药剂师|药房/;
 const ANOTHER_MEDICINE = /\b(another|other|new|different|next)( medicine| one)?\b|另一种|另一个/;
 
 /** A bare yes/no is only trusted in a short utterance ("ok what is this for" is a question). */
@@ -182,6 +184,15 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
       }
       // "My doctor said…" goes to the reducer, which answers from the record.
       if (isRecordConflict(raw)) return { kind: "message", text: raw };
+      // Beside the instruction: "Does this match what's printed on your label?"
+      if (ctx.explainStep === 1) {
+        if (DIFFERENT.test(n) || (negative && !affirm && isShort(n))) {
+          return { kind: "event", event: { type: "LABEL_CHECK", matches: false } };
+        }
+        if (MATCHES.test(n) || (affirm && !negative && !hedge && isShort(n))) {
+          return { kind: "event", event: { type: "LABEL_CHECK", matches: true } };
+        }
+      }
       if (BACK.test(n) && ctx.explainStep > 0) return { kind: "event", event: { type: "EXPLAIN_STEP", direction: "back" } };
       if (ctx.explainStep === 2) {
         if (UNDERSTOOD.test(n) || (affirm && !negative && isShort(n))) return { kind: "event", event: { type: "UNDERSTOOD" } };

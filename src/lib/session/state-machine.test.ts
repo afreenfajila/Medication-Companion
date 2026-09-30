@@ -457,6 +457,31 @@ describe("record conflict (“my doctor said…”)", () => {
   });
 });
 
+describe("label check beside the instruction", () => {
+  const atInstruction = () => run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain());
+
+  it("'Yes, it matches' moves on and is audited", () => {
+    const s = run([{ type: "LABEL_CHECK", matches: true }], atInstruction());
+    expect(s.state).toBe("explain");
+    expect(s.explainStep).toBe(2);
+    expect(s.audit.at(-1)).toMatchObject({ eventType: "label-check-answered", details: { matches: true } });
+  });
+
+  it("'It looks different' reaches safety, drops the record, and offers human help only", () => {
+    const s = run([{ type: "LABEL_CHECK", matches: false }], atInstruction());
+    expect(s.state).toBe("safety");
+    expect(s.safetyReason).toBe("label-differs");
+    expect(s.candidate).toBeNull();
+    expect(resolveExplanation(s, "en")).toBeNull();
+    expect(s.audit.map((e) => e.eventType)).toContain("label-check-answered");
+  });
+
+  it("is only asked beside the instruction", () => {
+    expect(blocked([{ type: "LABEL_CHECK", matches: false }], toExplain())).toBe(true); // step 0
+    expect(blocked([{ type: "LABEL_CHECK", matches: false }], toConfirmMatch())).toBe(true);
+  });
+});
+
 describe("URL cannot bypass state guards", () => {
   it("a requested state that is not the session's authoritative state is redirected", () => {
     const fresh = createInitialSession();

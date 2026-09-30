@@ -4,6 +4,7 @@ import { t as translate } from "@/lib/content/translations";
 import { createFakeSpeech } from "@/test/fake-speech";
 import { toConfirmMatch, toExplain, run, startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo, resolve } from "@/test/helpers";
 import { BrowserVoiceProvider, pickVoice } from "./browser-voice";
+import { interpretUtterance } from "./commands";
 import { VoiceError } from "./provider";
 import { speakableText } from "./speakable";
 
@@ -291,5 +292,42 @@ describe("speakableText — spoken output is approved wording only, and gated", 
   it("listening speaks the current approved companion message", () => {
     const s = run([startCall, askUnknown]);
     expect(speakableText(s, t, null)).toBe("Let’s check this together. Would you like to show me the medicine label?");
+  });
+});
+
+describe("interpretUtterance — explanation answers", () => {
+  const explainCtx = (over: Partial<Parameters<typeof interpretUtterance>[1]> = {}) => ({
+    state: "explain" as const,
+    contextualActions: [],
+    candidateId: "cand_med_metformin_500_demo",
+    explainStep: 1 as const,
+    cameraLive: false,
+    pendingSpokenMedicineName: null,
+    ...over,
+  });
+
+  it.each([
+    ["It looks different", false],
+    ["no", false],
+    ["不一样", false],
+    ["yes it matches", true],
+    ["yes", true],
+    ["一样", true],
+  ] as const)("beside the instruction, %j answers the label check (matches: %s)", (text, matches) => {
+    expect(interpretUtterance(text, explainCtx())).toEqual({ kind: "event", event: { type: "LABEL_CHECK", matches } });
+  });
+
+  it("a dispute goes to the reducer as a message; then pharmacist / carry on answer it and a bare yes re-asks", () => {
+    expect(interpretUtterance("My doctor said to take it at night", explainCtx()).kind).toBe("message");
+    const raised = explainCtx({ recordConflict: true });
+    expect(interpretUtterance("the pharmacist please", raised)).toEqual({
+      kind: "event",
+      event: { type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" },
+    });
+    expect(interpretUtterance("carry on", raised)).toEqual({
+      kind: "event",
+      event: { type: "RECORD_CONFLICT_CHOICE", choice: "carry-on" },
+    });
+    expect(interpretUtterance("yes", raised)).toEqual({ kind: "unclear" });
   });
 });

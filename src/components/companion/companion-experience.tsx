@@ -10,7 +10,7 @@ import {
   understandCapabilityResponseSchema,
   understandResponseSchema,
 } from "@/lib/api/schemas";
-import { resolveExplanation, withRephrasedFlavor } from "@/lib/content/explanation";
+import { fillRecordFacts, resolveExplanation, withRephrasedFlavor } from "@/lib/content/explanation";
 import { isConversationalRephraseKey, type RephraseFieldSet } from "@/lib/content/rephrase-guard";
 import { isUnderstandKey } from "@/lib/content/understand-guard";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
@@ -472,6 +472,8 @@ export function CompanionExperience() {
           step={session.explainStep}
           recordConflict={session.recordConflict}
           onConflictChoice={(choice) => dispatch({ type: "RECORD_CONFLICT_CHOICE", choice })}
+          sourceLine={fillRecordFacts(t("recordCheckedOn"), displayedExplanation, language)}
+          onLabelCheck={(matches) => dispatch({ type: "LABEL_CHECK", matches })}
           onLanguageChange={(l) => dispatch({ type: "SET_LANGUAGE", language: l })}
           onSend={conversation.submitText}
         />

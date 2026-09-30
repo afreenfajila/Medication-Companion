@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sessionStore } from "@/lib/session/session-store";
+import { run, toExplain } from "@/test/helpers";
 import { CompanionExperience } from "./companion-experience";
 
 const FORBIDDEN_ON_HOME = [
@@ -163,6 +164,20 @@ describe("in-call flow", () => {
     expect(screen.getByText("随餐每日服用一片，每日两次。")).toBeInTheDocument();
     // Language change did not reset the confirmation.
     expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("beside the instruction: shows the dated source and asks to compare with the label; 'It looks different' reaches safety", () => {
+    sessionStore.setForTest(run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain()));
+    render(<CompanionExperience />);
+    expect(screen.getByText("Take 1 tablet twice daily with meals.")).toBeInTheDocument();
+    expect(screen.getByText("BrightCare Pharmacy — demo record · checked 21 September 2026")).toBeInTheDocument();
+    const check = screen.getByRole("group", { name: "Does this match what’s printed on your label?" });
+    expect(within(check).getByRole("button", { name: "Yes, it matches" })).toBeInTheDocument();
+
+    fireEvent.click(within(check).getByRole("button", { name: "It looks different" }));
+    expect(screen.getByText(/When the label and the record don’t agree, a pharmacist is the best person to look/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check with pharmacy — demo" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try another photo" })).toBeNull();
   });
 
   it("typed-label fallback: a mismatching strength blocks instructions and offers demo-labelled human help", async () => {

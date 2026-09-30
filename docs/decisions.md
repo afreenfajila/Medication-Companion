@@ -488,3 +488,17 @@ CLAUDE.md as an approved contract change. Implemented A–G in order, one commit
 - **Speech guard.** Copy with placeholders is now approved fragment by fragment for Gemini voice, with
   the record fields and the formatted verified date approved separately. Without this, the filled line
   would fail the guard and drop to browser speech.
+
+## D. Label check on the explanation
+
+- **Asked at step 1, where the instruction is.** That's the only point where comparing with the label
+  means anything. The source line with its verified date sits in the pinned area above the two answers,
+  and speech reads it before the question.
+- **A prompt, not a gate.** "Next" still moves on. Making the check mandatory would add a step to every
+  happy path; the aim is to invite a comparison, and the audit event records whether it happened (a
+  signal for study mode, G).
+- **"It looks different" drops the confirmed candidate.** Once the person says the label and record
+  disagree, the record is no longer trusted for that medicine, so a later schedule question can't slip
+  back into the explanation. They can check another label from the conversation.
+- **`RecordCard` is unchanged.** It is deliberately identity-only (it has no field that can hold an
+  instruction), so the dated source line is a separate `RecordSourceLine` in the same file.

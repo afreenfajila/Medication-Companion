@@ -201,6 +201,16 @@ const en = {
     "Thank you for telling me — it’s good to double-check. Your pharmacy record, checked on {verifiedDate}, says: “{instruction}” Sometimes a doctor changes things and the record takes a little while to catch up, so it’s no trouble to ask. Would you like help checking with the pharmacist, or shall we carry on for now?",
   checkWithPharmacist: "Check with pharmacist — demo",
   carryOn: "Carry on",
+  // Comparing the record with the physical label: a wrong answer nobody questions
+  // is the most dangerous failure, so the explanation asks.
+  recordCheckedOn: "BrightCare Pharmacy — demo record · checked {verifiedDate}",
+  labelCheckPrompt: "Does this match what’s printed on your label?",
+  labelMatches: "Yes, it matches",
+  labelLooksDifferent: "It looks different",
+  labelDiffers:
+    "Thank you for checking — that’s really helpful. When the label and the record don’t agree, a pharmacist is the best person to look. Would you like help contacting them?",
+  unclearLabelCheck:
+    "I didn’t quite catch that. Does this match your label? You can say “yes, it matches” or “it looks different”.",
   languageControlLabel: "Explanation language",
   languageEnglish: "English",
   languageChinese: "中文",
@@ -421,6 +431,13 @@ const zhHans: Copy = {
     "谢谢您告诉我，多确认一下是很好的。您的药房记录（{verifiedDate}确认）写着：“{instruction}” 有时候医生会调整用药，记录可能还没来得及更新，所以问一问完全没关系。您想让我帮您联系药剂师确认一下，还是我们先继续？",
   checkWithPharmacist: "向药剂师确认 — 示范",
   carryOn: "先继续",
+  recordCheckedOn: "BrightCare Pharmacy — 示范记录 · {verifiedDate}核对",
+  labelCheckPrompt: "这和您标签上印的一样吗？",
+  labelMatches: "是的，一样",
+  labelLooksDifferent: "看起来不一样",
+  labelDiffers:
+    "谢谢您仔细核对，这很有帮助。标签和记录不一样的时候，最好请药剂师看一看。需要我帮您联系他们吗？",
+  unclearLabelCheck: "我没太听清楚。这和您的标签一样吗？您可以说「一样」或「不一样」。",
   languageControlLabel: "说明语言",
   languageEnglish: "English",
   languageChinese: "中文",

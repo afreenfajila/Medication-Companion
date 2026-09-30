@@ -36,6 +36,7 @@ const REASON_LINE: Record<SafetyReason, CopyKey | null> = {
   "urgent-risk": null,
   "service-failure": "reasonService",
   "help-requested": "reasonHelp",
+  "label-differs": null, // `labelDiffers` says it all
 };
 
 // Non-urgent label outcomes get gentler, no-fault wording (CLAUDE.md § Assignment 3, B):
@@ -92,12 +93,12 @@ export function buildEscalation(
     { id: "clinic-demo", labelKey: "contactClinic", implemented: false },
   );
 
-  const gentle = GENTLE_LABEL_REASONS.includes(reason);
+  const gentle = GENTLE_LABEL_REASONS.includes(reason) || reason === "label-differs";
   return {
     urgent: false,
     labelKey: "safetyLabel",
     headingKey: gentle ? "labelSafetyHeading" : "safetyHeading",
-    bodyKey: gentle ? "labelSafetyBody" : "safetyBody",
+    bodyKey: reason === "label-differs" ? "labelDiffers" : gentle ? "labelSafetyBody" : "safetyBody",
     reasonKey: REASON_LINE[reason],
     retryUsedKey: labelProblem && !canRetry ? "retryUsed" : null,
     actions,

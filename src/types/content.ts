@@ -24,7 +24,8 @@ export type SafetyReason =
   | "adverse-effect-question"
   | "urgent-risk"
   | "service-failure"
-  | "help-requested"; // extension: explicit "Get help" / human-help request
+  | "help-requested" // extension: explicit "Get help" / human-help request
+  | "label-differs"; // extension: the person says their label doesn't match the explained record
 
 export type CompanionState =
   | "start"
@@ -200,6 +201,7 @@ export type AuditEventType =
   | "explanation-viewed"
   | "understanding-confirmed" // extension
   | "record-conflict-raised" // extension: intent only, never the words
+  | "label-check-answered" // extension: "Does this match your label?" → matches / differs
   | "language-changed"
   | "help-requested"
   | "urgent-safety-triggered"

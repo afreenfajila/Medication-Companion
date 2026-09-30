@@ -634,3 +634,8 @@ See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 
 - Moving a step, `UNDERSTOOD`, `NEW_MEDICINE` and any safety entry clear the flag.
 - Voice/typed: in `explain`, a dispute is sent as a message; while the flag is set, "pharmacist" or "carry on / next" answers it, and a bare "yes" re-asks.
 - No model is called: the understanding pass and rephrase only run in `listening`.
+
+### D. Label check on the explanation
+
+- `LABEL_CHECK { matches }`, valid only in `explain` at step 1 with a confirmed match and no open record conflict. `matches: true` → step 2. `matches: false` → `safety` (`label-differs`), candidate and match status cleared, so the explanation is unreachable until a new label is confirmed.
+- Voice/typed at step 1: "different / doesn't match / 不一样" or a short "no" → differs; "matches / same / 一样" or a short "yes" → matches; "next" still moves on without answering.

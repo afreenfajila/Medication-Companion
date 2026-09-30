@@ -47,6 +47,7 @@ const UNCLEAR_GUIDANCE: Partial<Record<Session["state"], CopyKey>> = {
 export function unclearGuidanceKey(session: Pick<Session, "state" | "explainStep"> & { recordConflict?: boolean }): CopyKey {
   if (session.state === "explain") {
     if (session.recordConflict) return "unclearRecordConflict";
+    if (session.explainStep === 1) return "unclearLabelCheck";
     return session.explainStep === 2 ? "unclearExplainLast" : "unclearExplain";
   }
   return UNCLEAR_GUIDANCE[session.state] ?? "voiceDidntCatch";

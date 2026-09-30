@@ -92,6 +92,8 @@ export type SessionEvent =
     }
   | { type: "EXPLAIN_STEP"; direction: "next" | "back" }
   | { type: "RECORD_CONFLICT_CHOICE"; choice: "pharmacist" | "carry-on" }
+  /** "Does this match what's printed on your label?", asked beside the instruction. */
+  | { type: "LABEL_CHECK"; matches: boolean }
   | { type: "UNDERSTOOD" }
   | { type: "NEW_MEDICINE" }
   | { type: "GET_HELP" }
@@ -676,6 +678,20 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       if (s.state !== "explain" || !s.recordConflict || !isMatchConfirmed(s)) return s;
       if (event.choice === "carry-on") return { ...s, recordConflict: false };
       return enterSafety(s, ctx, "help-requested", {}, { from: "record-conflict" });
+    }
+
+    case "LABEL_CHECK": {
+      // Asked beside the instruction (step 1), the only step that shows it.
+      if (s.state !== "explain" || s.explainStep !== 1 || s.recordConflict || !isMatchConfirmed(s)) return s;
+      const answered = withAudit(s, ctx, {
+        eventType: "label-check-answered",
+        summary: event.matches ? "Person said the label matches the record" : "Person said the label looks different",
+        validationStatus: event.matches ? "passed" : "blocked",
+        details: { matches: event.matches },
+      });
+      if (event.matches) return { ...answered, explainStep: 2 };
+      // A label that disagrees with the record: the record isn't trusted for this medicine any more.
+      return enterSafety(answered, ctx, "label-differs", { candidate: null, matchStatus: null });
     }
 
     case "UNDERSTOOD": {

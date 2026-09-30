@@ -63,7 +63,14 @@ export function speakableText(
       if (session.recordConflict) return fillRecordFacts(t("recordConflict"), explanation, session.language);
       const e = explanation.explanation;
       if (session.explainStep === 0) return join(e.title, e.purpose, e.sourceLine);
-      if (session.explainStep === 1) return join(e.instructionIntro, e.instruction, e.sourceLine);
+      if (session.explainStep === 1) {
+        return join(
+          e.instructionIntro,
+          e.instruction,
+          fillRecordFacts(t("recordCheckedOn"), explanation, session.language) + ".",
+          t("labelCheckPrompt"),
+        );
+      }
       return join(e.caution, e.confirmationPrompt);
     }
     case "safety": {
