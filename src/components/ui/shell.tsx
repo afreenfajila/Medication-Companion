@@ -28,12 +28,14 @@ export function AppShell({
 /**
  * Phone-shaped shell on desktop (≈430px, 852px tall), a native full-height
  * layout on small screens. Horizontal padding is ≥24px, applied by `ScreenBody`.
+ * Exactly the screen's height on phones too (not min-height), so a long call
+ * scrolls inside `ScreenBody` and the call controls never scroll away.
  */
 export function PhoneShell({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div
       className={cn(
-        "relative mx-auto flex min-h-dvh w-full max-w-[430px] flex-col bg-canvas",
+        "relative mx-auto flex h-dvh w-full max-w-[430px] flex-col bg-canvas",
         "md:h-[852px] md:min-h-0 md:max-h-[calc(100dvh-3rem)] md:overflow-hidden md:rounded-[44px] md:border-[10px] md:border-navy-900 md:shadow-[0_24px_60px_rgb(23_50_77/0.25)]",
         className,
       )}

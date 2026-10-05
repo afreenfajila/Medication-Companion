@@ -33,7 +33,7 @@ describe("classifyOffTopic", () => {
     }
   });
 
-  it("recognises requests to act in the world that this demo cannot perform", () => {
+  it("recognises requests to act in the world that the companion cannot perform itself", () => {
     for (const text of [
       "Can you call my daughter?",
       "Book me an appointment",
@@ -74,7 +74,7 @@ describe("spine redirection inside routeMessage", () => {
     const r = routeMessage("Can you call my daughter?", none);
     expect(r.assistantKey).toBe("offTopicCapability");
     const copy = t("en", "offTopicCapability");
-    expect(copy).toMatch(/can’t do that in this demo/i);
+    expect(copy).toMatch(/can’t do that myself/i);
     expect(copy).toMatch(/Get help/);
   });
 

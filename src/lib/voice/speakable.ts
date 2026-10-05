@@ -1,5 +1,7 @@
-import type { ExplanationView } from "@/lib/content/explanation";
+import { fillCandidate, fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
 import type { CopyKey } from "@/lib/content/translations";
+import { helpLine } from "@/lib/content/help-lines";
+import { mentionsSelfHarm } from "@/lib/safety/classify";
 import { buildEscalation } from "@/lib/safety/escalation";
 import { MAX_LABEL_RETRIES, type Session } from "@/lib/session/state-machine";
 
@@ -21,6 +23,11 @@ export function speakableText(
     | "candidate"
     | "cameraMode"
     | "labelRetries"
+    | "recordConflict"
+    | "language"
+    | "userText"
+    | "helpFlow"
+    | "showMethod"
   >,
   t: (key: CopyKey) => string,
   explanation: ExplanationView | null,
@@ -38,29 +45,39 @@ export function speakableText(
   const join = (...parts: Array<string | null | undefined>) =>
     parts.filter((p): p is string => Boolean(p)).join(" ");
 
+  // A help request sits on top of whichever step asked it.
+  if (session.helpFlow) return helpLine(t, session.helpFlow);
+
   switch (session.state) {
     case "listening":
       return listeningOverride !== undefined ? listeningOverride : t(session.assistantKey);
     case "camera-permission":
-      return join(t("cameraPermissionHeading"), t("cameraPermissionBody"));
+      // The photo note is said first, before any picker opens (H2).
+      return session.showMethod === "choose"
+        ? join(t("showMedicineHeading"), t("photoIntro"))
+        : join(t("cameraPermissionHeading"), t("cameraPermissionBody"));
     case "camera-guidance":
       return session.cameraMode === "preview"
         ? t("cameraGuidanceHeading")
         : t("fallbackHeading");
     case "analyzing":
-      return t("analyzingHeading");
+      return join(t("analyzingHeading"), t("analyzingBody"));
     case "confirm-match":
-      return join(
-        t("possibleMatch") + ".",
-        t("confirmHeading"),
-        session.candidate?.medicineName ? session.candidate.medicineName + "." : null,
-        t("checkName"),
-      );
+      if (!session.candidate) return null;
+      return join(fillCandidate(t("confirmHeading"), session.candidate), t("checkName"));
     case "explain": {
       if (!explanation) return null; // gate: no confirmed match → nothing medical is spoken
+      if (session.recordConflict) return fillRecordFacts(t("recordConflict"), explanation, session.language);
       const e = explanation.explanation;
       if (session.explainStep === 0) return join(e.title, e.purpose, e.sourceLine);
-      if (session.explainStep === 1) return join(e.instructionIntro, e.instruction, e.sourceLine);
+      if (session.explainStep === 1) {
+        return join(
+          e.instructionIntro,
+          e.instruction,
+          fillRecordFacts(t("recordCheckedOn"), explanation, session.language) + ".",
+          t("labelCheckPrompt"),
+        );
+      }
       return join(e.caution, e.confirmationPrompt);
     }
     case "safety": {
@@ -68,12 +85,14 @@ export function speakableText(
         session.safetyReason ?? "help-requested",
         session.labelRouteSelected,
         session.labelRetries < MAX_LABEL_RETRIES,
+        mentionsSelfHarm(session.userText),
       );
       return join(
         t(view.headingKey),
         view.reasonKey ? t(view.reasonKey) : null,
         view.retryUsedKey ? t(view.retryUsedKey) : null,
         t(view.bodyKey),
+        view.crisisKey ? t(view.crisisKey) : null,
       );
     }
     case "complete":

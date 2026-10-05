@@ -1,6 +1,6 @@
 import type { ClaudeLabelExtraction } from "@/lib/ai/schemas";
 import type { LabelAnalysis } from "@/lib/api/schemas";
-import { metforminRecord, recordSource } from "@/lib/content/demo-record";
+import { metforminRecord, recordSource } from "@/lib/content/seed-record";
 import { candidateDisplayFor, matchLabel } from "@/lib/matching/match-record";
 
 const MSG_CANDIDATE = "I found a possible match. Please check the name on the label.";

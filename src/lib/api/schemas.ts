@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { CONVERSATIONAL_REPHRASE_KEYS } from "@/lib/content/rephrase-guard";
 import { UNDERSTAND_KEYS } from "@/lib/content/understand-guard";
+import { HELP_REASONS } from "@/lib/services/reasons";
 
 // Shared request/response contracts (site-contract.md §8). Used by the route
 // to build responses and by the client to validate what it receives.
@@ -40,7 +40,7 @@ export const labelAnalysisSchema = z.object({
       medicineName: z.string(),
       strength: z.string(),
       dosageForm: z.string(),
-      sourceLabel: z.literal("BrightCare Pharmacy — demo record"),
+      sourceLabel: z.literal("BrightCare Pharmacy"),
       matchStatus: z.literal("possible"),
     })
     .optional(),
@@ -62,29 +62,25 @@ export const labelAnalyzeFieldsSchema = z.object({
   inputMode: z.literal("image"),
 });
 
-export const rephraseRequestSchema = z.object({
+/**
+ * Help requests (CLAUDE.md § H4): a pharmacist callback or a care-circle
+ * notification, through the simulated services. "Sent" may only be shown
+ * after this returns `ok`.
+ */
+export const HELP_KINDS = ["pharmacist-callback", "family", "trusted-helper"] as const;
+export const helpRequestSchema = z.object({
   sessionId: z.string().min(1).max(64),
+  kind: z.enum(HELP_KINDS),
+  reason: z.enum(HELP_REASONS),
 });
-
-const rephraseFieldSetSchema = z.object({
-  title: z.string(),
-  purpose: z.string(),
-  instructionIntro: z.string(),
-  caution: z.string(),
-  confirmationPrompt: z.string(),
+export const helpResultSchema = z.object({
+  kind: z.enum(HELP_KINDS),
+  reference: z.string().optional(),
+  expectedWindow: z.string().optional(),
+  contactName: z.string().optional(),
 });
-
-/** Always `ok`: worst case is `source: "fallback"` with the exact approved text. */
-export const rephraseResponseDataSchema = z.object({
-  fields: rephraseFieldSetSchema,
-  source: z.enum(["claude", "fallback"]),
-});
-export type RephraseResponseData = z.infer<typeof rephraseResponseDataSchema>;
-
-export const rephraseResponseSchema = z.discriminatedUnion("ok", [
-  apiSuccessSchema(rephraseResponseDataSchema),
-  apiFailureSchema,
-]);
+export type HelpResult = z.infer<typeof helpResultSchema>;
+export const helpResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(helpResultSchema), apiFailureSchema]);
 
 /**
  * Speech output: renders already-approved text to audio (never generates
@@ -95,26 +91,6 @@ export const speakRequestSchema = z.object({
   text: z.string().min(1).max(600),
   language: z.enum(["en", "zh-Hans"]),
 });
-
-/**
- * In-call conversational rephrase: the client names WHICH approved line it
- * wants naturalised (never sends its own text) — the server looks up the
- * canonical English copy itself, so a client can't smuggle arbitrary text
- * through as if it were already-approved. English only, same as the
- * explanation rephrase (Chinese already has reviewed static translations).
- */
-export const replyRephraseRequestSchema = z.object({
-  key: z.enum(CONVERSATIONAL_REPHRASE_KEYS),
-});
-export const replyRephraseResponseDataSchema = z.object({
-  text: z.string(),
-  source: z.enum(["claude", "fallback"]),
-});
-export type ReplyRephraseResponseData = z.infer<typeof replyRephraseResponseDataSchema>;
-export const replyRephraseResponseSchema = z.discriminatedUnion("ok", [
-  apiSuccessSchema(replyRephraseResponseDataSchema),
-  apiFailureSchema,
-]);
 
 /**
  * In-call understanding (Claude task 3): the person's own message plus a short
@@ -135,6 +111,8 @@ export const understandRequestSchema = z.object({
   /** Whether the deterministic reply is itself a "did you mean…?" name check. */
   checkingMedicineName: z.boolean().default(false),
   history: z.array(understandTurnSchema).max(8).default([]),
+  /** Typed is exactly what she wrote; spoken came through speech recognition. */
+  via: z.enum(["typed", "voice"]).default("voice"),
 });
 export const understandResponseDataSchema = z.object({
   text: z.string(),

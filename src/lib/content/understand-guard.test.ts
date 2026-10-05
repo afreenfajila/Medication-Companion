@@ -1,6 +1,33 @@
 import { describe, expect, it } from "vitest";
 import { t } from "@/lib/content/translations";
-import { actionsForOffer, isSafeCompanionReply, isUnderstandKey } from "./understand-guard";
+import { actionsForOffer, claimsMishearing, introducesUnsafeLanguage, isSafeCompanionReply, isUnderstandKey } from "./understand-guard";
+
+describe("claimsMishearing — untrue for a typed message", () => {
+  it.each([
+    "That part didn't come through clearly to me.",
+    "Sorry, I didn't quite catch that.",
+    "I couldn't hear the name.",
+    "Could you say that again?",
+    "我没听清楚。",
+  ])("flags %j", (reply) => expect(claimsMishearing(reply)).toBe(true));
+
+  it("does not flag guidance", () => {
+    expect(
+      claimsMishearing("Good question. To tell you what it's for, let's first check which medicine you're holding. Would you like to show me the label?"),
+    ).toBe(false);
+  });
+});
+
+describe("introducesUnsafeLanguage", () => {
+  it("flags phrasing that resembles unsupported medical advice", () => {
+    expect(introducesUnsafeLanguage("You should stop taking this if you feel unwell.")).toBe(true);
+    expect(introducesUnsafeLanguage("This may cause a side effect.")).toBe(true);
+  });
+  it("does not flag the ordinary approved wording", () => {
+    expect(introducesUnsafeLanguage("Metformin helps manage blood sugar.")).toBe(false);
+    expect(introducesUnsafeLanguage("I can explain this record, but I cannot change your medicine instructions.")).toBe(false);
+  });
+});
 
 describe("isSafeCompanionReply — what a model-written reply may never carry", () => {
   it("accepts a natural, information-free reply", () => {
@@ -43,6 +70,28 @@ describe("isSafeCompanionReply — what a model-written reply may never carry", 
     ]) {
       expect(isSafeCompanionReply(reply)).toBe(false);
     }
+  });
+
+  it("rejects blaming words and instructions (companion tone rules)", () => {
+    for (const reply of [
+      "Sorry, that was the wrong label. Shall we try again?",
+      "You should show me the label, okay?",
+      "You need to check with your doctor, alright?",
+      "Let's skip the medicine today, shall we?",
+      "我们必须再试一次，好吗？",
+      "您今天可以不要吃，好吗？",
+    ]) {
+      expect(isSafeCompanionReply(reply)).toBe(false);
+    }
+    expect(isSafeCompanionReply("Let's take a look at the medicine label together, shall we?")).toBe(true);
+  });
+
+  it("with a language, requires that language and a closing question", () => {
+    expect(isSafeCompanionReply("没关系，标签没看清楚。我们再试一次好吗？", "zh-Hans")).toBe(true);
+    expect(isSafeCompanionReply("Thank you. Shall we try that again?", "en")).toBe(true);
+    expect(isSafeCompanionReply("Thank you. Shall we try that again?", "zh-Hans")).toBe(false);
+    expect(isSafeCompanionReply("我们再试一次好吗？", "en")).toBe(false);
+    expect(isSafeCompanionReply("Thank you, let's try once more.", "en")).toBe(false);
   });
 
   it("rejects markup, links, empty and over-long replies", () => {

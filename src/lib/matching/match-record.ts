@@ -1,5 +1,5 @@
 import { extractionForDemoAsset } from "@/lib/content/fixtures";
-import { metforminRecord, patient, recordSource } from "@/lib/content/demo-record";
+import { metforminRecord, patient, recordSource } from "@/lib/content/seed-record";
 import type {
   CandidateDisplay,
   ExtractedIdentity,

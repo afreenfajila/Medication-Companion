@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { resolveExplanation } from "@/lib/content/explanation";
 import { t as translate } from "@/lib/content/translations";
 import { createFakeSpeech } from "@/test/fake-speech";
-import { toConfirmMatch, toExplain, run, startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo, resolve } from "@/test/helpers";
+import { toConfirmMatch, toExplain, run, startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo, resolve } from "@/test/helpers";
 import { BrowserVoiceProvider, pickVoice } from "./browser-voice";
+import { interpretUtterance } from "./commands";
 import { VoiceError } from "./provider";
 import { speakableText } from "./speakable";
 
@@ -90,7 +91,11 @@ describe("BrowserVoiceProvider", () => {
     rec.say("what is", false);
     rec.say("What is this for?", true);
     expect(interim).toHaveBeenCalledWith("what is");
-    expect(final).toHaveBeenCalledWith("What is this for?");
+    expect(final).toHaveBeenCalledWith("What is this for?", undefined); // no confidence reported
+
+    p.startListening("en");
+    fake.recognitions.at(-1)!.say("met for pain", true, 0.31);
+    expect(final).toHaveBeenLastCalledWith("met for pain", 0.31);
 
     rec.stop();
     expect(listening).toHaveBeenLastCalledWith(false);
@@ -253,7 +258,7 @@ describe("speakableText — spoken output is approved wording only, and gated", 
     const pending = toConfirmMatch();
     const said = speakableText(pending, t, resolveExplanation(pending, "en"))!;
     expect(said).toContain("possible match");
-    expect(said).toContain("Metformin 500 mg"); // identity only
+    expect(said).toContain("Metformin, 500 mg"); // identity only
     expect(said).not.toMatch(/blood sugar|Take 1 tablet|twice daily|meals/i);
   });
 
@@ -275,9 +280,9 @@ describe("speakableText — spoken output is approved wording only, and gated", 
   });
 
   it("safety states speak the limitation and human help, never instructions", () => {
-    const blocked = run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo("sample_mismatch_label"), resolve]);
+    const blocked = run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo("sample_mismatch_label"), resolve]);
     const said = speakableText(blocked, t, resolveExplanation(blocked, "en"))!;
-    expect(said).toContain("I’m not sure enough to explain this safely.");
+    expect(said).toContain("Let’s check this one together.");
     expect(said).not.toMatch(/Take 1 tablet|twice daily|blood sugar/i);
 
     const urgent = run([startCall, { type: "USER_MESSAGE", text: "I have chest pain" }]);
@@ -291,5 +296,71 @@ describe("speakableText — spoken output is approved wording only, and gated", 
   it("listening speaks the current approved companion message", () => {
     const s = run([startCall, askUnknown]);
     expect(speakableText(s, t, null)).toBe("Let’s check this together. Would you like to show me the medicine label?");
+  });
+});
+
+describe("interpretUtterance — explanation answers", () => {
+  const explainCtx = (over: Partial<Parameters<typeof interpretUtterance>[1]> = {}) => ({
+    state: "explain" as const,
+    contextualActions: [],
+    candidateId: "cand_med_metformin_500_demo",
+    explainStep: 1 as const,
+    cameraLive: false,
+    pendingSpokenMedicineName: null,
+    ...over,
+  });
+
+  it.each([
+    ["It looks different", false],
+    ["no", false],
+    ["不一样", false],
+    ["yes it matches", true],
+    ["yes", true],
+    ["一样", true],
+  ] as const)("beside the instruction, %j answers the label check (matches: %s)", (text, matches) => {
+    expect(interpretUtterance(text, explainCtx())).toEqual({ kind: "event", event: { type: "LABEL_CHECK", matches } });
+  });
+
+  it("a dispute goes to the reducer as a message; then pharmacist / carry on answer it and a bare yes re-asks", () => {
+    expect(interpretUtterance("My doctor said to take it at night", explainCtx()).kind).toBe("message");
+    const raised = explainCtx({ recordConflict: true });
+    expect(interpretUtterance("the pharmacist please", raised)).toEqual({
+      kind: "event",
+      event: { type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" },
+    });
+    expect(interpretUtterance("carry on", raised)).toEqual({
+      kind: "event",
+      event: { type: "RECORD_CONFLICT_CHOICE", choice: "carry-on" },
+    });
+    expect(interpretUtterance("yes", raised)).toEqual({ kind: "unclear" });
+  });
+});
+
+describe("interpretUtterance — family consent", () => {
+  const ctx = {
+    state: "listening" as const,
+    contextualActions: [],
+    candidateId: null,
+    explainStep: 0 as const,
+    cameraLive: false,
+    pendingSpokenMedicineName: null,
+    helpStage: "confirm" as const,
+  };
+
+  it("only a clear, short yes consents; no or a hedge declines; anything else re-asks", () => {
+    expect(interpretUtterance("yes please", ctx)).toEqual({ kind: "event", event: { type: "HELP_CONFIRM", granted: true } });
+    expect(interpretUtterance("not now", ctx)).toEqual({ kind: "event", event: { type: "HELP_CONFIRM", granted: false } });
+    expect(interpretUtterance("maybe", ctx)).toEqual({ kind: "event", event: { type: "HELP_CONFIRM", granted: false } });
+    expect(interpretUtterance("what would they be told about my medicine", ctx)).toEqual({ kind: "unclear" });
+  });
+
+  it("after a failure: 'try again' resends and 'the number' shows the pharmacy's phone", () => {
+    const failed = { ...ctx, helpStage: "failed" as const };
+    expect(interpretUtterance("try again", failed)).toEqual({ kind: "event", event: { type: "HELP_RETRY" } });
+    expect(interpretUtterance("what's the phone number", failed)).toEqual({ kind: "event", event: { type: "HELP_SHOW_NUMBER" } });
+    expect(interpretUtterance("carry on", { ...ctx, helpStage: "sent" as const })).toEqual({
+      kind: "event",
+      event: { type: "HELP_DISMISS" },
+    });
   });
 });

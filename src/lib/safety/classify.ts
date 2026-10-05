@@ -1,5 +1,3 @@
-import type { SafetyReason } from "@/types/content";
-
 // Deterministic prototype safety net (content-model.md §14). Not clinical triage.
 // Runs before any model is ever consulted; a hit means "do not ask a model".
 
@@ -33,6 +31,9 @@ export const unsupportedMedicalPatterns: readonly RegExp[] = [
   /\b(can|could|may) i (double|skip|halve)\b/i,
   /\b(double|increase|decrease|reduce|skip|halve|cut)\b.*\b(dose|dosage|tablets?|pills?|medicine|medication)\b/i,
   /\b(extra|more|less|another|half)\b.*\b(dose|tablets?|pills?)\b/i,
+  // Stopping the medicine, however it's reported ("my doctor said I can stop it").
+  // Tied to an object so "stop the call" is not caught.
+  /\b(stop|skip|quit)\s+(taking\s+)?(it|them|this|that|my (medicine|medication|tablets?|pills?)|metformin)\b/i,
   /forg[oe]t (to take|my (dose|medicine|tablet|pill))/i,
   /interact/i,
   /alcohol/i,
@@ -49,8 +50,34 @@ export const unsupportedMedicalPatterns: readonly RegExp[] = [
   /有危险吗|危险吗/,
   /诊断/,
   /可以和.*一起/,
+  // Health signals in casual talk (CLAUDE.md § Assignment 3, E2). A redirect to
+  // "show me a label" would brush off something that may matter, so these get the
+  // limitation + pharmacist/clinic path. Not urgent: urgent wording is above.
+  /\b(feel|feeling|been) (so |very |really )?(tired|dizzy|weak|unwell|sick|confused)\b/i,
+  /\bkeep forgetting\b|\bso forgetful\b/i,
+  /\bcan'?t sleep\b|\bnot sleeping\b/i,
+  /头晕|很累|没力气|不舒服|睡不着|老是忘/,
+  // Safety-gap fixes found in self-review before the Assignment 3 test run.
+  // Possible overdose or wrong dose. Deliberately NOT "took two" or "twice":
+  // someone on a twice-daily dose says those normally.
+  /\b(took|taken|had|ate)\s+(too many|too much|double|an extra|extra|another)\b/i,
+  /\b(by mistake|accidentally|overdos)/i,
+  // Casual health signals.
+  /\b(so|very|really|always|too)\s+(tired|weak|dizzy)\b/i,
+  /\btired (lately|these days|all the time)\b/i,
+  // Chinese: asking whether to skip or stop, and taking too much or the wrong one.
+  /(可以|能|能不能|可不可以|要不要|行不行)[^，。？?]{0,4}(不吃|不用吃|不服|少吃|停|跳过)/,
+  /(不吃|不用吃|不服用)[^，。？?]{0,3}(可以|行|吗|嘛)/,
+  /吃多了|吃错了|多吃了/,
   ...adverseEffectPatterns,
 ];
+
+/** Self-harm wording (a subset of `urgentPatterns`): the urgent screen also lists crisis lines. */
+export const selfHarmPatterns: readonly RegExp[] = [/want to (die|hurt myself)/i, /suicid/i, /想死|自杀|伤害自己/];
+
+export function mentionsSelfHarm(text: string | null): boolean {
+  return text !== null && selfHarmPatterns.some((p) => p.test(text));
+}
 
 export type SafetyClassification =
   | { level: "urgent"; reason: "urgent-risk" }
@@ -73,8 +100,4 @@ export function classifySafety(text: string): SafetyClassification {
     return { level: "unsupported", reason: "unsupported-medical-question" };
   }
   return { level: "none" };
-}
-
-export function isUrgentReason(reason: SafetyReason): boolean {
-  return reason === "urgent-risk";
 }

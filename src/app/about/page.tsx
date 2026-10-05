@@ -20,20 +20,44 @@ export default function AboutPage() {
       <p className="text-[13px] font-bold uppercase tracking-wide text-teal-800">Prototype</p>
       <h1 className="mt-1 text-[28px] font-bold leading-tight">About Medication Companion</h1>
       <p className="mt-4 text-lg leading-normal">
-        Medication Companion is a design prototype for an AI product design assignment. It explains
-        information from a <strong>fictional demo pharmacy record</strong> (“BrightCare Pharmacy —
-        demo record”). It is <strong>not connected to a real pharmacy, clinic, or prescription
-        system</strong>, and it is not a medical device.
+        Medication Companion is a design prototype for an AI product design assignment. It works the
+        way the real product would, but with <strong>fictional data</strong> and{" "}
+        <strong>simulated services</strong>. It is <strong>not connected to a real pharmacy, clinic,
+        or prescription system</strong>, and it is not a medical device.
       </p>
+
+      <Section title="What is simulated">
+        <ul className={list}>
+          <li>
+            <strong>The pharmacy record.</strong> Mei Ling Tan and her BrightCare Pharmacy record are
+            fictional seed data.
+          </li>
+          <li>
+            <strong>Pharmacist callbacks.</strong> “Ask a pharmacist to call me” goes to a simulated
+            pharmacy service. The reference number it returns is made up, and no one will call.
+          </li>
+          <li>
+            <strong>Family and trusted-helper messages.</strong> “Let my family know” and “Ask my
+            trusted helper” always ask for consent first, then go to a simulated service. No message
+            is sent to anyone.
+          </li>
+          <li>
+            <strong>Sign-in.</strong> The real product would sign you in with Singpass. The prototype
+            simply continues as Mei Ling.
+          </li>
+          <li>The clinic and pharmacy phone numbers are fictional.</li>
+        </ul>
+      </Section>
 
       <Section title="What it does not do">
         <ul className={list}>
           <li>It does not diagnose, prescribe, or recommend treatment.</li>
           <li>It does not change doses or give missed-dose advice.</li>
           <li>It does not decide whether you should take a medicine.</li>
+          <li>It never places a real call or sends a real message.</li>
           <li>
-            It does not contact a pharmacist, clinic, helper, or emergency service. Those buttons
-            are labelled “demo” and nothing is sent.
+            It does not route anyone to emergency services. Urgent wording shows a fixed safety
+            message; how to recognise and route emergencies is still being researched.
           </li>
         </ul>
       </Section>
@@ -69,24 +93,28 @@ export default function AboutPage() {
             replies are used.
           </li>
           <li>
-            A <strong>fixed, non-AI matcher</strong> compares that text with the demo record and
-            makes the match decision.
+            A <strong>fixed, non-AI matcher</strong> compares that text with the record and makes
+            the match decision.
           </li>
           <li>
-            Everything the app says about the medicine comes from the local demo record, in English
-            or Simplified Chinese. It is never generated.
+            Everything the app says about the medicine comes from the fictional record, in English or
+            Simplified Chinese. It is never generated.
           </li>
           <li>
             When it is configured, <strong>Gemini</strong> only reads approved on-screen wording
             aloud. The server refuses any other text, so the voice cannot give medical advice.
           </li>
-          <li>Typed labels and the demo label work without any AI.</li>
+          <li>Typing the name and choosing from your medicines work without any AI.</li>
         </ul>
       </Section>
 
       <Section title="Camera, microphone and your data">
         <ul className={list}>
           <li>The camera preview stays on your device. A still photo is taken only when you tap.</li>
+          <li>
+            A photo you choose is shrunk and re-saved on your device first, which also removes
+            details such as location.
+          </li>
           <li>
             Label photos are sent to the server only to be read, are held in memory for that one
             request, and are not saved by default.

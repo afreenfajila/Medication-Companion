@@ -5,6 +5,7 @@ import {
 } from "@/lib/label/spoken-label";
 import { parseTypedLabel } from "@/lib/label/typed-label";
 import { classifySafety } from "@/lib/safety/classify";
+import { isRecordConflict } from "@/lib/session/intent";
 import type { SessionEvent } from "@/lib/session/state-machine";
 import type { CompanionState, ContextualActionId } from "@/types/content";
 
@@ -30,6 +31,12 @@ export type CommandContext = {
   cameraLive: boolean;
   /** The companion just asked "did you mean <medicine>?" — "yes" answers that, not an offered button. */
   nameCheckPending?: boolean;
+  /** The companion just answered "my doctor said…" and asked: pharmacist, or carry on? */
+  recordConflict?: boolean;
+  /** On the camera-permission step: choosing camera or photo, or the consent question. */
+  showMethod?: "choose" | "camera";
+  /** Stage of a help request on screen (confirm, sent, failed…), if any. */
+  helpStage?: "confirm" | "sending" | "sent" | "failed" | "info" | null;
   /** Set once a spoken name has been heard and we're waiting on its strength. */
   pendingSpokenMedicineName: string | null;
 };
@@ -56,12 +63,14 @@ const TO_CHINESE = /\b(chinese|mandarin)\b|中文|华语|普通话/;
 const TO_ENGLISH = /\benglish\b|英文|英语/;
 
 const TAKE_PHOTO = /\b(take (a |the )?(photo|picture|pic)|capture|snap( it)?|scan( it)?)\b|拍照|拍下/;
-const USE_DEMO = /\b(demo( label)?|sample label)\b|示范标签/;
 const NEXT = /\b(next|continue|go on|keep going|carry on|go ahead)\b|下一步|继续/;
 const BACK = /\b(back|previous|go back)\b|上一步|返回/;
 const UNDERSTOOD = /\b(i understand|understood|got it|thank(s| you)|that's all|makes sense|all clear)\b|明白|谢谢|懂了/;
 const TRY_AGAIN = /\b((try|another|new).*(photo|picture|again|label)|again)\b|再拍|再试/;
 const BACK_TO_CALL = /\b(back to (the )?(conversation|call)|carry on|continue (the )?(call|conversation)|talk (to you )?more)\b|回到对话/;
+const DIFFERENT = /\b(different|differs|doesn't match|does not match|don't match)\b|不一样|不同|不符/;
+const MATCHES = /\b(it matches|matches|same|the same)\b|一样|相同/;
+const PHARMACIST =/\b(pharmacist|pharmacy|check with)\b|药剂师|药房/;
 const ANOTHER_MEDICINE = /\b(another|other|new|different|next)( medicine| one)?\b|另一种|另一个/;
 
 /** A bare yes/no is only trusted in a short utterance ("ok what is this for" is a question). */
@@ -89,6 +98,25 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
   const negative = NEGATIVE.test(n);
   const affirm = AFFIRM.test(n);
 
+  // A help request on screen. Consent/confirmation must be a clear, short yes.
+  switch (ctx.helpStage) {
+    case "confirm":
+      if (negative || hedge) return { kind: "event", event: { type: "HELP_CONFIRM", granted: false } };
+      if (affirm && isShort(n)) return { kind: "event", event: { type: "HELP_CONFIRM", granted: true } };
+      return { kind: "unclear" };
+    case "failed":
+      if (TRY_AGAIN.test(n)) return { kind: "event", event: { type: "HELP_RETRY" } };
+      if (/\b(number|phone)\b|电话|号码/.test(n)) return { kind: "event", event: { type: "HELP_SHOW_NUMBER" } };
+      if (negative) return { kind: "event", event: { type: "HELP_DISMISS" } };
+      return { kind: "unclear" };
+    case "sent":
+    case "info":
+      if (NEXT.test(n) || BACK_TO_CALL.test(n) || negative || affirm) return { kind: "event", event: { type: "HELP_DISMISS" } };
+      return { kind: "unclear" };
+    case "sending":
+      return { kind: "unclear" };
+  }
+
   switch (ctx.state) {
     case "listening": {
       const offered = ctx.contextualActions;
@@ -106,6 +134,15 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
     }
 
     case "camera-permission":
+      // First: camera or photo (H2). A photo needs a tap (the system picker can't
+      // open from speech); the name and strength can simply be said.
+      if (ctx.showMethod === "choose") {
+        if (/\bcamera\b|相机|摄像头/.test(n)) return { kind: "event", event: { type: "CHOOSE_CAMERA" } };
+        const said = parseSpokenLabel(raw);
+        const parsed = said ? parseTypedLabel({ ...said, patientName: "" }) : null;
+        if (parsed?.ok) return { kind: "event", event: { type: "SUBMIT_LABEL", input: parsed.input } };
+        return { kind: "unclear" };
+      }
       if (hedge) return { kind: "unclear" };
       if (negative && !affirm) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: false } };
       if (affirm && !negative && isShort(n)) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: true } };
@@ -113,12 +150,6 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
 
     case "camera-guidance": {
       if (TAKE_PHOTO.test(n) && ctx.cameraLive) return { kind: "ui", action: "capture" };
-      if (USE_DEMO.test(n)) {
-        return {
-          kind: "event",
-          event: { type: "SUBMIT_LABEL", input: { mode: "demo", demoAssetId: "sample_metformin_label" } },
-        };
-      }
       // Saying the name and strength out loud ("It's Metformin, 500 milligrams")
       // is another way to fill the same typed-label form — for anyone who'd
       // rather not use the camera, or whose pronunciation speech recognition
@@ -169,6 +200,24 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
     }
 
     case "explain": {
+      // Answering "help checking with the pharmacist, or carry on?". A bare "yes"
+      // doesn't say which, so it re-asks rather than guessing.
+      if (ctx.recordConflict) {
+        if (PHARMACIST.test(n)) return { kind: "event", event: { type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" } };
+        if (NEXT.test(n)) return { kind: "event", event: { type: "RECORD_CONFLICT_CHOICE", choice: "carry-on" } };
+        return { kind: "unclear" };
+      }
+      // "My doctor said…" goes to the reducer, which answers from the record.
+      if (isRecordConflict(raw)) return { kind: "message", text: raw };
+      // Beside the instruction: "Does this match what's printed on your label?"
+      if (ctx.explainStep === 1) {
+        if (DIFFERENT.test(n) || (negative && !affirm && isShort(n))) {
+          return { kind: "event", event: { type: "LABEL_CHECK", matches: false } };
+        }
+        if (MATCHES.test(n) || (affirm && !negative && !hedge && isShort(n))) {
+          return { kind: "event", event: { type: "LABEL_CHECK", matches: true } };
+        }
+      }
       if (BACK.test(n) && ctx.explainStep > 0) return { kind: "event", event: { type: "EXPLAIN_STEP", direction: "back" } };
       if (ctx.explainStep === 2) {
         if (UNDERSTOOD.test(n) || (affirm && !negative && isShort(n))) return { kind: "event", event: { type: "UNDERSTOOD" } };

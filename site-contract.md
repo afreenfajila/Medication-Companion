@@ -399,6 +399,8 @@ The response is built from the local content model, not an unconstrained LLM ans
 
 ### `POST /api/help/request`
 
+> **Superseded by §16 H4** (help flows through simulated services). Kept for history.
+
 Creates a demo audit event and returns non-deceptive help options.
 
 Request:
@@ -614,3 +616,77 @@ Rules:
 7. Promote to production after manual checklist passes.
 
 The deployed site must include a visible prototype disclaimer and a link to `/about`.
+
+## 16. Assignment 3 experience amendments
+
+See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 for the copy.
+
+### A. Companion tone contract
+
+- `POST /api/companion/understand` validates the model reply with `isSafeCompanionReply(reply, language)`: the existing number/dosing/advice/match-claim/markup filters, plus the tone-contract blame words, advice phrased as an instruction, the requested language, and a closing question. Any failure returns the deterministic approved line (`source: "fallback"`).
+
+### B. Gentler label-failure copy
+
+- `buildEscalation` picks `labelSafetyHeading` / `labelSafetyBody` for the four non-urgent label reasons. No state, transition, action or retry rule changes.
+
+### C. Record conflict
+
+- Session flag `recordConflict` (state stays `explain`). Set by `USER_MESSAGE` when `routeMessage` returns `record-conflict` in `explain` with a confirmed match.
+- `RECORD_CONFLICT_CHOICE`: `pharmacist` → `safety` (`help-requested`, confirmed candidate kept, audit detail `from: record-conflict`); `carry-on` → clears the flag, same step. Ignored when no conflict is raised.
+- Moving a step, `UNDERSTOOD`, `NEW_MEDICINE` and any safety entry clear the flag.
+- Voice/typed: in `explain`, a dispute is sent as a message; while the flag is set, "pharmacist" or "carry on / next" answers it, and a bare "yes" re-asks.
+- No model is called: the understanding pass only runs in `listening`.
+
+### D. Label check on the explanation
+
+- `LABEL_CHECK { matches }`, valid only in `explain` at step 1 with a confirmed match and no open record conflict. `matches: true` → step 2. `matches: false` → `safety` (`label-differs`), candidate and match status cleared, so the explanation is unreachable until a new label is confirmed.
+- Voice/typed at step 1: "different / doesn't match / 不一样" or a short "no" → differs; "matches / same / 一样" or a short "yes" → matches; "next" still moves on without answering.
+
+### E. Off-topic, health signals and wellbeing
+
+- `ContextualActionId` adds `end-call` (after the wrap-up) and `carry-on` (after wellbeing). `SELECT_ROUTE` accepts them only when offered: `end-call` → `END_CALL`; `carry-on` → `anotherMedicineGuide`, no actions. The understanding pass still offers only the two doors.
+- Session `offTopicStreak`: +1 on an off-topic message, reset by any other message or a route taken; the wrap-up fires at `OFF_TOPIC_TURN_CAP` (2).
+- `VoiceProvider.onTranscript(callback: (text, confidence?) => void)`: the browser provider passes the lowest confidence of the final segments. Typed input has none.
+- `buildEscalation(..., selfHarm)` adds `crisisKey` on the urgent path; the caller derives it from the triggering message with `mentionsSelfHarm`.
+
+### F. Family help with consent
+
+- `ASK_FAMILY` (also `SELECT_ROUTE ask-family` when offered) sets `familyConsentPending`. Valid in non-urgent `safety`, or in `listening` when `ask-family` was offered.
+- `FAMILY_CONSENT { granted }`, only while pending. `true` writes `caregiver-help-requested` and shows the demo notice; `false` just closes the question. Any new message, a safety entry or returning to the call also closes it without writing anything.
+- Voice: while pending, only a short clear "yes" consents; "no", "not now" or a hedge declines; anything else re-asks.
+- `HELP_ACTION` never carries `ask-family`, so no demo-action audit can bypass consent.
+
+### G. Study mode
+
+- Enabled only when `STUDY_MODE=true` **and** `VERCEL_ENV !== "production"` (`isStudyModeEnabled`). Otherwise `/study` is a 404 and the cookie is ignored. Add `STUDY_MODE` to local or Preview env only. It is read when the app is built and rendered, so redeploy the preview after setting it.
+- `/study` (not linked, `noindex`): a server-action form sets the httpOnly session cookie `mc_study` to `control` or `wrong-explanation`, or clears it. Query parameters cannot set it, and unknown values are ignored.
+- The root layout reads the cookie server-side and passes the condition to `StudyBadge`, which shows "Study session" on every screen (never the condition itself) and dispatches `SET_STUDY_CONDITION`.
+- `resolveExplanation(session, language, studyCondition)` swaps only the instruction, and only for a confirmed match. Call start, camera consent and confirmation all still apply.
+- The caregiver timeline shows a `Study: <condition>` tag on tagged events.
+
+### H4. Service adapters and help flows
+
+- `src/lib/services/`: `PharmacyService`, `CareCircleService` and `IdentityService` interfaces, `Simulated*` implementations, `getServices()` selected by `SERVICE_MODE=simulated` (the only mode, and the default). `SIMULATED_SERVICE_FAILURE=pharmacy,care-circle` switches failures on. `notifyCaregiver` takes an optional `contact: "family" | "trusted-helper"`.
+- `POST /api/help/request` (replaces the earlier demo contract): `{ sessionId, kind: "pharmacist-callback" | "family" | "trusted-helper", reason: HelpReason }` → `{ kind, reference?, expectedWindow?, contactName? }`, or a 503 `service_unavailable` envelope. Origin check and rate limit as for the other routes. There is no emergency kind (amendment I).
+- Session `helpFlow: { kind, stage: "confirm" | "sending" | "sent" | "failed" | "info", reason, reference?, contactName? } | null` replaces `helpAction` and `familyConsentPending`. Events: `HELP_START`, `HELP_CONFIRM`, `HELP_RESULT`, `HELP_RETRY`, `HELP_SHOW_NUMBER`, `HELP_DISMISS`.
+  - `HELP_START` is allowed on non-urgent safety screens (all kinds), and for `family` after the wellbeing reply. The record conflict's "Ask a pharmacist to call me" opens the callback on top of the explanation.
+  - The client posts to the API only in `sending`. `sent` is set only by `HELP_RESULT ok`.
+  - `HELP_DISMISS` after `sent` on a safety screen continues the call where it left off.
+- Clinic shows the clinic's number as text. No `tel:` links anywhere.
+- Urgent-risk screen: no actions until amendment I.
+
+### H3. Choose from my medicines
+
+- `CHOOSE_MEDICINE { medicineId }`, valid only in `camera-guidance` and only for an id in `recordMedicines`. It sets a possible candidate and moves to `confirm-match`. Confirmation is still required before any explanation.
+
+### H2. Camera or photo
+
+- Session `showMethod: "choose" | "camera"`. Show medicine sets `camera-permission` with `choose`. `CHOOSE_CAMERA` → `camera`, and only then is `CAMERA_CONSENT` accepted.
+- `SUBMIT_LABEL` is accepted on the choice step for inputs that need no camera: `image` with `source: "upload"`, or `typed`. A camera photo still needs consent.
+- Photos are prepared in the browser (`preparePhoto`): long edge at most 2048 px, JPEG about 0.85, which drops EXIF. Anything undecodable (e.g. HEIC) shows `photoFormat` and nothing is sent. The upload then uses the same `/api/label/analyze` route and the same gates; images are never stored.
+- Voice on the choice step: "camera" → `CHOOSE_CAMERA`; saying the name and strength submits it as typed. A photo needs a tap, because the system picker can't be opened from speech.
+
+### H1. Prototype framing
+
+- `PrototypeBadge` (client, in the session's language) is rendered once in `src/app/layout.tsx`, fixed in the top padding band beside the study badge.
+- `CandidateDisplay.recordSource`, `RecordSource.displayLabel` and the label-analysis `sourceLabel` literal are now `"BrightCare Pharmacy"`.

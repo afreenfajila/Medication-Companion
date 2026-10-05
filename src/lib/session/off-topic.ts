@@ -44,13 +44,23 @@ const SOCIAL_TALK =
 export type OffTopicKind = "capability" | "world" | "social";
 
 /**
+ * Loneliness or low mood (CLAUDE.md § Assignment 3, E3). Not off-topic banter
+ * and not a medical question: it gets a fixed, warm `wellbeing` reply with the
+ * family-help option. Self-harm wording never reaches here — it is urgent.
+ */
+const LOW_MOOD = /\blonely\b|\ball alone\b|\bno one to talk\b|\bfeel(ing)? sad\b|孤单|寂寞|没人陪|难过/i;
+
+export function isLowMood(text: string): boolean {
+  return LOW_MOOD.test(text);
+}
+
+/**
  * Returns the kind of off-spine talk this is, or `null` when the message should
  * continue down the normal medicine-routing path.
  *
- * Note what is deliberately absent: feeling and symptom words ("I feel tired",
- * "I'm dizzy"). Those are never routed here — a chatty redirect is the wrong
- * response to something that might be a symptom, so they fall through to the
- * ordinary clarification path and stay eligible for the safety classifier.
+ * Feeling and symptom words ("I feel tired", "I'm dizzy") never reach here:
+ * the safety classifier, which runs first, sends them to the pharmacist/clinic
+ * path (reversal of an earlier decision — see docs/decisions.md, Assignment 3 E).
  */
 export function classifyOffTopic(text: string): OffTopicKind | null {
   const input = text.trim();

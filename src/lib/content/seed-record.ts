@@ -17,7 +17,7 @@ export const patient: Patient = {
 export const recordSource: RecordSource = {
   id: "source_brightcare_demo",
   name: "BrightCare Pharmacy",
-  displayLabel: "BrightCare Pharmacy — demo record",
+  displayLabel: "BrightCare Pharmacy",
   recordStatus: "current-demo",
   verifiedAt: "2026-09-21T00:00:00.000Z",
   disclaimer: "Prototype information — not connected to a real pharmacy.",
@@ -33,16 +33,16 @@ const metforminExplanation: LocalizedMedicationExplanation = {
     "zh-Hans": "二甲双胍用于帮助控制血糖。",
   },
   instructionIntro: {
-    en: "Your current demo pharmacy record says:",
-    "zh-Hans": "您目前的药房示范记录显示：",
+    en: "Your current pharmacy record says:",
+    "zh-Hans": "您目前的药房记录显示：",
   },
   instruction: {
     en: "Take 1 tablet twice daily with meals.",
     "zh-Hans": "随餐每日服用一片，每日两次。",
   },
   sourceLine: {
-    en: "Source: BrightCare Pharmacy — demo record.",
-    "zh-Hans": "来源：BrightCare Pharmacy — 示范记录。",
+    en: "Source: BrightCare Pharmacy.",
+    "zh-Hans": "来源：BrightCare Pharmacy。",
   },
   caution: {
     en: "I can explain this record, but I cannot change your medicine instructions.",
@@ -85,6 +85,22 @@ export const metforminRecord: MedicationRecord = {
     humanHelpForSymptoms: true,
   },
 };
+
+/** Every medicine on her record — what "Choose from my medicines" lists (name and strength only). */
+export const recordMedicines: readonly MedicationRecord[] = [metforminRecord];
+
+/**
+ * Mei Ling's fictional care circle and contacts — the simulated services'
+ * data source (CLAUDE.md § H4). The numbers use the 555-01xx pattern that is
+ * reserved for fiction elsewhere; replace them with numbers you are allowed to
+ * show before any external testing.
+ */
+export const careContacts = {
+  pharmacy: { name: "BrightCare Pharmacy", phone: "6555 0123" },
+  clinic: { name: "Greenhill Family Clinic", phone: "6555 0100" },
+  family: { name: "Daniel" }, // her son
+  trustedHelper: { name: "Mrs Lim" }, // her neighbour
+} as const;
 
 /** Purpose line for the caregiver record view (from the verified record brief). */
 export const metforminPurposeEn = "Helps manage blood sugar";

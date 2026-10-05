@@ -1,6 +1,7 @@
-import { metforminPurposeEn, metforminRecord, recordSource } from "./demo-record";
+import { metforminPurposeEn, metforminRecord, recordSource } from "./seed-record";
 import { candidateIdFor } from "@/lib/matching/match-record";
-import type { RephraseFieldSet } from "./rephrase-guard";
+import type { StudyCondition } from "@/lib/study/study-mode";
+import { studyWrongInstruction } from "./fixtures";
 import type {
   CandidateDisplay,
   LocalizedText,
@@ -39,12 +40,17 @@ function pick(text: LocalizedText, language: UiLanguage): string {
 export function resolveExplanation(
   session: { matchStatus: MatchStatus | null; candidate: CandidateDisplay | null },
   language: UiLanguage,
+  /** Study mode only: `wrong-explanation` swaps in a fixed wrong instruction, after the same gate. */
+  studyCondition: StudyCondition | null = null,
 ): ExplanationView | null {
   const { matchStatus, candidate } = session;
   if (matchStatus !== "confirmed" || !candidate) return null;
   if (candidate.candidateId !== candidateIdFor(metforminRecord)) return null;
 
-  const e = metforminRecord.explanation;
+  const e =
+    studyCondition === "wrong-explanation"
+      ? { ...metforminRecord.explanation, instruction: studyWrongInstruction }
+      : metforminRecord.explanation;
   return {
     recordSource: recordSource.displayLabel,
     medicine: {
@@ -65,27 +71,29 @@ export function resolveExplanation(
   };
 }
 
+/** "I found a possible match: Metformin, 500 mg. …" — name and strength come from the candidate. */
+export function fillCandidate(template: string, candidate: CandidateDisplay): string {
+  return template
+    .replace("{medicine}", candidate.medicineName.replace(` ${candidate.strength}`, ""))
+    .replace("{strength}", candidate.strength);
+}
+
+/** The record's verified date, e.g. "21 September 2026" / "2026年9月21日". */
+export function formatVerifiedDate(language: UiLanguage): string {
+  return new Intl.DateTimeFormat(language === "en" ? "en-GB" : "zh-CN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(recordSource.verifiedAt));
+}
+
 /**
- * Optionally swaps in a Claude-rephrased (and already-validated) version of the
- * non-dosing "flavour" text. English only — Chinese keeps the reviewed static
- * translation, per CLAUDE.md's preference for local translations where they
- * exist. `instruction` and `sourceLine` are never touched by this function.
+ * Fills `{instruction}` and `{verifiedDate}` in approved copy from the confirmed
+ * explanation. Copy never contains these facts itself, and a model never writes them.
  */
-export function withRephrasedFlavor(
-  view: ExplanationView,
-  language: UiLanguage,
-  fields: Partial<RephraseFieldSet> | null,
-): ExplanationView {
-  if (language !== "en" || !fields) return view;
-  return {
-    ...view,
-    explanation: {
-      ...view.explanation,
-      title: fields.title ?? view.explanation.title,
-      purpose: fields.purpose ?? view.explanation.purpose,
-      instructionIntro: fields.instructionIntro ?? view.explanation.instructionIntro,
-      caution: fields.caution ?? view.explanation.caution,
-      confirmationPrompt: fields.confirmationPrompt ?? view.explanation.confirmationPrompt,
-    },
-  };
+export function fillRecordFacts(template: string, view: ExplanationView, language: UiLanguage): string {
+  return template
+    .replace("{instruction}", view.explanation.instruction)
+    .replace("{verifiedDate}", formatVerifiedDate(language));
 }

@@ -1,21 +1,123 @@
 "use client";
 
-import { Camera, FileImage, ScanLine, SwitchCamera } from "lucide-react";
-import Image from "next/image";
+import { Camera, ImageUp, ListChecks, Pill, SwitchCamera } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
 import { CameraPreview } from "@/components/ui/camera-preview";
-import { samplePhotos } from "@/lib/content/samples";
-import { setPendingImage } from "@/lib/label/pending-image";
-import { registerVoiceAction } from "@/lib/voice/actions";
+import { recordMedicines } from "@/lib/content/seed-record";
 import { validateImage } from "@/lib/label/image-validation";
+import { setPendingImage } from "@/lib/label/pending-image";
+import { preparePhoto } from "@/lib/label/prepare-photo";
 import type { CameraIssue, CameraMode } from "@/lib/session/state-machine";
+import { registerCapture } from "@/lib/voice/actions";
 import type { LabelInput } from "@/types/content";
 import { CameraLive, type CameraFacing } from "./camera-live";
 import { StateLabel, type T } from "./screen-chrome";
 import { TypedLabelForm } from "./typed-label-form";
 
-/** 03-label-camera-permission, as the pinned card for that step. Approve and refuse are equally tappable. */
+/**
+ * "Choose a photo" (CLAUDE.md § H2). A plain file input WITHOUT `capture`, so
+ * phones offer the photo library and files and computers open the file dialog;
+ * the system picker hands over only the chosen file, so no permission prompt.
+ * The photo is shrunk and re-encoded here (dropping EXIF), then goes through the
+ * same analysis → possible match → confirmation as a camera photo.
+ */
+export function PhotoPicker({
+  t,
+  onSubmit,
+  primary = false,
+  compact = false,
+}: {
+  t: T;
+  onSubmit: (input: LabelInput) => void;
+  primary?: boolean;
+  compact?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState(false);
+  const Button = primary ? PrimaryButton : SecondaryButton;
+
+  const onPicked = async (file: File | undefined) => {
+    if (!file) return;
+    setError(false);
+    const photo = await preparePhoto(file);
+    const check = photo ? validateImage(photo) : null;
+    if (!photo || !check?.ok) {
+      setError(true); // e.g. HEIC the browser can't open: offer another photo or the camera
+      return;
+    }
+    setPendingImage(photo);
+    onSubmit({ mode: "image", source: "upload", mimeType: check.mimeType, byteSize: photo.size });
+  };
+
+  return (
+    <>
+      <Button
+        compact={compact}
+        icon={<ImageUp className="h-5 w-5" aria-hidden="true" />}
+        onClick={() => inputRef.current?.click()}
+      >
+        {t("choosePhoto")}
+      </Button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        data-photo-input
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(e) => {
+          void onPicked(e.target.files?.[0]);
+          e.target.value = ""; // choosing the same photo again still fires
+        }}
+      />
+      {error && (
+        <p role="alert" className="text-center text-base font-medium text-danger-800">
+          {t("photoFormat")}
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * After "Show medicine": camera or photo, equally (CLAUDE.md § H2), or typing.
+ * Nothing touches the camera here — "Use camera" leads to the consent question.
+ */
+export function ShowMedicineChoice({
+  t,
+  onCamera,
+  onSubmit,
+}: {
+  t: T;
+  onCamera: () => void;
+  onSubmit: (input: LabelInput) => void;
+}) {
+  const [typing, setTyping] = useState(false);
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="text-center">
+        <h2 className="text-[22px] font-bold leading-tight">{t("showMedicineHeading")}</h2>
+        <p className="mx-auto mt-2 max-w-[21rem] text-lg leading-normal">{t("photoIntro")}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <PrimaryButton compact onClick={onCamera} icon={<Camera className="h-5 w-5" aria-hidden="true" />}>
+          {t("useCamera")}
+        </PrimaryButton>
+        <div className="flex flex-col gap-2">
+          <PhotoPicker t={t} onSubmit={onSubmit} primary compact />
+        </div>
+      </div>
+      <TextAction className="self-center" aria-expanded={typing} onClick={() => setTyping(!typing)}>
+        {t("typeName")}
+      </TextAction>
+      {typing && <TypedLabelForm t={t} onSubmit={onSubmit} />}
+    </div>
+  );
+}
+
+/** 03-label-camera-permission, after "Use camera". Approve and refuse are equally tappable. */
 export function CameraPermissionScreen({
   t,
   onGrant,
@@ -48,42 +150,32 @@ export function CameraPermissionScreen({
  * panel on the SAME call screen, not a separate full-screen camera view. With
  * consent, shows a LOCAL camera preview (rear camera by default, flip where
  * supported). A still is captured only when the user taps the button. If the
- * camera is declined/blocked/absent — or simply not wanted — the sample-photo
- * "upload", typed details and demo label all work, so the demo never depends
- * on hardware.
+ * camera is declined/blocked/absent — or simply not wanted — choosing a photo,
+ * choosing from the record, or typing all work, so nothing depends on hardware.
  */
 export function CameraGuidanceScreen({
   t,
   mode,
   issue,
   onSubmit,
+  onChooseMedicine,
   onCameraFailed,
 }: {
   t: T;
   mode: CameraMode;
   issue: CameraIssue | null;
   onSubmit: (input: LabelInput) => void;
+  onChooseMedicine: (medicineId: string) => void;
   onCameraFailed: (issue: CameraIssue) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [facing, setFacing] = useState<CameraFacing>("environment");
   const [live, setLive] = useState(false);
   const [canFlip, setCanFlip] = useState(false);
-  const [panel, setPanel] = useState<"samples" | "typed" | null>(null);
+  const [panel, setPanel] = useState<"typed" | "medicines" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const preview = mode === "preview";
-
-  const submitImage = (blob: Blob, source: "sample" | "camera") => {
-    const check = validateImage(blob);
-    if (!check.ok) {
-      setError(t("captureError"));
-      return;
-    }
-    setPendingImage(blob);
-    onSubmit({ mode: "image", source, mimeType: check.mimeType, byteSize: blob.size });
-  };
 
   const capture = () => {
     const video = videoRef.current;
@@ -100,7 +192,12 @@ export function CameraGuidanceScreen({
     }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(
-      (blob) => (blob ? submitImage(blob, "camera") : setError(t("captureError"))),
+      (blob) => {
+        const check = blob ? validateImage(blob) : null;
+        if (!blob || !check?.ok) return setError(t("captureError"));
+        setPendingImage(blob);
+        onSubmit({ mode: "image", source: "camera", mimeType: check.mimeType, byteSize: blob.size });
+      },
       "image/jpeg",
       0.85,
     );
@@ -113,23 +210,9 @@ export function CameraGuidanceScreen({
   });
   useEffect(() => {
     if (!preview || !live) return;
-    registerVoiceAction("capture", () => captureRef.current());
-    return () => registerVoiceAction("capture", null);
+    registerCapture(() => captureRef.current());
+    return () => registerCapture(null);
   }, [preview, live]);
-
-  const chooseSample = async (src: string) => {
-    setError(null);
-    setBusy(true);
-    try {
-      const res = await fetch(src);
-      if (!res.ok) throw new Error("sample not found");
-      submitImage(await res.blob(), "sample");
-    } catch {
-      setError(t("sampleLoadError"));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const flip = () => {
     setLive(false);
@@ -150,13 +233,56 @@ export function CameraGuidanceScreen({
         ? t("cameraUnavailableBody")
         : t("fallbackBody");
 
-  const demoButton = (Btn: typeof PrimaryButton) => (
-    <Btn
-      onClick={() => onSubmit({ mode: "demo", demoAssetId: "sample_metformin_label" })}
-      icon={<ScanLine className="h-5 w-5" aria-hidden="true" />}
-    >
-      {t("useDemoLabel")}
-    </Btn>
+  // Every way to show the label without the camera. Always open when the camera
+  // is off; behind one "Other ways" link when the live camera is the main action.
+  const otherWays = (
+    <div className="flex flex-col gap-4">
+      <p className="mx-auto max-w-[21rem] text-center text-[15px] text-navy-700">{t("spokenLabelHint")}</p>
+
+      <div role="group" aria-label={t("moreWays")} className="flex flex-col gap-3">
+        <PhotoPicker t={t} onSubmit={onSubmit} primary={!preview} />
+        <SecondaryButton
+          aria-expanded={panel === "medicines"}
+          onClick={() => setPanel(panel === "medicines" ? null : "medicines")}
+          icon={<ListChecks className="h-5 w-5" aria-hidden="true" />}
+        >
+          {t("chooseFromMedicines")}
+        </SecondaryButton>
+        {panel === "medicines" && (
+          <section
+            aria-label={t("medicineListHeading")}
+            className="fade-in flex flex-col gap-3 rounded-lg border border-line bg-surface p-4"
+          >
+            <h3 className="text-[18px] font-bold leading-tight">{t("medicineListHeading")}</h3>
+            <p className="text-sm leading-snug text-navy-700">{t("medicineListNote")}</p>
+            {/* Name and strength only — never instructions. Picking one is a possible match to confirm. */}
+            <ul className="flex flex-col gap-2">
+              {recordMedicines.map((m) => (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => onChooseMedicine(m.id)}
+                    className="flex min-h-14 w-full items-center gap-3 rounded-md border border-line bg-canvas px-4 py-2 text-left text-lg font-medium hover:border-teal-600"
+                  >
+                    <Pill className="h-5 w-5 shrink-0 text-teal-800" aria-hidden="true" />
+                    <span>{m.identity.displayName}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <TextAction
+          className="self-center"
+          aria-expanded={panel === "typed"}
+          onClick={() => setPanel(panel === "typed" ? null : "typed")}
+        >
+          {t("typeLabelToggle")}
+        </TextAction>
+        {panel === "typed" && <TypedLabelForm t={t} onSubmit={onSubmit} />}
+      </div>
+    </div>
   );
 
   return (
@@ -221,60 +347,17 @@ export function CameraGuidanceScreen({
         </p>
       )}
 
-      <p className="mx-auto max-w-[21rem] text-center text-[15px] text-navy-700">{t("spokenLabelHint")}</p>
-
-      <div role="group" aria-label={t("moreWays")} className="flex flex-col gap-3">
-        {!preview && demoButton(PrimaryButton)}
-        {preview && demoButton(SecondaryButton)}
-        <SecondaryButton
-          aria-expanded={panel === "samples"}
-          onClick={() => setPanel(panel === "samples" ? null : "samples")}
-          icon={<FileImage className="h-5 w-5" aria-hidden="true" />}
-        >
-          {t("uploadPhoto")}
-        </SecondaryButton>
-
-        {panel === "samples" && (
-          <section
-            aria-label={t("samplePickerHeading")}
-            className="fade-in flex flex-col gap-3 rounded-lg border border-line bg-surface p-4"
-          >
-            <h3 className="text-[18px] font-bold leading-tight">{t("samplePickerHeading")}</h3>
-            <p className="text-sm leading-snug text-navy-700">{t("samplePickerNote")}</p>
-            <ul className="flex flex-col gap-2">
-              {samplePhotos.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => chooseSample(p.src)}
-                    className="flex min-h-14 w-full items-center gap-3 rounded-md border border-line bg-canvas p-2 text-left text-lg font-medium hover:border-teal-600 disabled:opacity-60"
-                  >
-                    <Image
-                      src={p.src}
-                      alt=""
-                      width={72}
-                      height={51}
-                      unoptimized
-                      className="h-[51px] w-[72px] shrink-0 rounded-sm object-cover"
-                    />
-                    <span>{t(p.labelKey)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <TextAction
-          className="self-center"
-          aria-expanded={panel === "typed"}
-          onClick={() => setPanel(panel === "typed" ? null : "typed")}
-        >
-          {t("typeLabelToggle")}
-        </TextAction>
-        {panel === "typed" && <TypedLabelForm t={t} onSubmit={onSubmit} />}
-      </div>
+      {preview ? (
+        // With the camera on, capture is THE action: the fallbacks wait one tap away.
+        <details className="text-center">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 text-base font-medium text-teal-800 underline underline-offset-4">
+            {t("moreWays")}
+          </summary>
+          <div className="mt-2 text-left">{otherWays}</div>
+        </details>
+      ) : (
+        otherWays
+      )}
     </div>
   );
 }

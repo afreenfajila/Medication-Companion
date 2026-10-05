@@ -18,7 +18,7 @@ const BODY = {
   language: "en",
   offered: ["show-medicine"],
   checkingMedicineName: true,
-  history: [{ speaker: "companion", text: "Hello, Mei Ling. What would you like help with?" }],
+  history: [{ speaker: "companion", text: "Hello, I’m an AI guide. What would you like to know today?" }],
 };
 
 function req(body: unknown = BODY, headers?: Record<string, string>) {
@@ -47,7 +47,7 @@ afterEach(() => {
 describe("POST /api/companion/understand", () => {
   it("returns Claude's reply and its offer when the reply passes the guard", async () => {
     understandMessage.mockResolvedValue({
-      reply: "I think you said Metformin — is that right? You can also type it, or show me the label.",
+      reply: "I think you said Metformin — is that right? Would you like to type it, or show me the label?",
       offer: "show-medicine",
       checkingMedicineName: true,
     });
@@ -75,6 +75,38 @@ describe("POST /api/companion/understand", () => {
       checkingMedicineName: true,
       source: "fallback",
     });
+  });
+
+  it("a typed message can't have been misheard: a 'didn't come through' reply falls back", async () => {
+    const misheard =
+      "Thank you for asking, that's a good habit. That part didn't come through clearly to me. Would you like to show me the medicine label, or tell me the name again?";
+    understandMessage.mockResolvedValue({ reply: misheard, offer: "show-medicine", checkingMedicineName: false });
+
+    const typed = await data(await POST(req({ ...BODY, key: "showLabelQuestion", message: "What is this medicine for?", via: "typed" })));
+    expect(typed.source).toBe("fallback");
+    expect(typed.text).toBe(t("en", "showLabelQuestion"));
+    expect(understandMessage).toHaveBeenLastCalledWith(expect.objectContaining({ via: "typed" }));
+
+    // Spoken, a mishearing is possible, so the same reply is allowed.
+    const spoken = await data(await POST(req({ ...BODY, key: "showLabelQuestion", message: "What is this medicine for?", via: "voice" })));
+    expect(spoken.source).toBe("claude");
+  });
+
+  it("never assumes the medicine: naming Metformin when nobody did falls back to asking which one", async () => {
+    const assumed =
+      "Thank you for telling me. It sounds like you may have your Metformin with you. Would you like to show me the label?";
+    understandMessage.mockResolvedValue({ reply: assumed, offer: "show-medicine", checkingMedicineName: false });
+    const vague = { ...BODY, key: "whichMedicine", message: "I take it twice a day", via: "typed", history: [] };
+
+    const r = await data(await POST(req(vague)));
+    expect(r.source).toBe("fallback");
+    expect(r.text).toBe(t("en", "whichMedicine"));
+
+    // Once she has named it earlier in the call, referring to it by name is fine.
+    const earlier = await data(
+      await POST(req({ ...vague, history: [{ speaker: "user", text: "I have my metformin here" }] })),
+    );
+    expect(earlier.source).toBe("claude");
   });
 
   it("never asks the model about a safety-classified message", async () => {

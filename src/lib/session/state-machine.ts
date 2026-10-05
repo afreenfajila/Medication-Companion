@@ -1,8 +1,9 @@
 import type { CopyKey } from "@/lib/content/translations";
 import type { LabelAnalysis } from "@/lib/api/schemas";
-import { metforminRecord } from "@/lib/content/demo-record";
+import { metforminRecord, recordMedicines } from "@/lib/content/seed-record";
 import { candidateDisplayFor, candidateIdFor, matchLabelInput } from "@/lib/matching/match-record";
-import type { HelpActionId } from "@/lib/safety/escalation";
+import type { HelpReason } from "@/lib/services/reasons";
+import type { StudyCondition } from "@/lib/study/study-mode";
 import type {
   AuditEvent,
   CandidateDisplay,
@@ -20,6 +21,16 @@ import { routeMessage } from "./intent";
 // that is not legal in the current state returns the SAME session object
 // (reference-equal), so callers/tests can detect a blocked transition.
 
+export type HelpKind = "pharmacist-callback" | "family" | "trusted-helper" | "clinic";
+export type HelpFlow = {
+  kind: HelpKind;
+  stage: "confirm" | "sending" | "sent" | "failed" | "info";
+  reason: HelpReason;
+  /** From the service on success: the callback reference, or who was told. */
+  reference?: string;
+  contactName?: string;
+};
+
 export type CameraMode = "preview" | "fallback";
 export type CameraIssue = "denied" | "unavailable";
 
@@ -32,10 +43,18 @@ export type Session = {
   sessionId: string;
   /** Transient, in-memory only. Never written to the audit log. */
   userText: string | null;
+  /** How `userText` arrived, so the understanding pass never "mishears" a typed message. */
+  userInputVia: "typed" | "voice";
   assistantKey: CopyKey;
   contextualActions: ContextualActionId[];
   /** True once `Show medicine` was chosen inside the active call. */
   labelRouteSelected: boolean;
+  /**
+   * On the camera-permission step: "choose" asks camera, photo or typing (H2);
+   * "camera" is the existing camera-consent question. Consent is only ever asked
+   * after the person picked "Use camera".
+   */
+  showMethod: "choose" | "camera";
   cameraMode: CameraMode | null;
   /** Why the live camera is not in use (drives the fallback wording). */
   cameraIssue: CameraIssue | null;
@@ -44,6 +63,17 @@ export type Session = {
   matchStatus: MatchStatus | null;
   safetyReason: SafetyReason | null;
   explainStep: 0 | 1 | 2;
+  /**
+   * The explanation step they were on when they left for safety/help, so
+   * "Carry on" returns them to where they left off. Null otherwise.
+   */
+  resumeExplainStep: 0 | 1 | 2 | null;
+  /**
+   * The person disputed the record while it was explained ("my doctor said…").
+   * The explanation stays; the companion answers from the record and offers
+   * pharmacist help or carrying on.
+   */
+  recordConflict: boolean;
   repeatCount: number;
   /**
    * Increments on every accepted user message. The transcript keys each turn by
@@ -60,7 +90,16 @@ export type Session = {
   replyTo: number | null;
   /** The companion's last question was "did you mean <medicine>?" — a bare yes/no answers it. */
   nameCheckPending: boolean;
-  helpAction: HelpActionId | null;
+  /** Consecutive off-topic turns; the second gets a friendly wrap-up. Any other turn resets it. */
+  offTopicStreak: number;
+  /**
+   * A help request in progress (CLAUDE.md § H4), shown on top of whichever step
+   * offered it: confirm → sending → sent | failed, or an info card with a number.
+   * Nothing is sent until the person confirms; "sent" only after the service succeeds.
+   */
+  helpFlow: HelpFlow | null;
+  /** Study mode only (set from the server's cookie); null otherwise. Tags every audit event. */
+  studyCondition: StudyCondition | null;
   /** Label retries used for the current medicine. One retry, then human help only. */
   labelRetries: number;
   audit: AuditEvent[];
@@ -70,12 +109,19 @@ export type Session = {
 export type SessionEvent =
   | { type: "SELECT_PERSONA"; persona: Persona }
   | { type: "SET_LANGUAGE"; language: UiLanguage }
+  /** From the root layout, which reads the study cookie server-side (study mode only). */
+  | { type: "SET_STUDY_CONDITION"; condition: StudyCondition | null }
   | { type: "CALL_START" }
-  | { type: "USER_MESSAGE"; text: string }
+  /** `via`: typed (exactly what she wrote) or voice (speech recognition). Defaults to voice. */
+  | { type: "USER_MESSAGE"; text: string; via?: "typed" | "voice" }
   | { type: "SELECT_ROUTE"; route: ContextualActionId }
+  /** "Use camera" on the show-medicine choice: next comes the camera-consent question. */
+  | { type: "CHOOSE_CAMERA" }
   | { type: "CAMERA_CONSENT"; granted: boolean }
   | { type: "CAMERA_FAILED"; issue: CameraIssue }
   | { type: "SUBMIT_LABEL"; input: LabelInput }
+  /** "Choose from my medicines": a medicine picked from the record list — still only a possible match. */
+  | { type: "CHOOSE_MEDICINE"; medicineId: string }
   | { type: "RESOLVE_ANALYSIS" } // deterministic demo/typed inputs (local)
   | { type: "ANALYSIS_RESULT"; analysis: LabelAnalysis } // image inputs (server-validated)
   | { type: "ANALYSIS_FAILED" }
@@ -85,12 +131,22 @@ export type SessionEvent =
       decision: "confirmed" | "denied" | "unsure";
     }
   | { type: "EXPLAIN_STEP"; direction: "next" | "back" }
+  | { type: "RECORD_CONFLICT_CHOICE"; choice: "pharmacist" | "carry-on" }
+  /** "Does this match what's printed on your label?", asked beside the instruction. */
+  | { type: "LABEL_CHECK"; matches: boolean }
   | { type: "UNDERSTOOD" }
   | { type: "NEW_MEDICINE" }
   | { type: "GET_HELP" }
   | { type: "TRY_ANOTHER_LABEL" }
   | { type: "RETURN_TO_CALL" }
-  | { type: "HELP_ACTION"; action: Exclude<HelpActionId, "try-again"> }
+  /** Opens a help flow: the confirm/consent step, or the clinic's number. */
+  | { type: "HELP_START"; kind: HelpKind }
+  | { type: "HELP_CONFIRM"; granted: boolean }
+  /** The service's answer to a confirmed request (dispatched by the client after the API call). */
+  | { type: "HELP_RESULT"; ok: boolean; reference?: string; contactName?: string }
+  | { type: "HELP_RETRY" }
+  | { type: "HELP_SHOW_NUMBER" }
+  | { type: "HELP_DISMISS" }
   | { type: "REPEAT" }
   | { type: "END_CALL" }
   /**
@@ -109,6 +165,8 @@ export type ReduceContext = { now: string };
 
 const AUDIT_LIMIT = 200;
 export const MAX_LABEL_RETRIES = 1;
+/** After this many consecutive off-topic turns, the companion gently wraps up. */
+export const OFF_TOPIC_TURN_CAP = 2;
 
 export function canRetryLabel(s: Pick<Session, "labelRetries">): boolean {
   return s.labelRetries < MAX_LABEL_RETRIES;
@@ -123,9 +181,11 @@ export function createInitialSession(): Session {
     callCount: 0,
     sessionId: "demo-session",
     userText: null,
+    userInputVia: "voice",
     assistantKey: "callGreeting",
     contextualActions: [],
     labelRouteSelected: false,
+    showMethod: "choose",
     cameraMode: null,
     cameraIssue: null,
     pendingLabel: null,
@@ -133,11 +193,15 @@ export function createInitialSession(): Session {
     matchStatus: null,
     safetyReason: null,
     explainStep: 0,
+    resumeExplainStep: null,
+    recordConflict: false,
     repeatCount: 0,
     turnCount: 0,
     replyTo: null,
     nameCheckPending: false,
-    helpAction: null,
+    offTopicStreak: 0,
+    helpFlow: null,
+    studyCondition: null,
     labelRetries: 0,
     audit: [],
     auditSeq: 0,
@@ -165,9 +229,10 @@ function withAudit(s: Session, ctx: ReduceContext, ...events: AuditInput[]): Ses
       eventType: e.eventType,
       actor: e.actor ?? "primary-user",
       summary: e.summary,
-      route: e.route ?? "deterministic-demo",
+      route: e.route ?? "deterministic",
       validationStatus: e.validationStatus ?? "not-applicable",
-      details: e.details ?? {},
+      // Study sessions tag every event, so the six signals can be read off the timeline.
+      details: s.studyCondition ? { ...e.details, studyCondition: s.studyCondition } : (e.details ?? {}),
     };
   });
   return { ...s, auditSeq: seq, audit: [...s.audit, ...added].slice(-AUDIT_LIMIT) };
@@ -198,6 +263,39 @@ export function pathForState(state: CompanionState): string {
 
 // ---- Transition helpers -----------------------------------------------------
 
+/** Why help is being asked for, from where the person is (sent with the request, never their words). */
+function helpReasonFor(s: Session): HelpReason {
+  if (s.state === "explain") return "record-conflict";
+  if (s.state === "listening") return "wellbeing";
+  switch (s.safetyReason) {
+    case "unreadable-label":
+    case "record-mismatch":
+    case "multiple-candidates":
+    case "user-unsure":
+    case "service-failure":
+    case "label-differs":
+      return "label-trouble";
+    case "unsupported-medical-question":
+    case "adverse-effect-question":
+      return "medical-question";
+    default:
+      return "help-requested";
+  }
+}
+
+/**
+ * Closes a help flow. After a request was sent from the safety screen, "Carry on"
+ * continues the call where it left off (Recovery); otherwise it just closes.
+ */
+function closeHelp(s: Session, ctx: ReduceContext, resume: boolean): Session {
+  const closed: Session = { ...s, helpFlow: null };
+  if (closed.state === "listening") {
+    return { ...closed, assistantKey: "anotherMedicineGuide", contextualActions: [], replyTo: null };
+  }
+  if (resume && closed.state === "safety") return reduceSession(closed, { type: "RETURN_TO_CALL" }, ctx);
+  return closed;
+}
+
 function enterSafety(
   s: Session,
   ctx: ReduceContext,
@@ -209,10 +307,12 @@ function enterSafety(
   const next: Session = {
     ...s,
     ...extra,
+    resumeExplainStep: s.state === "explain" ? s.explainStep : null,
     state: "safety",
     safetyReason: reason,
     contextualActions: [],
-    helpAction: null,
+    helpFlow: null,
+    recordConflict: false,
   };
   return withAudit(next, ctx, {
     eventType: urgent ? "urgent-safety-triggered" : "help-requested",
@@ -247,10 +347,10 @@ function enterExplain(s: Session, ctx: ReduceContext, step: 0 | 1): Session {
 function applyRoute(
   s: Session,
   ctx: ReduceContext,
-  route: ContextualActionId,
+  route: "show-medicine" | "ask-schedule",
   via: "button" | "message",
 ): Session {
-  s = { ...s, replyTo: null, nameCheckPending: false };
+  s = { ...s, replyTo: null, nameCheckPending: false, offTopicStreak: 0 };
   const audit: AuditInput = {
     eventType: "route-selected",
     summary:
@@ -259,7 +359,7 @@ function applyRoute(
   };
   if (route === "show-medicine") {
     return withAudit(
-      { ...s, state: "camera-permission", labelRouteSelected: true, contextualActions: [] },
+      { ...s, state: "camera-permission", labelRouteSelected: true, showMethod: "choose", contextualActions: [] },
       ctx,
       audit,
     );
@@ -304,6 +404,11 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       });
     }
 
+    case "SET_STUDY_CONDITION": {
+      if (s.studyCondition === event.condition) return s;
+      return { ...s, studyCondition: event.condition };
+    }
+
     case "CALL_START": {
       if (s.state !== "start" || s.callActive) return s;
       const callCount = s.callCount + 1;
@@ -325,7 +430,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           matchStatus: null,
           safetyReason: null,
           explainStep: 0,
-          helpAction: null,
+          helpFlow: null,
           labelRetries: 0,
         },
         ctx,
@@ -339,15 +444,19 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       const routed = routeMessage(text, {
         matchConfirmed: isMatchConfirmed(s),
         nameCheckPending: s.state === "listening" && s.nameCheckPending,
+        explaining: s.state === "explain",
       });
       // One accepted message = one turn, whatever it routes to. Counted here so
       // every path below (safety, route, explain, ordinary reply) carries it.
       const heard: Session = {
         ...s,
         userText: text,
+        userInputVia: event.via ?? "voice",
         turnCount: s.turnCount + 1,
         replyTo: null,
         nameCheckPending: false,
+        offTopicStreak: routed.intent === "off-topic" ? s.offTopicStreak + 1 : 0,
+        helpFlow: null, // moving on without answering a help question is a "not now"
       };
 
       // Urgent-risk overrides the normal path from ANY active-call state.
@@ -372,6 +481,15 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           { intent: routed.intent },
         );
       }
+      // "My doctor said…": stay on the explanation and answer from the record itself.
+      // The record is never changed, hidden or softened, and no model is asked.
+      if (routed.intent === "record-conflict" && s.state === "explain" && isMatchConfirmed(s)) {
+        return withAudit({ ...heard, recordConflict: true }, ctx, {
+          eventType: "record-conflict-raised",
+          summary: "Person said the record differs from what they were told; record shown with pharmacist option",
+          details: { intent: routed.intent },
+        });
+      }
       if (s.state !== "listening") return s;
 
       const base: Session = heard;
@@ -383,13 +501,17 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       if (routed.toExplain && isMatchConfirmed(base)) {
         return enterExplain(base, ctx, 1);
       }
+      // Two off-topic turns in a row: a friendly wrap-up instead of a third redirect.
+      const wrapUp = base.offTopicStreak >= OFF_TOPIC_TURN_CAP;
+      const assistantKey: CopyKey = wrapUp ? "offTopicWrapUp" : routed.assistantKey;
+      const contextualActions: ContextualActionId[] = wrapUp ? ["show-medicine", "end-call"] : routed.contextualActions;
       return withAudit(
         {
           ...base,
-          assistantKey: routed.assistantKey,
-          contextualActions: routed.contextualActions,
+          assistantKey,
+          contextualActions,
           replyTo: base.turnCount,
-          nameCheckPending: routed.assistantKey === "medicineNameCheck",
+          nameCheckPending: assistantKey === "medicineNameCheck",
         },
         ctx,
         {
@@ -398,11 +520,14 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           actor: "system",
           route: "typed-input",
           validationStatus: "passed",
-          details: {
-            intent: routed.intent,
-            actionsOffered: routed.contextualActions.join(",") || "none",
-            characters: text.length, // length only — never the raw text
-          },
+          // Off-topic and wellbeing turns keep the category only — nothing personal.
+          details: routed.category
+            ? { intent: routed.intent, category: routed.category, actionsOffered: contextualActions.join(",") }
+            : {
+                intent: routed.intent,
+                actionsOffered: contextualActions.join(",") || "none",
+                characters: text.length, // length only — never the raw text
+              },
         },
       );
     }
@@ -437,12 +562,23 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       // Button path: the action must have been offered during this active call.
       if (!s.callActive || s.state !== "listening") return s;
       if (!s.contextualActions.includes(event.route)) return s;
+      if (event.route === "end-call") return reduceSession(s, { type: "END_CALL" }, ctx);
+      if (event.route === "carry-on") {
+        return { ...s, assistantKey: "anotherMedicineGuide", contextualActions: [], replyTo: null };
+      }
+      if (event.route === "ask-family") return reduceSession(s, { type: "HELP_START", kind: "family" }, ctx);
       return applyRoute(s, ctx, event.route, "button");
     }
 
+    case "CHOOSE_CAMERA": {
+      if (s.state !== "camera-permission" || s.showMethod !== "choose") return s;
+      return { ...s, showMethod: "camera" };
+    }
+
     case "CAMERA_CONSENT": {
-      // CAMERA_PERMISSION is only reachable via SELECT_ROUTE("show-medicine").
-      if (s.state !== "camera-permission" || !s.labelRouteSelected) return s;
+      // CAMERA_PERMISSION is only reachable via SELECT_ROUTE("show-medicine"), and the
+      // consent question only after the person picked "Use camera".
+      if (s.state !== "camera-permission" || !s.labelRouteSelected || s.showMethod !== "camera") return s;
       if (event.granted) {
         return withAudit(
           { ...s, state: "camera-guidance", cameraMode: "preview", cameraIssue: null },
@@ -454,10 +590,10 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           },
         );
       }
-      // Denial is never a dead end: typed/demo-label fallback opens.
+      // Denial is never a dead end: photo, record-list and typed fallbacks open.
       return withAudit({ ...s, state: "camera-guidance", cameraMode: "fallback", cameraIssue: null }, ctx, {
         eventType: "camera-consent-declined",
-        summary: "Camera declined; demo-label fallback offered",
+        summary: "Camera declined; photo, record-list and typed fallbacks offered",
         route: "local-fallback",
       });
     }
@@ -478,14 +614,18 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
     }
 
     case "SUBMIT_LABEL": {
-      if (s.state !== "camera-guidance") return s;
       const input = event.input;
+      // From the camera step, anything. From the show-medicine choice, only what
+      // needs no camera: a chosen photo or typed details (a camera still can't get
+      // here without consent).
+      const noCamera = input.mode === "typed" || (input.mode === "image" && input.source === "upload");
+      if (s.state !== "camera-guidance" && !(s.state === "camera-permission" && noCamera)) return s;
       return withAudit({ ...s, state: "analyzing", pendingLabel: input }, ctx, {
         eventType: "label-submitted",
         summary: "Label submitted for checking",
         route:
           input.mode === "demo"
-            ? "deterministic-demo"
+            ? "deterministic"
             : input.mode === "typed"
               ? "typed-input"
               : "claude-vision",
@@ -499,6 +639,21 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
                 ? input.source
                 : null,
         },
+      });
+    }
+
+    case "CHOOSE_MEDICINE": {
+      // Offered beside the camera (after "Not now", or another try). Picking one is a
+      // possible match like any other: it still has to be confirmed before anything is explained.
+      if (s.state !== "camera-guidance") return s;
+      const record = recordMedicines.find((m) => m.id === event.medicineId);
+      if (!record) return s;
+      const display = candidateDisplayFor(record);
+      return withAudit({ ...s, state: "confirm-match", candidate: display, matchStatus: "possible" }, ctx, {
+        eventType: "candidate-presented",
+        summary: `Possible match chosen from the record list: ${display.medicineName}`,
+        route: "record-list",
+        validationStatus: "passed",
       });
     }
 
@@ -650,12 +805,37 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       if (s.state !== "explain" || !isMatchConfirmed(s)) return s;
       const step = Math.min(2, Math.max(0, s.explainStep + (event.direction === "next" ? 1 : -1)));
       if (step === s.explainStep) return s;
-      return { ...s, explainStep: step as 0 | 1 | 2 };
+      return { ...s, explainStep: step as 0 | 1 | 2, recordConflict: false };
+    }
+
+    case "RECORD_CONFLICT_CHOICE": {
+      if (s.state !== "explain" || !s.recordConflict || !isMatchConfirmed(s)) return s;
+      if (event.choice === "carry-on") return { ...s, recordConflict: false };
+      // "Ask a pharmacist to call me": the callback flow, on top of the explanation.
+      return {
+        ...s,
+        recordConflict: false,
+        helpFlow: { kind: "pharmacist-callback", stage: "confirm", reason: "record-conflict" },
+      };
+    }
+
+    case "LABEL_CHECK": {
+      // Asked beside the instruction (step 1), the only step that shows it.
+      if (s.state !== "explain" || s.explainStep !== 1 || s.recordConflict || !isMatchConfirmed(s)) return s;
+      const answered = withAudit(s, ctx, {
+        eventType: "label-check-answered",
+        summary: event.matches ? "Person said the label matches the record" : "Person said the label looks different",
+        validationStatus: event.matches ? "passed" : "blocked",
+        details: { matches: event.matches },
+      });
+      if (event.matches) return { ...answered, explainStep: 2 };
+      // A label that disagrees with the record: the record isn't trusted for this medicine any more.
+      return enterSafety(answered, ctx, "label-differs", { candidate: null, matchStatus: null });
     }
 
     case "UNDERSTOOD": {
       if (s.state !== "explain" || !isMatchConfirmed(s)) return s;
-      return withAudit({ ...s, state: "complete" }, ctx, {
+      return withAudit({ ...s, state: "complete", recordConflict: false }, ctx, {
         eventType: "understanding-confirmed",
         summary: "User said “I understand”",
       });
@@ -677,6 +857,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         candidate: null,
         matchStatus: null, // a new medicine must pass the confirmation gate again
         explainStep: 0,
+        recordConflict: false,
         labelRetries: 0,
       };
     }
@@ -704,9 +885,10 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       return {
         ...s,
         labelRetries: s.labelRetries + 1,
+        resumeExplainStep: null,
         state: "camera-guidance",
         safetyReason: null,
-        helpAction: null,
+        helpFlow: null,
         cameraMode: s.cameraMode ?? "fallback",
         candidate: null,
         matchStatus: null,
@@ -715,26 +897,98 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
 
     case "RETURN_TO_CALL": {
       if (s.state !== "safety" || !s.callActive || s.safetyReason === "urgent-risk") return s;
+      // Recovery: back to the explanation step they left, when the record is still confirmed.
+      if (s.resumeExplainStep !== null && isMatchConfirmed(s)) {
+        return {
+          ...s,
+          state: "explain",
+          explainStep: s.resumeExplainStep,
+          resumeExplainStep: null,
+          safetyReason: null,
+          helpFlow: null,
+          contextualActions: [],
+        };
+      }
       return {
         ...s,
         state: "listening",
         safetyReason: null,
-        helpAction: null,
+        helpFlow: null,
         assistantKey: "anotherMedicineGuide",
         contextualActions: [],
         replyTo: null,
         nameCheckPending: false,
         labelRouteSelected: false,
+        resumeExplainStep: null,
       };
     }
 
-    case "HELP_ACTION": {
-      if (s.state !== "safety") return s;
-      return withAudit({ ...s, helpAction: event.action }, ctx, {
-        eventType: "help-requested",
-        summary: `Demo help action selected: ${event.action} (nothing was sent)`,
-        details: { action: event.action, implemented: false },
-      });
+    case "HELP_START": {
+      // Offered on the non-urgent safety options (all kinds), and as "Let my family
+      // know" after the wellbeing reply. Never on the urgent path (§ I, on hold).
+      const fromSafety = s.state === "safety" && s.safetyReason !== "urgent-risk";
+      const fromWellbeing =
+        s.state === "listening" && event.kind === "family" && s.contextualActions.includes("ask-family");
+      if (!s.callActive || s.helpFlow || !(fromSafety || fromWellbeing)) return s;
+      return {
+        ...s,
+        helpFlow: { kind: event.kind, stage: event.kind === "clinic" ? "info" : "confirm", reason: helpReasonFor(s) },
+      };
+    }
+
+    case "HELP_CONFIRM": {
+      if (s.helpFlow?.stage !== "confirm") return s;
+      if (!event.granted) return closeHelp(s, ctx, false);
+      // Consent given: the client now sends the request. Nothing is "sent" until the service says so.
+      return { ...s, helpFlow: { ...s.helpFlow, stage: "sending" } };
+    }
+
+    case "HELP_RESULT": {
+      const flow = s.helpFlow;
+      if (flow?.stage !== "sending") return s;
+      if (!event.ok) {
+        return withAudit({ ...s, helpFlow: { ...flow, stage: "failed" } }, ctx, {
+          eventType: "service-fallback-used",
+          summary: "Help request couldn’t be sent; try again or the pharmacy’s number offered",
+          actor: "system",
+          route: "local-fallback",
+          validationStatus: "blocked",
+          details: { kind: flow.kind },
+        });
+      }
+      const sent: HelpFlow = { ...flow, stage: "sent", reference: event.reference, contactName: event.contactName };
+      return withAudit(
+        { ...s, helpFlow: sent },
+        ctx,
+        flow.kind === "pharmacist-callback"
+          ? {
+              eventType: "pharmacist-callback-requested",
+              summary: `Pharmacist callback requested (simulated service, ref ${event.reference ?? "—"})`,
+              details: { reason: flow.reason },
+            }
+          : {
+              // Only ever after an explicit "Yes" on the consent step.
+              eventType: "caregiver-help-requested",
+              summary: `${flow.kind === "family" ? "Family" : "Trusted helper"} told Mei Ling would like help (simulated service)`,
+              details: { kind: flow.kind, consent: true, reason: flow.reason },
+            },
+      );
+    }
+
+    case "HELP_RETRY": {
+      if (s.helpFlow?.stage !== "failed") return s;
+      return { ...s, helpFlow: { ...s.helpFlow, stage: "sending" } };
+    }
+
+    case "HELP_SHOW_NUMBER": {
+      // From the failure state: the pharmacy's own number, to call themselves.
+      if (s.helpFlow?.stage !== "failed") return s;
+      return { ...s, helpFlow: { ...s.helpFlow, stage: "info" } };
+    }
+
+    case "HELP_DISMISS": {
+      if (!s.helpFlow || s.helpFlow.stage === "sending") return s;
+      return closeHelp(s, ctx, s.helpFlow.stage === "sent");
     }
 
     case "REPEAT": {
@@ -750,6 +1004,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         ...createInitialSession(),
         persona: ended.persona,
         language: ended.language,
+        studyCondition: ended.studyCondition,
         callCount: ended.callCount,
         sessionId: ended.sessionId,
         audit: ended.audit,

@@ -24,7 +24,8 @@ export type SafetyReason =
   | "adverse-effect-question"
   | "urgent-risk"
   | "service-failure"
-  | "help-requested"; // extension: explicit "Get help" / human-help request
+  | "help-requested" // extension: explicit "Get help" / human-help request
+  | "label-differs"; // extension: the person says their label doesn't match the explained record
 
 export type CompanionState =
   | "start"
@@ -53,10 +54,17 @@ export type UserIntent =
   | "unsure-match"
   | "general"
   | "off-topic" // recognised as off-spine: acknowledged, then redirected (never answered)
+  | "record-conflict" // extension: "my doctor said…" while the record is explained — answered from the record
+  | "wellbeing" // extension: loneliness / low mood — warm fixed reply, family help with consent
   | "unsupported-medical-question"
   | "urgent-risk";
 
-export type ContextualActionId = "show-medicine" | "ask-schedule";
+/**
+ * Temporary in-call choices. The two doors (`show-medicine`, `ask-schedule`) are
+ * the only ones the understanding pass may offer; `end-call` follows the
+ * off-topic wrap-up; `ask-family` and `carry-on` follow the wellbeing reply.
+ */
+export type ContextualActionId = "show-medicine" | "ask-schedule" | "end-call" | "carry-on" | "ask-family";
 
 export type LocalizedText = Partial<Record<LanguageCode, string>>;
 
@@ -82,7 +90,7 @@ export type Patient = {
 export type RecordSource = {
   id: "source_brightcare_demo";
   name: "BrightCare Pharmacy";
-  displayLabel: "BrightCare Pharmacy — demo record";
+  displayLabel: "BrightCare Pharmacy";
   recordStatus: "current-demo";
   verifiedAt: string;
   disclaimer: "Prototype information — not connected to a real pharmacy.";
@@ -131,7 +139,7 @@ export type LabelInput =
   | {
       // Metadata only: the pixels live in memory for one request and are never stored in session state.
       mode: "image";
-      source: "sample" | "camera";
+      source: "upload" | "camera"; // "upload": chosen with the system photo picker (gallery/files)
       mimeType: "image/jpeg" | "image/png" | "image/webp";
       byteSize: number;
     }
@@ -163,7 +171,7 @@ export type CandidateDisplay = {
   medicineName: "Metformin 500 mg";
   strength: "500 mg";
   dosageForm: "tablet";
-  recordSource: "BrightCare Pharmacy — demo record";
+  recordSource: "BrightCare Pharmacy";
 };
 
 export type MatchResult =
@@ -198,6 +206,10 @@ export type AuditEventType =
   | "candidate-denied"
   | "explanation-viewed"
   | "understanding-confirmed" // extension
+  | "record-conflict-raised" // extension: intent only, never the words
+  | "label-check-answered" // extension: "Does this match your label?" → matches / differs
+  | "caregiver-help-requested" // extension: family/trusted helper told, ONLY after consent and service success
+  | "pharmacist-callback-requested" // extension: callback request accepted by the (simulated) pharmacy
   | "language-changed"
   | "help-requested"
   | "urgent-safety-triggered"
@@ -212,10 +224,11 @@ export type AuditEvent = {
   actor: "primary-user" | "caregiver" | "system";
   summary: string;
   route:
-    | "deterministic-demo"
+    | "deterministic"
     | "claude-vision"
     | "claude-understanding"
     | "typed-input"
+    | "record-list" // extension: chosen from "Choose from my medicines"
     | "local-fallback"
     | "gemini-live";
   validationStatus: "passed" | "blocked" | "not-applicable";

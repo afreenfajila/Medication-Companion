@@ -17,9 +17,12 @@ describe("unclearGuidanceKey", () => {
 
   it("distinguishes mid-explanation from the final chunk", () => {
     expect(at("explain", 0)).toBe("unclearExplain");
-    expect(at("explain", 1)).toBe("unclearExplain");
+    // Beside the instruction, the open question is the label check.
+    expect(at("explain", 1)).toBe("unclearLabelCheck");
     // On the last chunk "next" no longer exists, so offering it would misdirect.
     expect(at("explain", 2)).toBe("unclearExplainLast");
+    // After "my doctor said…", the open question is pharmacist or carry on.
+    expect(unclearGuidanceKey({ state: "explain", explainStep: 1, recordConflict: true })).toBe("unclearRecordConflict");
   });
 
   it("keeps the generic line where anything may be said", () => {
@@ -36,12 +39,12 @@ describe("unclearGuidanceKey", () => {
       ["camera-guidance", 0],
       ["confirm-match", 0],
       ["explain", 0],
+      ["explain", 1],
       ["explain", 2],
       ["safety", 0],
       ["complete", 0],
     ];
-    for (const [state, step] of states) {
-      const key = at(state, step);
+    for (const key of [...states.map(([state, step]) => at(state, step)), "unclearRecordConflict" as const]) {
       expect(t("en", key), key).toMatch(/didn’t quite catch that/i);
       expect(t("zh-Hans", key), key).toMatch(/没太听清楚/);
     }

@@ -1,4 +1,4 @@
-import { Pill } from "lucide-react";
+import { Pill, ShieldCheck } from "lucide-react";
 import type { CandidateDisplay } from "@/types/content";
 
 export type RecordCardLabels = {
@@ -9,6 +9,20 @@ export type RecordCardLabels = {
   form: string;
   formValue: string;
 };
+
+/**
+ * Where the explained record comes from and when it was checked
+ * ("BrightCare Pharmacy · checked 21 September 2026"), shown
+ * beside the instruction so it can be compared with the physical label.
+ */
+export function RecordSourceLine({ children }: { children: string }) {
+  return (
+    <p className="flex items-center gap-2 text-[14px] font-medium text-navy-700">
+      <ShieldCheck className="h-4 w-4 shrink-0 text-teal-800" aria-hidden="true" />
+      <span>{children}</span>
+    </p>
+  );
+}
 
 /**
  * Candidate identity only: patient, medicine, strength, form. It is labelled

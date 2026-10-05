@@ -30,7 +30,7 @@ describe("deterministic matching", () => {
     const result = matchLabelInput({ mode: "demo", demoAssetId: "sample_metformin_label" });
     if (result.outcome !== "candidate") throw new Error("expected candidate");
     expect(result.display.status).toBe("possible");
-    expect(result.display.recordSource).toBe("BrightCare Pharmacy — demo record");
+    expect(result.display.recordSource).toBe("BrightCare Pharmacy");
   });
 
   it("unreadableLabel fixture → unreadable", () => {

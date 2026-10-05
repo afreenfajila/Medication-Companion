@@ -1,6 +1,6 @@
 import type { CopyKey } from "@/lib/content/translations";
 import { classifySafety } from "@/lib/safety/classify";
-import { classifyOffTopic, type OffTopicKind } from "./off-topic";
+import { classifyOffTopic, isLowMood, type OffTopicKind } from "./off-topic";
 import type {
   ContextualActionId,
   SafetyReason,
@@ -17,7 +17,9 @@ export type RoutedMessage = {
   /** Only true when a confirmed record already authorises schedule content. */
   toExplain?: boolean;
   /** The person asked for a route outright ("I want to show the medicine"): act as if they chose it. */
-  route?: ContextualActionId;
+  route?: "show-medicine" | "ask-schedule";
+  /** Off-spine and wellbeing turns: the only thing the audit log records about them. */
+  category?: OffTopicKind | "wellbeing";
 };
 
 const OFF_TOPIC_KEYS: Record<OffTopicKind, CopyKey> = {
@@ -56,6 +58,16 @@ const RECORD_MEDICINE_NAME = /\bmetformin\b|二甲双胍/i;
 const RECORD_MEDICINE_SOUNDALIKE =
   /\bmet\s?-?form\w*|\b(met|med|meth)\s?(for|four|fore)\s?(min|mins|men|man|mean|main|mine|ming|pain)\b|\bmetphormin\w*|\bmedformin\w*/i;
 
+// The person disagrees with what the record says (CLAUDE.md § Assignment 3, C).
+// Only read while a confirmed record is being explained, and only AFTER the
+// safety classifier: "my doctor said I can stop it" is a dose question first.
+const RECORD_CONFLICT =
+  /\bdoctor (said|told|says)\b|\bthat'?s not (right|what)\b|\bi thought (it was|i take)\b|\bnot the same as\b|医生(说|告诉)|不是这样|我以为/i;
+
+export function isRecordConflict(text: string): boolean {
+  return RECORD_CONFLICT.test(text.replace(/[’‘]/g, "'"));
+}
+
 // Answers to "Did you mean Metformin?" — only read on the turn right after it.
 const NAME_CHECK_YES =
   /^\s*(yes|yeah|yep|yup|correct|right|that's (it|right)|that is (it|right)|exactly|i did|i do)\b|^\s*(是|对|没错)/i;
@@ -66,6 +78,25 @@ function joinSpelledLetters(text: string): string {
   // Only lone letters join — the "s" of "it's" or the "a" of "a pill" never do.
   return text.replace(/(?<![\w'’])([a-z])[\s.-]+(?=[a-z](?![\w'’]))/gi, "$1");
 }
+
+/**
+ * True when the record's medicine is named (or spelled, or a common mishearing).
+ * The understanding guard uses this too: a reply may only name the medicine if
+ * the person did first.
+ */
+export function mentionsRecordMedicine(text: string): boolean {
+  return RECORD_MEDICINE_NAME.test(joinSpelledLetters(text)) || RECORD_MEDICINE_SOUNDALIKE.test(text);
+}
+
+// "I take it twice a day" — talking about taking a medicine without saying which.
+// A statement only (anchored at the start), so "When do I take it?" stays a schedule question.
+const VAGUE_TAKING =
+  /^\s*(?:(?:yes|yeah|well|so|um|uh|ok|okay)[,\s]+)?(?:i|i've|i have|i'm|i am)\s+(?:take|took|taking|been taking|usually take)\b(?![^?]*\?)|^我(?:每天|平时|今天|一天)?(?:都|在)?(?:吃|服用)(?!.*[吗？?])/i;
+
+// Points at a medicine without naming it: "this one", "the white one", "my pill", "这个".
+// Checked after the explicit questions ("what is this?") so those keep their own replies.
+const VAGUE_MEDICINE_REFERENCE =
+  /\b(?:this|that|the(?:\s+\w+)?|my)\s+(?:one|ones|pill|pills|tablet|tablets|capsule|capsules|medicine|medication)\b|这个|那个|这颗|那颗|这片|那片|这种|那种/i;
 
 // "I've got my medicine with me" — the person has something in hand to check.
 const MEDICINE_IN_HAND =
@@ -79,7 +110,7 @@ const SCHEDULE =
 
 /**
  * Deterministic in-call routing (site-contract.md §4). Order matters:
- * safety → human help → off-spine talk → explicit route requests →
+ * safety → record conflict (explain only) → human help → off-spine talk → explicit route requests →
  * list-my-prescriptions → medicine named / misheard / in hand → unknown medicine →
  * schedule → broad/unclear.
  * "What is this for? When do I take it?" is an unknown-medicine question:
@@ -94,6 +125,8 @@ export function routeMessage(
     matchConfirmed: boolean;
     /** The companion just asked "did you mean <medicine>?" — a bare "yes"/"no" answers it. */
     nameCheckPending?: boolean;
+    /** A confirmed record is on screen, so "that's not right" disputes it. */
+    explaining?: boolean;
   },
 ): RoutedMessage {
   const safety = classifySafety(text);
@@ -112,6 +145,9 @@ export function routeMessage(
       contextualActions: [],
       safetyReason: safety.reason,
     };
+  }
+  if (ctx.explaining && ctx.matchConfirmed && isRecordConflict(text)) {
+    return { intent: "record-conflict", assistantKey: "recordConflict", contextualActions: [] };
   }
   if (HELP_REQUEST.test(text)) {
     return {
@@ -136,10 +172,19 @@ export function routeMessage(
   // safety-classified message can never be answered with a friendly deflection,
   // and before the medicine patterns only because `classifyOffTopic` refuses to
   // fire on anything containing a medicine/label/dose term.
+  if (isLowMood(text)) {
+    return {
+      intent: "wellbeing",
+      assistantKey: "wellbeing",
+      contextualActions: ["ask-family", "carry-on"],
+      category: "wellbeing",
+    };
+  }
   const offTopic = classifyOffTopic(text);
   if (offTopic) {
     return {
       intent: "off-topic",
+      category: offTopic,
       assistantKey: OFF_TOPIC_KEYS[offTopic],
       // Still offering the spine's two doors, exactly as the clarification does.
       contextualActions: ["show-medicine", "ask-schedule"],
@@ -185,6 +230,14 @@ export function routeMessage(
       contextualActions: ["show-medicine"],
     };
   }
+  // A medicine is being talked about but not named: ask which one, never assume.
+  if (!ctx.matchConfirmed && VAGUE_TAKING.test(text)) {
+    return {
+      intent: "unknown-medicine-question",
+      assistantKey: "whichMedicine",
+      contextualActions: ["show-medicine"],
+    };
+  }
   if (!ctx.matchConfirmed && MEDICINE_IN_HAND.test(text)) {
     return {
       intent: "unknown-medicine-question",
@@ -214,9 +267,19 @@ export function routeMessage(
       contextualActions: ["show-medicine", "ask-schedule"],
     };
   }
+  // Vague: a medicine is pointed at but not named — ask which one, never assume.
+  if (!ctx.matchConfirmed && VAGUE_MEDICINE_REFERENCE.test(text)) {
+    return {
+      intent: "unknown-medicine-question",
+      assistantKey: "whichMedicine",
+      contextualActions: ["show-medicine"],
+    };
+  }
+  // Unclear or random ("I don't know what to do", "banana"): say what the companion
+  // can help with, then offer the same two doors — guidance, not a bare question.
   return {
     intent: "general",
-    assistantKey: "clarificationPrompt",
+    assistantKey: "capabilityGuide",
     contextualActions: ["show-medicine", "ask-schedule"],
   };
 }

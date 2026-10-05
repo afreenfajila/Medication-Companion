@@ -411,7 +411,7 @@ Limit: Explain only these facts in the selected language. Do not add medical adv
 | Key | English | Simplified Chinese |
 |---|---|---|
 | `possibleMatch` | I found a possible match | 我找到一个可能的匹配项 |
-| `confirmHeading` | Is this the medicine you are holding? | 这是您手上拿着的药物吗？ |
+| `confirmHeading` | I found a possible match: {medicine}, {strength}. Is this the one you're holding? (see §19) | 我找到一个可能的匹配：{medicine}，{strength}。是您手上的这一种吗？ |
 | `checkName` | Please check the name on the label before continuing. | 继续之前，请确认标签上的名称。 |
 | `yesMedicine` | Yes, this is my medicine | 是的，这是我的药物 |
 | `tryAgain` | No, try again | 不是，再试一次 |
@@ -503,6 +503,7 @@ Audit events must avoid storing raw image data, raw audio, or unredacted free-te
 - Make it clear that the companion cannot change instructions.
 - Provide a human-help route for uncertainty.
 - Start with the single `Call with companion` entry point; offer label/schedule choices only after active-call conversation context exists.
+- Follow the companion tone contract (§19.A) in every companion line, fixed or model-written.
 
 ### Prohibited
 
@@ -558,3 +559,158 @@ const demoFixtures = {
 - [ ] Every uncertain outcome has a clear next action.
 - [ ] Gemini and Claude system instructions repeat the no-medical-advice boundary.
 - [ ] Audit log records route and validation status without storing raw sensitive media.
+
+## 19. Assignment 3 experience amendments
+
+Approved changes from the Assignment 3 experience design (CLAUDE.md § Assignment 3 experience amendments). None relaxes a safety rule. All new copy keys are fixed approved copy, never model-written, and are not in `UNDERSTAND_KEYS`. zh-Hans lines need native-speaker review before external testing.
+
+### A. Companion tone contract
+
+Every companion line, fixed copy and model-written replies alike:
+
+1. Thank or reassure first. A doubt, retry or question is a good habit.
+2. Say what the record says, never what the person should do. Quoting the verified instruction verbatim is the only exception.
+3. Nobody is at fault. Things "didn't come through clearly" or "take a little while to update".
+4. Offer a choice and end with a gentle question, except when closing the call.
+5. At most four short sentences, one idea each. Use "we" and "let's".
+6. Never use: error, failed, invalid, wrong, incorrect, mistake, must, should (错误, 失败, 无效, 不对, 错了, 必须, 应该).
+
+Rule 6 is enforced in code: `usesBlameWords` rejects a model reply in `isSafeCompanionReply`, and a test checks every fixed copy line and record field. A model reply for the current turn must also be in the requested language and end with a question.
+
+### B. Gentler label-failure copy
+
+For the non-urgent label reasons (`unreadable-label`, `record-mismatch`, `multiple-candidates`, `user-unsure`) the safety card uses these instead of `safetyHeading` / `safetyBody`. The reason line, the no-instructions line and the single retry are unchanged. `urgent-risk`, `service-failure`, medical questions and help requests keep their existing copy.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `labelSafetyHeading` | Let's check this one together. | 我们一起再确认一下。 |
+| `labelSafetyBody` | Thank you for checking. That happens sometimes, and I'd rather be careful than guess. Would you like to try another photo, or ask someone to check it with you? | 谢谢您的确认。这种情况很常见，我宁可小心一点也不想猜。您想再拍一张，还是请人和您一起核对？ |
+
+### C. Record conflict
+
+New intent `record-conflict`, valid only while a confirmed record is explained (`explain`). Deterministic, case-insensitive patterns: `doctor (said|told|says)`, `that'?s not (right|what)`, `i thought (it was|i take)`, `not the same as`, `医生(说|告诉)`, `不是这样`, `我以为`.
+
+Order: `urgent-risk` → `unsupported-medical-question` → `record-conflict` → human help → off-topic. "My doctor said I can stop it" is therefore a dose question; a new unsupported pattern catches stopping the medicine however it's reported (`stop|skip|quit (taking) it|them|my medicine…`).
+
+The reply is fixed copy. `{instruction}` and `{verifiedDate}` are filled by `fillRecordFacts` from the confirmed explanation and `recordSource.verifiedAt`; they are never typed into copy and never model-written. The record stays on screen, unchanged.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `recordConflict` | Thank you for telling me — it's good to double-check. Your pharmacy record, checked on {verifiedDate}, says: "{instruction}" Sometimes a doctor changes things and the record takes a little while to catch up, so it's no trouble to ask. Would you like help checking with the pharmacist, or shall we carry on for now? | 谢谢您告诉我，多确认一下是很好的。您的药房记录（{verifiedDate}确认）写着：“{instruction}” 有时候医生会调整用药，记录可能还没来得及更新，所以问一问完全没关系。您想让我帮您联系药剂师确认一下，还是我们先继续？ |
+| `checkWithPharmacist` | Check with pharmacist — demo | 向药剂师确认 — 示范 |
+| `carryOn` | Carry on | 先继续 |
+| `unclearRecordConflict` | I didn't quite catch that. You can say "pharmacist" for help checking, or "carry on". | 我没太听清楚。您可以说「药剂师」请人帮忙确认，或说「继续」。 |
+
+Audit event `record-conflict-raised` (details: `{ intent: "record-conflict" }` only, never the words).
+
+### D. Label check on the explanation
+
+Beside the instruction (explanation step 1) the companion shows where the record comes from and when it was checked, and asks the person to compare it with the physical label. `{verifiedDate}` is filled from `recordSource.verifiedAt`.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `recordCheckedOn` | BrightCare Pharmacy — demo record · checked {verifiedDate} | BrightCare Pharmacy — 示范记录 · {verifiedDate}核对 |
+| `labelCheckPrompt` | Does this match what's printed on your label? | 这和您标签上印的一样吗？ |
+| `labelMatches` | Yes, it matches | 是的，一样 |
+| `labelLooksDifferent` | It looks different | 看起来不一样 |
+| `labelDiffers` | Thank you for checking — that's really helpful. When the label and the record don't agree, a pharmacist is the best person to look. Would you like help contacting them? | 谢谢您仔细核对，这很有帮助。标签和记录不一样的时候，最好请药剂师看一看。需要我帮您联系他们吗？ |
+| `unclearLabelCheck` | I didn't quite catch that. Does this match your label? You can say "yes, it matches" or "it looks different". | 我没太听清楚。这和您的标签一样吗？您可以说「一样」或「不一样」。 |
+
+New safety reason `label-differs` (heading `labelSafetyHeading`, body `labelDiffers`, no reason line, no photo retry). New audit event `label-check-answered` (details: `{ matches }`).
+
+### E. Off-topic, health signals and wellbeing
+
+1. **Turn cap.** The second consecutive off-topic turn gets `offTopicWrapUp` with `Show medicine` and `End call`. Any other turn resets the count.
+2. **Health signals.** Added to `unsupportedMedicalPatterns` (the limitation + pharmacist/clinic path, not urgent): `(feel|feeling|been) (so |very |really )?(tired|dizzy|weak|unwell|sick|confused)`, `keep forgetting|so forgetful`, `can'?t sleep|not sleeping`, `头晕|很累|没力气|不舒服|睡不着|老是忘`.
+3. **Wellbeing.** `lonely|all alone|no one to talk|feel(ing)? sad`, `孤单|寂寞|没人陪|难过` → intent `wellbeing`, fixed `wellbeing` copy with `Carry on` (and the family option, F). Self-harm stays urgent, and that screen also shows `crisisLines` as text.
+4. **Misheard speech.** A browser result with confidence above 0 and below `MIN_SPEECH_CONFIDENCE` (0.5) gets `didntCatch` before any classification. Exactly 0 means "not provided".
+5. **Nothing personal is kept.** Off-topic and wellbeing audit events carry `{ intent, category, actionsOffered }` only (no text, no length).
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `offTopicWrapUp` | It's been lovely chatting with you. Shall we look at your medicine together, or would you like to end the call for now? | 和您聊天很开心。我们一起看看您的药，还是先结束通话？ |
+| `wellbeing` | Thank you for telling me — that sounds hard. I'm only a medicine helper, but you don't have to manage things alone. Would you like me to let your family know you'd like some company, or shall we carry on together? | 谢谢您告诉我，这听起来不容易。我只是一个用药小帮手，但您不必一个人面对。需要我告诉您的家人您想有人陪陪您吗，还是我们一起继续？ |
+| `didntCatch` | Sorry, I didn't quite catch that. Could you say it again? Typing it works well too. | 不好意思，我没听清楚。可以再说一次吗？也可以直接打字。 |
+| `crisisLines` | Samaritans of Singapore (24 hours): 1767 · Emergency: 995 | 新加坡援人协会（24小时）：1767 · 紧急电话：995 |
+
+### F. Asking family for help needs consent every time
+
+`Ask family to help — demo` is on the non-urgent safety options and after the `wellbeing` reply. Tapping it shows `familyConsent` with `Yes, ask them — demo` and `Not now`. Only "Yes" writes `caregiver-help-requested` (details `{ consent: true, implemented: false }`), which the caregiver dashboard shows as `Needs help`. "Not now" writes nothing. Nothing is sent anywhere; the demo notice says so.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `askFamily` | Ask family to help — demo | 请家人帮忙 — 示范 |
+| `familyConsent` | Shall I let your family know you'd like some help? I'll only do this if you say yes. | 需要我告诉您的家人您想请他们帮忙吗？只有您同意，我才会联系。 |
+| `familyConsentYes` | Yes, ask them — demo | 好，请告诉他们 — 示范 |
+| `unclearFamilyConsent` | I didn't quite catch that. You can say "yes" to ask your family, or "not now". | 我没太听清楚。您可以说「好」请家人帮忙，或说「现在不用」。 |
+
+### G. Study mode fixture
+
+`studyWrongInstruction` (`src/lib/content/fixtures.ts`): en `Take 1 tablet once daily at bedtime.`, zh-Hans `每日一次，睡前服用一片。` (needs native-speaker review). Used only in the `wrong-explanation` study condition, in place of the record's `instruction` after every gate has passed. It is never shown outside study mode, and participants are debriefed afterwards. Every audit event in a study session carries `details.studyCondition`.
+
+### Interaction-state wording (from the states diagram)
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `callGreeting` | Hello, I'm an AI guide. What would you like to know today? | 您好，我是AI向导。今天想了解什么呢？ |
+| `analyzingHeading` / `analyzingBody` | Thank you, let me have a look. / This will just take a moment. | 谢谢，我来看一看。/ 请稍等一下。 |
+| `confirmHeading` | I found a possible match: {medicine}, {strength}. Is this the one you're holding? | 我找到一个可能的匹配：{medicine}，{strength}。是您手上的这一种吗？ |
+| `recordHidden` | Your record is tucked away while we get you some help. | 在我们为您寻求帮助时，记录内容先收起来了。 |
+
+### H4. Help flows (simulated services)
+
+The record module is now `seed-record.ts`, the simulated services' data source, with a fictional care circle (`careContacts`: BrightCare Pharmacy 6555 0123, Greenhill Family Clinic 6555 0100, family "Daniel", trusted helper "Mrs Lim"). The numbers follow the 555-01xx fiction pattern; replace them with numbers you're allowed to show before external testing.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `askPharmacistCall` | Ask a pharmacist to call me | 请药剂师给我回电 |
+| `contactClinic` | Contact my clinic | 联系我的诊所 |
+| `askHelper` | Ask my trusted helper | 请我信任的人帮忙 |
+| `letFamilyKnow` | Let my family know | 告诉我的家人 |
+| `callbackConfirm` | I can ask BrightCare Pharmacy to call you on the number in your record. They usually call within one working day. Shall I send the request? | 我可以请BrightCare药房按您记录上的号码给您回电。他们通常会在一个工作日内联系您。要我发送请求吗？ |
+| `callbackYes` | Yes, send the request | 好，发送请求 |
+| `callbackSent` | Thank you. I've sent your request to BrightCare Pharmacy. Your reference is {reference}. Is there anything else I can help you with? | 谢谢，我已经把您的请求发给BrightCare药房了。您的参考编号是{reference}。还有什么我可以帮您的吗？ |
+| `helperConsent` | Shall I let {name}, your trusted helper, know you'd like some help? I'll only do this if you say yes. | 需要我告诉您信任的{name}您想请他们帮忙吗？只有您同意，我才会联系。 |
+| `familyConsentYes` | Yes, let them know | 好，告诉他们 |
+| `familySent` | Thank you. I've let {caregiverName} know you'd like some help. Would you like to carry on while you wait? | 谢谢，我已经告诉{caregiverName}您需要帮忙了。等待的时候，要不要我们先继续？ |
+| `helpSending` | Sending your request… | 正在发送您的请求… |
+| `serviceTrouble` | I'm sorry, I couldn't send that just now. Would you like to try again, or see the pharmacy's phone number instead? | 不好意思，刚才没能发送成功。您想再试一次，还是看看药房的电话号码？ |
+| `sendAgain` / `seePharmacyNumber` | Try again / See the pharmacy's number | 再试一次 / 查看药房电话 |
+| `pharmacyNumber` / `clinicNumber` | You can call {name} on {phone}. Is there anything else I can help you with? | 您可以拨打{phone}联系{name}。还有什么我可以帮您的吗？ |
+| `unclearHelpConfirm` | I didn't quite catch that. You can say "yes", or "not now". | 我没太听清楚。您可以说「好」，或说「现在不用」。 |
+
+Removed: `checkPharmacy`, `checkWithPharmacist`, `askFamily`, `emergencyDemo`, `demoActionNotice`, `unclearFamilyConsent`. New audit event `pharmacist-callback-requested`; `caregiver-help-requested` is now written only after consent **and** the service's success.
+
+### H3. Choose from my medicines
+
+Offered in the camera step's other ways (reached after "Not now" and after another try). It lists `recordMedicines` by name and strength only. Choosing one creates a possible match (`candidate-presented`, route `record-list`), which still goes to the confirm step.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `chooseFromMedicines` | Choose from my medicines | 从我的药物中选择 |
+| `medicineListHeading` | Which medicine are you holding? | 您手上拿的是哪一种药？ |
+| `medicineListNote` | These are the medicines on your BrightCare Pharmacy record. You'll still check it on the next step. | 这些是您在BrightCare药房记录中的药物。下一步您仍需要确认。 |
+
+### H2. Showing the medicine: camera or photo
+
+After "Show medicine": `showMedicineHeading` with `photoIntro`, two equal primary actions `Use camera` (→ the existing consent question) and `Choose a photo` (system picker, `accept="image/*"`, no `capture`), and the text action `Type the name`. The camera step's other ways are Choose a photo, Choose from my medicines, and Type the label details. "Use demo label" and the sample-photo picker are removed from the UI; their fixtures remain for reducer tests only. The bundled fictional label photos in `public/samples/` are kept so testers can save one and choose it as a photo.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `showMedicineHeading` | How would you like to show me your medicine? | 您想怎样给我看您的药？ |
+| `useCamera` / `choosePhoto` / `typeName` | Use camera / Choose a photo / Type the name | 使用相机 / 选择照片 / 输入药名 |
+| `photoIntro` | You can choose a photo of your medicine label. I'll only look at the medicine name, and the photo won't be kept. | 您可以选择一张药品标签的照片。我只看药品名称，照片不会被保存。 |
+| `photoFormat` | I couldn't open that photo. Would you like to try another one, or use the camera instead? | 这张照片我打不开。您想换一张，还是改用相机？ |
+| `unclearShowMedicine` | I didn't quite catch that. You can say "camera", choose a photo, or tell me the medicine name and strength. | 我没太听清楚。您可以说「相机」、选择照片，或告诉我药物名称和剂量。 |
+
+Removed: `useDemoLabel`, `uploadPhoto`, `samplePicker*`, `sample*`, `sampleLoadError`. Rewritten without demo-label wording: `cameraDeniedBody`, `cameraUnavailableBody`, `fallbackBody`, `reasonService`, `unclearCameraGuidance`.
+
+### H1. Prototype framing
+
+No user-facing copy or record wording says "demo" (a test checks both languages and the rendered sign-in, caregiver and About pages). One `PrototypeBadge`, `Prototype · fictional data` / `原型 · 虚构数据`, is mounted in the root layout so it shows on every screen, including About and 404 (pages that don't use `AppShell`).
+
+- Record source: `displayLabel` is now `BrightCare Pharmacy`; the explanation says "Your current pharmacy record says:" and "Source: BrightCare Pharmacy."
+- `trustBadge`: `Plan checked by BrightCare Pharmacy · {verifiedDate}`; `recordCheckedOn`: `BrightCare Pharmacy · checked {verifiedDate}`.
+- `offTopicCapability`: "I can't do that myself. If you tap Get help, I can ask a pharmacist to call you or let your family know. I can also help you understand the medicine information in your record."
+- The sign-in stand-in says "Continue as Mei Ling" and notes that the real product signs in with Singpass. The About page explains what is simulated.
+- The audit route `deterministic-demo` is now `deterministic` (it is shown in the caregiver view).

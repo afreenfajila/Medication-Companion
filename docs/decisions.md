@@ -441,3 +441,251 @@ deterministic fallback wording rather than the only wording. The actions and eve
 **Trade-off accepted.** Replies now vary and can take a moment. While Claude works, the transcript
 shows "Let me think about that…" so the pause reads as the companion thinking, not as the app
 ignoring the person.
+
+---
+
+# Decisions (Assignment 3 experience amendments)
+
+Source: the Assignment 3 experience design (correction, recovery and uncertainty states), added to
+CLAUDE.md as an approved contract change. Implemented A–G in order, one commit each.
+
+## A. Tone contract
+
+- **Enforced where it can be, prompted where it can't.** Rule 6 (no blaming or commanding words) is a
+  regex in `isSafeCompanionReply`, so a model reply that says "wrong" or "should" falls back to the
+  approved line. Rules 1–5 are about warmth and shape, which a regex can't judge, so they live in the
+  understanding prompt with three existing approved lines as tone examples. Rule 4 (end with a question)
+  is also checked for fresh model replies only; it isn't applied to `isApprovedSpeech`, because several
+  fixed lines the voice reads (for example "Reading the label…") correctly don't end in a question.
+- **Fixed copy is tested, not trusted.** A test runs every copy line and record field through the same
+  blame-word check, so a future copy edit can't reintroduce "must" unnoticed.
+- **"Take a look" is allowed.** The advice pattern (`take … medicine`) would otherwise reject "let's take
+  a look at the medicine label", a natural phrase that gives no instruction.
+
+## B. Gentler label-failure copy
+
+- **Words only.** The one-retry mechanism was already right, so the state machine is untouched; only
+  `buildEscalation`'s heading/body keys change for the four label reasons.
+- **`service-failure` keeps the old copy on purpose.** It shares the "try another photo" action with the
+  label reasons, but it means the reader didn't answer, not that the label looked wrong, and the spec
+  keeps it as is.
+- **Known rough edge.** After the single retry is used, the gentle body still asks "would you like to try
+  another photo", while the card shows `retryUsed` and no photo button. The spec fixes the body text, so
+  this is left as specified; a retry-used variant of the body would fix it.
+
+## C. Record conflict
+
+- **A flag, not a new state.** The person is still looking at the confirmed explanation; the conflict
+  reply and its two actions sit on top of it. A new `CompanionState` would have meant re-guarding every
+  explain-only event, for no benefit.
+- **The safety classifier had a hole the spec's own example found.** "My doctor said I can stop it"
+  matched no unsupported pattern (only "should I stop" did), so it would have landed as a record
+  conflict and been answered with "carry on?". Added a pattern for stopping/skipping the medicine
+  with an object attached, so "stop the call" still isn't caught.
+- **The instruction in the reply is the displayed one.** `fillRecordFacts` reads the confirmed
+  `ExplanationView`, the same object the screen shows, so the conflict reply can never quote something
+  different from the record on screen.
+- **Speech guard.** Copy with placeholders is now approved fragment by fragment for Gemini voice, with
+  the record fields and the formatted verified date approved separately. Without this, the filled line
+  would fail the guard and drop to browser speech.
+
+## D. Label check on the explanation
+
+- **Asked at step 1, where the instruction is.** That's the only point where comparing with the label
+  means anything. The source line with its verified date sits in the pinned area above the two answers,
+  and speech reads it before the question.
+- **A prompt, not a gate.** "Next" still moves on. Making the check mandatory would add a step to every
+  happy path; the aim is to invite a comparison, and the audit event records whether it happened (a
+  signal for study mode, G).
+- **"It looks different" drops the confirmed candidate.** Once the person says the label and record
+  disagree, the record is no longer trusted for that medicine, so a later schedule question can't slip
+  back into the explanation. They can check another label from the conversation.
+- **`RecordCard` is unchanged.** It is deliberately identity-only (it has no field that can hold an
+  instruction), so the dated source line is a separate `RecordSourceLine` in the same file.
+
+## E. Off-topic, health signals and wellbeing
+
+- **Reversal: feeling words no longer fall through.** The spine-redirection decision above kept "I feel
+  tired" and "I'm dizzy" out of the social pattern so they would reach the ordinary clarification
+  prompt. In practice that prompt is "would you like to show me a medicine label?", which brushes off
+  something that may matter to an older adult on a medicine. These phrases now go to the existing
+  limitation + pharmacist/clinic path. They are deliberately not urgent: "I feel tired" isn't an
+  emergency, and treating it as one would make the urgent screen cry wolf.
+- **Low mood is its own path, not off-topic and not medical.** A redirect would be cold and a safety
+  screen would be alarming. The fixed `wellbeing` line acknowledges it and offers family help (with
+  consent, F) or carrying on. Self-harm wording stays urgent; that screen now also shows Samaritans of
+  Singapore and 995 as plain text, never as a call the demo claims to make.
+- **Crisis lines are derived, not stored.** `mentionsSelfHarm(session.userText)` reads the message that
+  triggered the urgent screen (it is still in memory). Nothing new enters the session or the audit log.
+- **Wrap-up at the second off-topic turn.** One friendly redirect is enough; the second one would sound
+  like a loop. The wrap-up hands the choice back, with ending the call as a legitimate option.
+- **Low-confidence speech is re-asked before anything else, even safety.** This follows the spec. The
+  trade-off: an urgent phrase heard with low confidence gets "could you say it again?" rather than the
+  urgent screen. That is one extra turn, and acting on a guess is how "I have chest pain" and "I have
+  just been in" get confused. Typed input is never gated this way. The 0.5 threshold is a starting
+  point to tune in testing.
+- **Audit.** Off-topic and wellbeing events now drop even the character count and keep only the
+  category.
+
+## F. Family help needs consent every time
+
+- **One question, two entry points.** The consent card is driven by a session flag rather than a state,
+  so the same card sits on top of the safety options or the wellbeing reply, and "Not now" returns to
+  exactly where the person was.
+- **Consent is never remembered.** Each "Ask family to help" asks again; a previous "Yes" doesn't carry
+  over. That is the point of the amendment, and it costs one tap.
+- **Voice consent errs towards no.** A hedge ("maybe") counts as "not now", and only a short, clear
+  "yes" consents. A long sentence that happens to contain "yes" re-asks.
+- **Added alongside "Ask a trusted helper — demo", not replacing it.** The spec says "add", and the
+  helper option predates consent. Merging the two into one consented family/helper action is worth
+  considering later.
+- **Not on the urgent screen.** The urgent screen already has "Ask a trusted helper" and emergency
+  services. A consent round-trip there would slow the one path where speed matters.
+
+## G. Study mode
+
+- **Two switches, both server-side.** `STUDY_MODE=true` alone isn't enough; `VERCEL_ENV=production`
+  always wins. Verified on a dev server: with both set, `/study` is a 404 and a hand-set cookie shows
+  no badge. With study mode on, `/study?condition=wrong-explanation` sets nothing, and a bogus cookie
+  value is ignored.
+- **The swap happens behind the gate, not instead of it.** `resolveExplanation` still returns null
+  without a confirmed match; the condition only changes which instruction string a confirmed match
+  resolves to. Everything that quotes the instruction (the feed, speech, the record-conflict reply)
+  reads that same view, so a participant never sees two different answers.
+- **The condition lives in the session so the audit log can carry it.** The layout reads the cookie
+  and hands it to the client once per page load. Every audit event is then tagged, and ending a call
+  keeps the tag. The badge says only "Study session", so participants can't tell which condition they
+  are in.
+- **Voice isn't a confound.** The wrong instruction is on the speech guard's approved list, so both
+  conditions use the same Gemini voice.
+- **Build-time caveat.** Pages are static unless study mode is on when the app is built, so setting
+  `STUDY_MODE` on a preview needs a redeploy. `next dev` reads it per request.
+
+---
+
+# Decisions (removing the two rephrase paths)
+
+An over-engineering audit found both rephrase features largely redundant once the understanding pass
+(Claude task 3) existed. The product owner chose to remove them.
+
+- **Explanation rephrase (`/api/companion/rephrase`) removed.** It only reworded English "flavour"
+  text on screen (never spoken, never the instruction or source line). CLAUDE.md's task 2 covers
+  translating when local translations are insufficient, which English never was. The explanation is
+  now always the approved record text.
+- **Reply rephrase (`/api/companion/reply-rephrase`) removed.** Five of its seven keys were already
+  understanding keys, and both needed the same Anthropic key, so in practice it only reworded
+  `scheduleNeedsRecord` and `anotherMedicineGuide`. Those two now use their approved lines.
+- **What stays:** the understanding pass still words replies to what the person said, behind the same
+  guard. `introducesUnsafeLanguage`, which that guard uses, moved from the deleted `rephrase-guard.ts`
+  into `understand-guard.ts`.
+- **CLAUDE.md is unchanged.** Task 2 is still permitted, just not used; re-adding it for a real
+  translation gap (for example Malay or Tamil) would be a new, narrower route.
+
+---
+
+# Decisions (matching the interaction-states diagram)
+
+The Assignment 3 "Interaction states" diagram (Default, Loading, Success, Uncertainty, Failure,
+Correction, Recovery, Escalation) was checked against the app. Gaps that amendment H doesn't cover were
+fixed here; H covers choose-from-my-medicines, typed name on failure, real callbacks and sent states.
+
+- **Default / Loading / Uncertainty wording now matches the diagram.** Greeting: "Hello, I'm an AI
+  helper. What would you like to know today?" (the AI disclosure is spoken, not only in the footer).
+  Loading: "Thank you, let me have a look. This will just take a moment." The thinking indicator shows
+  "Let me think about that…" as visible words, not only dots. Confirm: "I think this may be your
+  {medicine}. Is this the one you're holding?", with `{medicine}` filled from the candidate's record name.
+- **Correction: "It looks different" offers one more try.** `label-differs` joins the label reasons that
+  get the single photo retry, alongside the pharmacist options and "Back to the conversation".
+- **Recovery: carry on where they left off.** Entering safety from the explanation remembers the step
+  (`resumeExplainStep`). If the record is still confirmed, "Carry on" returns to that step; otherwise
+  it returns to the conversation as before. A label that looked different clears the match, so it never
+  resumes into the explanation.
+- **Escalation never shows instructions, including in the transcript.** Record lines in the call
+  transcript (explanation steps and the record-conflict reply) are replaced with "Your record is tucked
+  away while we get you some help." while the call is in safety, and reappear when they carry on.
+- **Updated diagram (Incorrect output card).** A newer version of the diagram gives "It looks different"
+  its own "Incorrect output" state that leads to a person only, so the "one more try" above was
+  reverted. The greeting says "AI guide", and the confirm heading is "I found a possible match:
+  {medicine}, {strength}. Is this the one you're holding?" The separate "possible match" label above it
+  was removed because the heading now says it.
+
+## H4. Simulated services and real help flows
+
+- **Order of work.** H4 went first (before H1–H3) because it replaces every "— demo" help action. Doing
+  H1's "no demo wording" first would have left help buttons claiming things they didn't do.
+- **The client never claims "sent".** It moves to `sending` on consent, posts to `/api/help/request`, and
+  only the service's `ok` sets `sent` (with the reference or the person told). A network error or a 503
+  is the `serviceTrouble` state, with try again or the pharmacy's own number.
+- **Trusted helper is a fourth flow.** The interaction-states diagram lists "pharmacist, clinic or trusted
+  helper", so it stays, with the same consent step as family and the same simulated care-circle service.
+- **Urgent screen: no actions for now.** The product owner chose to remove the "Emergency services —
+  demo" button rather than strip its suffix. The trusted-helper option there would have become a real
+  (simulated) notification on the urgent path, which amendment I puts on hold. The urgent screen keeps
+  its fixed message, the "this prototype cannot place emergency calls" line and, for self-harm, the
+  existing crisis-lines text. To revisit under amendment I.
+- **Reasons, not words.** Each request carries a `HelpReason` (label trouble, medical question, record
+  conflict, wellbeing, help requested) derived from where the person is. Nothing they said is sent.
+- **Fictional contacts.** Phone numbers use the 555-01xx fiction pattern. They are shown as text, never
+  as `tel:` links, and need replacing with numbers you are allowed to show before external testing.
+
+## H3. Choose from my medicines
+
+- **In the camera step, not on the safety screen.** H3 calls it the fallback for "Not now" and for label
+  trouble. Both lead to the camera step's other ways ("Not now" directly, label trouble through "Try
+  another photo"). The updated diagram's Failure card lists only "try another photo, or ask someone",
+  so adding a third option to the safety screen would contradict it and bring back button clutter.
+- **A list pick is a possible match, not a shortcut.** It is audited as `record-list` and goes through
+  the same confirm step as a photo, so the confirmation gate is never skipped.
+
+## H2. Camera or photo
+
+- **A choice step, then the existing consent.** `showMethod` splits the camera-permission step into
+  "how would you like to show it?" and the unchanged consent question, so consent still always comes
+  before the camera and only after the person chose it.
+- **photoIntro is said first.** It's the choice step's own text, so the companion has said it before
+  any picker can open. The picker opens on the tap, inside the user gesture browsers require.
+- **The shrink happens in the browser.** Canvas re-encoding also drops EXIF metadata such as location.
+  It can't run in jsdom, so the component tests stub `preparePhoto`, and `targetSize` has its own unit
+  test. HEIC handling still needs a check on a real iPhone, as H2 says.
+- **The demo label leaves the UI, not the tests.** Reducer tests keep the deterministic fixtures. The
+  rendered tests now use the real paths: typed details, choose from my medicines, and a picked photo.
+
+## H1. Prototype framing
+
+- **One badge, in the root layout rather than `AppShell`.** H1 asks for the badge in `AppShell`, but the
+  About and 404 pages don't use `AppShell`, and the badge must appear on every screen. The layout covers
+  them all. It sits in the top padding band (like the study badge) so it never covers a heading.
+- **"Demo" is gone from what people see, not from the code.** Internal ids
+  (`source_brightcare_demo`, `demo-call-1`), the test fixtures, and the `DemoNotice` component name stay;
+  none of them is shown. The audit route was renamed because the caregiver view displays it, and the
+  understanding prompt dropped "demo" so Claude doesn't repeat it.
+- **H1 went last** so that its "no demo anywhere" test could pass from the commit that adds it.
+
+## Unclear or random input gets guidance, not a bare question
+
+- Reported: "i dont know what to do" got only "Would you like to show me a medicine label, or ask about
+  your medicine schedule?", which doesn't tell the person what the companion is for.
+- The router's last-resort reply (intent `general`) is now `capabilityGuide`: what the companion can do
+  (check a label, then explain the pharmacy record, in English or 中文), then the same two doors.
+  `clarificationPrompt` stays, unchanged, for broad schedule questions, as CLAUDE.md requires.
+- `capabilityGuide` is an understanding key, so when Claude is configured it can say the same thing in
+  its own words. The prompt now says to explain what it can help with when she seems unsure or says
+  something unrelated.
+
+## Vague input is clarified back, never guessed
+
+- **Rule:** when a message is vague or could mean more than one thing, the companion asks one short
+  clarifying question instead of assuming.
+- **In the app's own rules (works without AI):**
+  - a medicine talked about or pointed at but not named ("I take it twice a day", "this one", "the
+    white one", "my pill", "这个") gets `whichMedicine`: "Which medicine do you mean?", plus Show
+    medicine;
+  - any other unclear message gets `capabilityGuide` (what the companion can do, then "a label or
+    your schedule?").
+  - Explicit questions keep their own replies ("What is this?" → `showLabelQuestion`; "When do I take
+    it?" → `clarificationPrompt`).
+- **In the understanding pass:** the prompt says to say back what was understood and ask one
+  clarifying question with easy options. The route also rejects any reply that names the record's
+  medicine when nobody else has; that check is deterministic.
+- **Limit:** pattern rules can't catch every vague phrasing. Anything they miss still lands on the
+  capability guide, which is itself a clarifying question.

@@ -6,7 +6,11 @@ export interface VoiceProvider {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   sendTranscript(text: string): Promise<void>;
-  onTranscript(callback: (text: string) => void): () => void;
+  /**
+   * `confidence` is the recogniser's 0–1 score when it reports one. Browsers
+   * report 0 to mean "not provided"; typed input passes none.
+   */
+  onTranscript(callback: (text: string, confidence?: number) => void): () => void;
   onAssistantText(callback: (text: string) => void): () => void;
   onError(callback: (error: Error) => void): () => void;
 }

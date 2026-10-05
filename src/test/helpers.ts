@@ -14,15 +14,17 @@ export function run(events: SessionEvent[], from: Session = createInitialSession
 export const startCall: SessionEvent = { type: "CALL_START" };
 export const askUnknown: SessionEvent = { type: "USER_MESSAGE", text: "What is this for?" };
 export const chooseShowMedicine: SessionEvent = { type: "SELECT_ROUTE", route: "show-medicine" };
+/** "Use camera" on the show-medicine choice (H2) — the consent question comes next. */
+export const chooseCamera: SessionEvent = { type: "CHOOSE_CAMERA" };
 export const grantCamera: SessionEvent = { type: "CAMERA_CONSENT", granted: true };
 export const submitDemo = (
   asset: "sample_metformin_label" | "sample_unreadable_label" | "sample_mismatch_label" = "sample_metformin_label",
 ): SessionEvent => ({ type: "SUBMIT_LABEL", input: { mode: "demo", demoAssetId: asset } });
 export const resolve: SessionEvent = { type: "RESOLVE_ANALYSIS" };
 
-/** Start → call → unknown question → Show medicine → camera → demo label → possible match. */
+/** Start → call → unknown question → Show medicine → Use camera → consent → demo fixture → possible match. */
 export function toConfirmMatch(): Session {
-  return run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo(), resolve]);
+  return run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo(), resolve]);
 }
 
 export function toExplain(): Session {

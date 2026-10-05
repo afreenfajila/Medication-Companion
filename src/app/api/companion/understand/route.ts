@@ -8,8 +8,13 @@ import {
   understandResponseDataSchema,
 } from "@/lib/api/schemas";
 import { t } from "@/lib/content/translations";
-import { actionsForOffer, isSafeCompanionReply } from "@/lib/content/understand-guard";
+import { actionsForOffer, claimsMishearing, isSafeCompanionReply } from "@/lib/content/understand-guard";
 import { classifySafety } from "@/lib/safety/classify";
+import { mentionsRecordMedicine } from "@/lib/session/intent";
+
+/** Replies that are about the medicine's name, so they may say it. */
+const NAME_KEYS = new Set(["prescriptionsListed", "medicineMentioned", "medicineNameCheck", "medicineNameRetry"]);
+const namesRecordMedicine = (reply: string) => /metformin|二甲双胍/i.test(reply);
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +51,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsed.success) {
     return fail(400, "invalid_request", firstIssue(parsed.error), "retry", requestId);
   }
-  const { message, key, language, offered, checkingMedicineName, history } = parsed.data;
+  const { message, key, language, offered, checkingMedicineName, history, via } = parsed.data;
   const approved = t(language, key);
   const fallback = () =>
     ok(
@@ -64,8 +69,15 @@ export async function POST(request: Request): Promise<Response> {
   if (classifySafety(message).level !== "none") return fallback();
 
   try {
-    const out = await understandMessage({ language, message, history, routerReply: approved });
-    if (!isSafeCompanionReply(out.reply)) return fallback();
+    const out = await understandMessage({ language, message, history, routerReply: approved, via });
+    if (!isSafeCompanionReply(out.reply, language)) return fallback();
+    // A typed message can't have been misheard: "I didn't catch that" would be untrue.
+    if (via === "typed" && claimsMishearing(out.reply)) return fallback();
+    // Never assume which medicine she means: the reply may name the record's medicine
+    // only if she (or the conversation) did, or the reply is about the name itself.
+    const named =
+      NAME_KEYS.has(key) || mentionsRecordMedicine(message) || history.some((h) => h.speaker === "user" && mentionsRecordMedicine(h.text));
+    if (!named && namesRecordMedicine(out.reply)) return fallback();
     return ok(
       understandResponseDataSchema.parse({
         text: out.reply.trim(),

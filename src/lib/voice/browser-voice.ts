@@ -7,7 +7,7 @@ import {
 } from "./provider";
 
 // Minimal structural types for the Web Speech API (not in every TS lib.dom version).
-type ResultLike = { isFinal: boolean; 0: { transcript: string } };
+type ResultLike = { isFinal: boolean; 0: { transcript: string; confidence?: number } };
 type RecognitionEventLike = { resultIndex: number; results: ArrayLike<ResultLike> };
 export interface RecognitionLike {
   lang: string;
@@ -100,7 +100,7 @@ type Listener<T> = (value: T) => void;
 export class BrowserVoiceProvider implements SpeechVoiceProvider {
   private recognition: RecognitionLike | null = null;
   private utterance: UtteranceLike | null = null;
-  private transcript = new Set<Listener<string>>();
+  private transcript = new Set<(text: string, confidence?: number) => void>();
   private interim = new Set<Listener<string>>();
   private assistant = new Set<Listener<string>>();
   private errors = new Set<Listener<Error>>();
@@ -150,7 +150,12 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
     if (value) this.transcript.forEach((l) => l(value));
   }
 
-  onTranscript = (cb: Listener<string>) => this.subscribe(this.transcript, cb);
+  onTranscript = (cb: (text: string, confidence?: number) => void) => {
+    this.transcript.add(cb);
+    return () => {
+      this.transcript.delete(cb);
+    };
+  };
   onInterim = (cb: Listener<string>) => this.subscribe(this.interim, cb);
   onAssistantText = (cb: Listener<string>) => this.subscribe(this.assistant, cb);
   onError = (cb: Listener<Error>) => this.subscribe(this.errors, cb);
@@ -171,13 +176,18 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
     rec.onresult = (e) => {
       let interimText = "";
       let finalText = "";
+      // The least confident final segment speaks for the whole utterance.
+      let confidence: number | undefined;
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) finalText += r[0].transcript;
-        else interimText += r[0].transcript;
+        if (r.isFinal) {
+          finalText += r[0].transcript;
+          const c = r[0].confidence;
+          if (typeof c === "number") confidence = confidence === undefined ? c : Math.min(confidence, c);
+        } else interimText += r[0].transcript;
       }
       if (interimText.trim()) this.interim.forEach((l) => l(interimText.trim()));
-      if (finalText.trim()) this.transcript.forEach((l) => l(finalText.trim()));
+      if (finalText.trim()) this.transcript.forEach((l) => l(finalText.trim(), confidence));
     };
     rec.onerror = (e) => {
       if (e.error === "aborted") return; // we stopped it ourselves

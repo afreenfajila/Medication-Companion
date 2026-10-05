@@ -12,12 +12,15 @@ export function CallFeed({
   entries,
   interim,
   thinking = false,
+  hideRecord = false,
   t,
 }: {
   entries: FeedMessage[];
   interim: string;
   /** The companion is working out a reply to what was just said. */
   thinking?: boolean;
+  /** Escalated: record content already shown stays out of view until they carry on. */
+  hideRecord?: boolean;
   t: T;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -35,15 +38,19 @@ export function CallFeed({
           speaker={entry.speaker}
           label={entry.speaker === "user" ? t("youSay") : t("companionSays")}
         >
-          {entry.lines.map((line, i) => (
-            <p key={i}>{line}</p>
-          ))}
+          {hideRecord && entry.record ? (
+            <p className="text-base font-normal italic text-navy-700">{t("recordHidden")}</p>
+          ) : (
+            entry.lines.map((line, i) => <p key={i}>{line}</p>)
+          )}
         </TranscriptCard>
       ))}
       {thinking && (
         <TranscriptCard speaker="companion" label={t("companionSays")}>
           <span role="status" className="inline-flex items-center gap-1.5 py-2 text-navy-700">
-            <span className="sr-only">{t("companionThinking")}</span>
+            {/* Words, not just dots: every state says what is happening. Kept first so the
+                dots' nth-child stagger in globals.css still lines up. */}
+            <span className="text-lg">{t("companionThinking")}</span>
             <span className="call-dot" aria-hidden="true" />
             <span className="call-dot" aria-hidden="true" />
             <span className="call-dot" aria-hidden="true" />

@@ -1,15 +1,14 @@
-// UI-only actions a spoken command can trigger (things the reducer doesn't own, like "take the photo").
-// A screen registers its handler while it can honour the action and clears it on unmount.
-type Actions = { capture: (() => void) | null };
-const actions: Actions = { capture: null };
+// The one UI-only action a spoken command can trigger that the reducer doesn't
+// own: "take the photo". The camera screen registers it while it can honour it
+// and clears it on unmount.
+let capture: (() => void) | null = null;
 
-export function registerVoiceAction(name: keyof Actions, fn: (() => void) | null): void {
-  actions[name] = fn;
+export function registerCapture(fn: (() => void) | null): void {
+  capture = fn;
 }
 
-export function runVoiceAction(name: keyof Actions): boolean {
-  const fn = actions[name];
-  if (!fn) return false;
-  fn();
+export function runCapture(): boolean {
+  if (!capture) return false;
+  capture();
   return true;
 }

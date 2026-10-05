@@ -3,7 +3,7 @@ import { resolveExplanation } from "@/lib/content/explanation";
 import {
   askUnknown,
   chooseShowMedicine,
-  grantCamera,
+  chooseCamera, grantCamera,
   resolve,
   run,
   startCall,
@@ -12,6 +12,8 @@ import {
   toExplain,
   CTX,
 } from "@/test/helpers";
+import { buildEscalation } from "@/lib/safety/escalation";
+import { buildTimeline, deriveRecordStatus } from "./audit-view";
 import { routeMessage } from "./intent";
 import {
   createInitialSession,
@@ -114,7 +116,7 @@ describe("conversation routing and contextual actions", () => {
     // Saying the name again instead of yes/no.
     expect(routeMessage("metformin", afterCheck).assistantKey).toBe("medicineMentioned");
     // A bare "yes" means nothing special when the name check wasn't the last question.
-    expect(routeMessage("yes", none).assistantKey).toBe("clarificationPrompt");
+    expect(routeMessage("yes", none).assistantKey).toBe("capabilityGuide");
     // Safety still comes first, even as an answer to the check.
     expect(routeMessage("yes, I can't breathe", afterCheck).intent).toBe("urgent-risk");
   });
@@ -181,12 +183,44 @@ describe("conversation routing and contextual actions", () => {
     expect(r.contextualActions).toEqual([]);
   });
 
-  it("broad/unclear request → the same clarification with both actions", () => {
-    const r = routeMessage("I need something", none);
-    expect(r.intent).toBe("general");
-    expect(r.assistantKey).toBe("clarificationPrompt");
-    expect(r.contextualActions).toEqual(["show-medicine", "ask-schedule"]);
+  it.each(["I take it twice a day", "I took it this morning", "yes I have been taking it", "我每天吃两次"])(
+    "a medicine talked about but not named (%j) → asks which medicine, never assumes",
+    (text) => {
+      const r = routeMessage(text, none);
+      expect(r.assistantKey).toBe("whichMedicine");
+      expect(r.contextualActions).toEqual(["show-medicine"]);
+    },
+  );
+
+  it.each(["this one", "the white one", "my pill is white", "it's the small tablet", "这个"])(
+    "pointing at a medicine without naming it (%j) → asks which medicine",
+    (text) => {
+      expect(routeMessage(text, none).assistantKey).toBe("whichMedicine");
+    },
+  );
+
+  it("explicit questions keep their own replies; non-medicine vagueness gets the capability guide", () => {
+    expect(routeMessage("What is this?", none).assistantKey).toBe("showLabelQuestion");
+    expect(routeMessage("这是什么", none).assistantKey).toBe("showLabelQuestion");
+    expect(routeMessage("That's great", none).assistantKey).toBe("capabilityGuide");
+    expect(routeMessage("hmm", none).assistantKey).toBe("capabilityGuide");
   });
+
+  it("a named medicine, or a question about taking it, is not treated as vague", () => {
+    expect(routeMessage("I take Metformin twice a day", none).assistantKey).toBe("medicineMentioned");
+    expect(routeMessage("When do I take it?", none).assistantKey).toBe("clarificationPrompt");
+    expect(routeMessage("I take it twice a day?", none).assistantKey).not.toBe("whichMedicine");
+  });
+
+  it.each(["I need something", "i dont know what to do", "banana", "我不知道该怎么办"])(
+    "unclear or random %j → says what the companion can do, then offers both actions",
+    (text) => {
+      const r = routeMessage(text, none);
+      expect(r.intent).toBe("general");
+      expect(r.assistantKey).toBe("capabilityGuide");
+      expect(r.contextualActions).toEqual(["show-medicine", "ask-schedule"]);
+    },
+  );
 
   it("human-help request → safety; unsafe/urgent → safety with no actions", () => {
     expect(routeMessage("I want to speak to a pharmacist", none).safetyReason).toBe("help-requested");
@@ -223,6 +257,11 @@ describe("conversation routing and contextual actions", () => {
     expect(resolveExplanation(s, "en")).toBeNull();
   });
 
+  it("remembers whether the message was typed or spoken (spoken by default)", () => {
+    expect(run([startCall, { type: "USER_MESSAGE", text: "What is this for?", via: "typed" }]).userInputVia).toBe("typed");
+    expect(run([startCall, { type: "USER_MESSAGE", text: "What is this for?" }]).userInputVia).toBe("voice");
+  });
+
   it("never stores the raw typed text in the audit log", () => {
     const s = run([startCall, { type: "USER_MESSAGE", text: "My secret question about pills" }]);
     expect(JSON.stringify(s.audit)).not.toContain("secret");
@@ -238,8 +277,25 @@ describe("camera permission gate", () => {
     expect(s.labelRouteSelected).toBe(true);
   });
 
-  it("granting moves to guidance; declining opens the demo-label fallback (no dead end)", () => {
-    const base = run([startCall, askUnknown, chooseShowMedicine]);
+  it("Show medicine first offers camera or photo; consent is only asked after 'Use camera'", () => {
+    const choice = run([startCall, askUnknown, chooseShowMedicine]);
+    expect(choice.showMethod).toBe("choose");
+    expect(blocked([grantCamera], choice)).toBe(true); // no consent before choosing the camera
+    expect(run([chooseCamera], choice).showMethod).toBe("camera");
+  });
+
+  it("a chosen photo or typed name can be checked straight from the choice — never a camera photo", () => {
+    const choice = run([startCall, askUnknown, chooseShowMedicine]);
+    const photo = { type: "SUBMIT_LABEL", input: { mode: "image", source: "upload", mimeType: "image/jpeg", byteSize: 1000 } } as const;
+    expect(run([photo], choice).state).toBe("analyzing");
+    const typed = { type: "SUBMIT_LABEL", input: { mode: "typed", medicineName: "Metformin", strength: "500 mg" } } as const;
+    expect(run([typed], choice).state).toBe("analyzing");
+    const camera = { type: "SUBMIT_LABEL", input: { mode: "image", source: "camera", mimeType: "image/jpeg", byteSize: 1000 } } as const;
+    expect(blocked([camera], choice)).toBe(true);
+  });
+
+  it("granting moves to guidance; declining opens the photo/list/typed fallbacks (no dead end)", () => {
+    const base = run([startCall, askUnknown, chooseShowMedicine, chooseCamera]);
     const granted = run([grantCamera], base);
     expect(granted.state).toBe("camera-guidance");
     expect(granted.cameraMode).toBe("preview");
@@ -280,7 +336,7 @@ describe("match → confirmation gate → explanation", () => {
     expect(s.matchStatus).toBe("confirmed");
     const view = resolveExplanation(s, "en");
     expect(view?.explanation.instruction).toBe("Take 1 tablet twice daily with meals.");
-    expect(view?.recordSource).toBe("BrightCare Pharmacy — demo record");
+    expect(view?.recordSource).toBe("BrightCare Pharmacy");
   });
 
   it("rejects confirmation for the wrong candidate id or outside confirm-match", () => {
@@ -349,7 +405,7 @@ describe("safety states block instructions", () => {
     ["sample_unreadable_label", "unreadable", "unreadable-label"],
     ["sample_mismatch_label", "no-match", "record-mismatch"],
   ] as const)("%s → safety with no candidate", (asset, status, reason) => {
-    const s = run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo(asset), resolve]);
+    const s = run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo(asset), resolve]);
     expect(s.state).toBe("safety");
     expect(s.matchStatus).toBe(status);
     expect(s.safetyReason).toBe(reason);
@@ -359,7 +415,7 @@ describe("safety states block instructions", () => {
   });
 
   it("from safety the user can try another label (no second permission) or return to the call", () => {
-    const s = run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo("sample_mismatch_label"), resolve]);
+    const s = run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo("sample_mismatch_label"), resolve]);
     const again = run([{ type: "TRY_ANOTHER_LABEL" }], s);
     expect(again.state).toBe("camera-guidance");
     expect(run([submitDemo(), resolve], again).state).toBe("confirm-match");
@@ -395,13 +451,300 @@ describe("safety states block instructions", () => {
     expect(resolveExplanation(s, "en")).toBeNull();
   });
 
-  it("demo help actions are audited as not implemented", () => {
-    const s = run(
-      [{ type: "HELP_ACTION", action: "pharmacy-demo" }],
-      run([startCall, { type: "GET_HELP" }]),
+  it("contacting the clinic shows its number; nothing is sent", () => {
+    const s = run([{ type: "HELP_START", kind: "clinic" }], run([startCall, { type: "GET_HELP" }]));
+    expect(s.helpFlow).toMatchObject({ kind: "clinic", stage: "info" });
+    expect(blocked([{ type: "HELP_CONFIRM", granted: true }], s)).toBe(true);
+  });
+});
+
+describe("help flows: confirm, then sent only on service success (Assignment 3, H4)", () => {
+  const safety = () => run([startCall, { type: "GET_HELP" }]);
+  const helpEvents = (s: ReturnType<typeof run>) =>
+    s.audit.filter((e) => e.eventType === "pharmacist-callback-requested" || e.eventType === "caregiver-help-requested");
+
+  it("a pharmacist callback confirms first, sends, and is 'sent' with a reference only after success", () => {
+    const asked = run([{ type: "HELP_START", kind: "pharmacist-callback" }], safety());
+    expect(asked.helpFlow).toMatchObject({ kind: "pharmacist-callback", stage: "confirm", reason: "help-requested" });
+    const sending = run([{ type: "HELP_CONFIRM", granted: true }], asked);
+    expect(sending.helpFlow?.stage).toBe("sending");
+    expect(helpEvents(sending)).toHaveLength(0); // nothing claimed yet
+
+    const sent = run([{ type: "HELP_RESULT", ok: true, reference: "BC-123456" }], sending);
+    expect(sent.helpFlow).toMatchObject({ stage: "sent", reference: "BC-123456" });
+    expect(helpEvents(sent).map((e) => e.eventType)).toEqual(["pharmacist-callback-requested"]);
+    expect(deriveRecordStatus(buildTimeline(sent.audit))).toBe("Needs help");
+  });
+
+  it("a service failure shows the failure state, never 'sent'; try again or see the pharmacy's number", () => {
+    const sending = run([{ type: "HELP_START", kind: "pharmacist-callback" }, { type: "HELP_CONFIRM", granted: true }], safety());
+    const failed = run([{ type: "HELP_RESULT", ok: false }], sending);
+    expect(failed.helpFlow?.stage).toBe("failed");
+    expect(helpEvents(failed)).toHaveLength(0);
+    expect(run([{ type: "HELP_RETRY" }], failed).helpFlow?.stage).toBe("sending");
+    expect(run([{ type: "HELP_SHOW_NUMBER" }], failed).helpFlow?.stage).toBe("info");
+  });
+
+  it("a result that arrives when nothing is being sent is ignored", () => {
+    expect(blocked([{ type: "HELP_RESULT", ok: true, reference: "BC-1" }], safety())).toBe(true);
+  });
+
+  it("after 'sent', carry on continues the call where it left off", () => {
+    const atInstruction = run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain());
+    const flow = run(
+      [
+        { type: "GET_HELP" },
+        { type: "HELP_START", kind: "trusted-helper" },
+        { type: "HELP_CONFIRM", granted: true },
+        { type: "HELP_RESULT", ok: true, contactName: "Mrs Lim" },
+        { type: "HELP_DISMISS" },
+      ],
+      atInstruction,
     );
-    expect(s.helpAction).toBe("pharmacy-demo");
-    expect(s.audit.at(-1)?.details).toMatchObject({ action: "pharmacy-demo", implemented: false });
+    expect(flow.state).toBe("explain");
+    expect(flow.explainStep).toBe(1);
+    expect(flow.helpFlow).toBeNull();
+  });
+
+  it("is not offered on the urgent path", () => {
+    const urgent = run([startCall, { type: "USER_MESSAGE", text: "I have chest pain" }]);
+    expect(blocked([{ type: "HELP_START", kind: "pharmacist-callback" }], urgent)).toBe(true);
+  });
+
+  it("the record conflict's 'Ask a pharmacist to call me' opens the callback on top of the explanation", () => {
+    const s = run(
+      [{ type: "USER_MESSAGE", text: "That's not right" }, { type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" }],
+      toExplain(),
+    );
+    expect(s.state).toBe("explain");
+    expect(s.helpFlow).toMatchObject({ kind: "pharmacist-callback", stage: "confirm", reason: "record-conflict" });
+  });
+});
+
+describe("record conflict (“my doctor said…”)", () => {
+  const dispute = (text: string, from = toExplain()) => run([{ type: "USER_MESSAGE", text }], from);
+
+  it.each([
+    "My doctor said to take it at night",
+    "That's not right",
+    "I thought it was once a day",
+    "It's not the same as my label",
+    "医生说要晚上吃",
+    "不是这样的",
+  ])("'%s' stays on the explanation and answers from the record", (text) => {
+    const s = dispute(text);
+    expect(s.state).toBe("explain");
+    expect(s.recordConflict).toBe(true);
+    expect(s.matchStatus).toBe("confirmed"); // the record is never hidden
+    const last = s.audit.at(-1)!;
+    expect(last.eventType).toBe("record-conflict-raised");
+    expect(last.details).toEqual({ intent: "record-conflict" }); // intent only, never the words
+    expect(JSON.stringify(s.audit)).not.toContain(text);
+  });
+
+  it("'My doctor said I can stop it' is a dose question first: unsupported-medical, not record-conflict", () => {
+    const s = dispute("My doctor said I can stop it");
+    expect(s.state).toBe("safety");
+    expect(s.safetyReason).toBe("unsupported-medical-question");
+    expect(s.recordConflict).toBe(false);
+  });
+
+  it("only applies while a confirmed record is explained", () => {
+    const listening = run([{ type: "USER_MESSAGE", text: "My doctor said something else" }], run([startCall]));
+    expect(listening.recordConflict).toBe(false);
+    expect(routeMessage("That's not right", { matchConfirmed: false, explaining: true }).intent).not.toBe("record-conflict");
+  });
+
+  it("offers a pharmacist callback (on top of the explanation) or carrying on", () => {
+    const raised = dispute("That's not right");
+    const help = run([{ type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" }], raised);
+    expect(help.state).toBe("explain");
+    expect(help.helpFlow).toMatchObject({ kind: "pharmacist-callback", stage: "confirm" });
+    expect(help.recordConflict).toBe(false);
+
+    const carry = run([{ type: "RECORD_CONFLICT_CHOICE", choice: "carry-on" }], raised);
+    expect(carry.state).toBe("explain");
+    expect(carry.recordConflict).toBe(false);
+    expect(carry.explainStep).toBe(raised.explainStep);
+  });
+
+  it("a choice with no conflict raised is ignored", () => {
+    expect(blocked([{ type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" }], toExplain())).toBe(true);
+  });
+});
+
+describe("off-topic cap, health signals and wellbeing (Assignment 3, E)", () => {
+  const say = (text: string) => ({ type: "USER_MESSAGE", text }) as const;
+
+  it("the second off-topic turn in a row wraps up, offering Show medicine and End call", () => {
+    const once = run([startCall, say("What's the weather like?")]);
+    expect(once.assistantKey).toBe("offTopicWorld");
+    const twice = run([say("Do you like football?")], once);
+    expect(twice.assistantKey).toBe("offTopicWrapUp");
+    expect(twice.contextualActions).toEqual(["show-medicine", "end-call"]);
+
+    const ended = run([{ type: "SELECT_ROUTE", route: "end-call" }], twice);
+    expect(ended.state).toBe("start");
+    expect(ended.callActive).toBe(false);
+  });
+
+  it("any on-spine turn resets the count", () => {
+    const s = run([startCall, say("What's the weather like?"), say("What is this for?"), say("Do you like football?")]);
+    expect(s.assistantKey).toBe("offTopicWorld");
+    expect(s.offTopicStreak).toBe(1);
+  });
+
+  it("health-signal talk gets the limitation + pharmacist/clinic path, not a label redirect", () => {
+    const s = run([startCall, say("I've been feeling really tired lately")]);
+    expect(s.state).toBe("safety");
+    expect(s.safetyReason).toBe("unsupported-medical-question");
+  });
+
+  it("loneliness gets the warm wellbeing reply with Carry on, and the audit keeps the category only", () => {
+    const s = run([startCall, say("I feel so lonely these days")]);
+    expect(s.state).toBe("listening");
+    expect(s.assistantKey).toBe("wellbeing");
+    expect(s.contextualActions).toContain("carry-on");
+    expect(s.audit.at(-1)?.details).toEqual({
+      intent: "wellbeing",
+      category: "wellbeing",
+      actionsOffered: "ask-family,carry-on",
+    });
+
+    const on = run([{ type: "SELECT_ROUTE", route: "carry-on" }], s);
+    expect(on.assistantKey).toBe("anotherMedicineGuide");
+    expect(on.contextualActions).toEqual([]);
+  });
+
+  it("off-topic audit keeps the category, never the words or their length", () => {
+    const s = run([startCall, say("What's the weather like?")]);
+    expect(s.audit.at(-1)?.details).toEqual({
+      intent: "off-topic",
+      category: "world",
+      actionsOffered: "show-medicine,ask-schedule",
+    });
+  });
+});
+
+describe("family help needs consent every time (Assignment 3, F)", () => {
+  const lonely = () => run([startCall, { type: "USER_MESSAGE", text: "I feel lonely" }]);
+  const asked = (s = lonely()) => run([{ type: "SELECT_ROUTE", route: "ask-family" }], s);
+  const familyEvents = (s: ReturnType<typeof run>) =>
+    s.audit.filter((e) => e.eventType === "caregiver-help-requested");
+
+  const yes = [
+    { type: "HELP_CONFIRM", granted: true },
+    { type: "HELP_RESULT", ok: true, contactName: "Daniel" },
+  ] as const;
+
+  it("choosing 'Let my family know' only asks — nothing is recorded yet", () => {
+    const s = asked();
+    expect(s.helpFlow).toMatchObject({ kind: "family", stage: "confirm", reason: "wellbeing" });
+    expect(familyEvents(s)).toHaveLength(0);
+  });
+
+  it("'Not now' leaves no trace", () => {
+    const s = run([{ type: "HELP_CONFIRM", granted: false }], asked());
+    expect(s.helpFlow).toBeNull();
+    expect(familyEvents(s)).toHaveLength(0);
+  });
+
+  it("only 'Yes' (and the service's success) writes caregiver-help-requested, shown as Needs help", () => {
+    const s = run([...yes], asked());
+    expect(familyEvents(s)).toHaveLength(1);
+    expect(familyEvents(s)[0].details).toEqual({ kind: "family", consent: true, reason: "wellbeing" });
+    expect(s.helpFlow).toMatchObject({ stage: "sent", contactName: "Daniel" });
+    expect(deriveRecordStatus(buildTimeline(s.audit))).toBe("Needs help");
+  });
+
+  it("is on the non-urgent safety options too, and asks again every time", () => {
+    const once = run([{ type: "HELP_START", kind: "family" }, ...yes, { type: "HELP_DISMISS" }], run([startCall, { type: "GET_HELP" }]));
+    expect(familyEvents(once)).toHaveLength(1);
+    const again = run([{ type: "GET_HELP" }, { type: "HELP_START", kind: "family" }], once);
+    expect(again.helpFlow?.stage).toBe("confirm");
+    expect(familyEvents(again)).toHaveLength(1); // nothing new until a second "Yes"
+  });
+
+  it("can't be opened where it wasn't offered", () => {
+    expect(blocked([{ type: "HELP_START", kind: "family" }], run([startCall]))).toBe(true);
+    expect(blocked([{ type: "HELP_CONFIRM", granted: true }], lonely())).toBe(true);
+  });
+});
+
+describe("choose from my medicines (Assignment 3, H3)", () => {
+  const guidance = () => run([startCall, askUnknown, chooseShowMedicine, chooseCamera, { type: "CAMERA_CONSENT", granted: false }]);
+  const id = "med_metformin_500_demo";
+
+  it("after 'Not now', picking from the record list is a possible match that still needs confirming", () => {
+    const s = run([{ type: "CHOOSE_MEDICINE", medicineId: id }], guidance());
+    expect(s.state).toBe("confirm-match");
+    expect(s.matchStatus).toBe("possible");
+    expect(resolveExplanation(s, "en")).toBeNull(); // nothing explained before confirmation
+    expect(s.audit.at(-1)).toMatchObject({ eventType: "candidate-presented", route: "record-list" });
+  });
+
+  it("only from the camera step, and only for a medicine on the record", () => {
+    expect(blocked([{ type: "CHOOSE_MEDICINE", medicineId: id }], run([startCall]))).toBe(true);
+    expect(blocked([{ type: "CHOOSE_MEDICINE", medicineId: "med_other" }], guidance())).toBe(true);
+  });
+});
+
+describe("recovery: carry on where they left off", () => {
+  it("help from mid-explanation, then carry on, returns to the same step with the record still confirmed", () => {
+    const atInstruction = run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain());
+    const help = run([{ type: "GET_HELP" }], atInstruction);
+    expect(help.state).toBe("safety");
+    expect(help.resumeExplainStep).toBe(1);
+
+    const back = run([{ type: "RETURN_TO_CALL" }], help);
+    expect(back.state).toBe("explain");
+    expect(back.explainStep).toBe(1);
+    expect(back.matchStatus).toBe("confirmed");
+    expect(back.resumeExplainStep).toBeNull();
+  });
+
+  it("without a confirmed record (e.g. the label looked different) it returns to the conversation", () => {
+    const differs = run(
+      [{ type: "EXPLAIN_STEP", direction: "next" }, { type: "LABEL_CHECK", matches: false }],
+      toExplain(),
+    );
+    const back = run([{ type: "RETURN_TO_CALL" }], differs);
+    expect(back.state).toBe("listening");
+    expect(resolveExplanation(back, "en")).toBeNull();
+  });
+
+  it("'It looks different' leads to a person, not another photo (Incorrect output)", () => {
+    const differs = run(
+      [{ type: "EXPLAIN_STEP", direction: "next" }, { type: "LABEL_CHECK", matches: false }],
+      toExplain(),
+    );
+    const actions = buildEscalation(differs.safetyReason!, differs.labelRouteSelected).actions.map((a) => a.id);
+    expect(actions).not.toContain("try-again");
+  });
+});
+
+describe("label check beside the instruction", () => {
+  const atInstruction = () => run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain());
+
+  it("'Yes, it matches' moves on and is audited", () => {
+    const s = run([{ type: "LABEL_CHECK", matches: true }], atInstruction());
+    expect(s.state).toBe("explain");
+    expect(s.explainStep).toBe(2);
+    expect(s.audit.at(-1)).toMatchObject({ eventType: "label-check-answered", details: { matches: true } });
+  });
+
+  it("'It looks different' reaches safety, drops the record, and offers human help only", () => {
+    const s = run([{ type: "LABEL_CHECK", matches: false }], atInstruction());
+    expect(s.state).toBe("safety");
+    expect(s.safetyReason).toBe("label-differs");
+    expect(s.candidate).toBeNull();
+    expect(resolveExplanation(s, "en")).toBeNull();
+    expect(s.audit.map((e) => e.eventType)).toContain("label-check-answered");
+  });
+
+  it("is only asked beside the instruction", () => {
+    expect(blocked([{ type: "LABEL_CHECK", matches: false }], toExplain())).toBe(true); // step 0
+    expect(blocked([{ type: "LABEL_CHECK", matches: false }], toConfirmMatch())).toBe(true);
   });
 });
 

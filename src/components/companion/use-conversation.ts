@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { dispatch } from "@/lib/session/session-store";
 import type { Session } from "@/lib/session/state-machine";
-import { runVoiceAction } from "@/lib/voice/actions";
+import { runCapture } from "@/lib/voice/actions";
 import { interpretUtterance } from "@/lib/voice/commands";
 import { detectInputLanguage } from "@/lib/voice/detect-language";
 import { isLikelySelfEcho } from "@/lib/voice/echo";
@@ -13,6 +13,8 @@ import { getVoiceProvider, useVoiceCapabilities } from "@/lib/voice/use-voice";
 
 const LISTEN_DELAY_MS = 350; // let the speaker finish before the mic opens (no echo)
 const MAX_SILENT_TURNS = 3; // then pause politely instead of listening forever
+// ponytail: starting threshold from the spec; tune against real older-adult speech in testing.
+export const MIN_SPEECH_CONFIDENCE = 0.5;
 
 const ERROR_KEY: Record<VoiceErrorCode, CopyKey> = {
   "permission-denied": "voiceDenied",
@@ -44,8 +46,18 @@ const UNCLEAR_GUIDANCE: Partial<Record<Session["state"], CopyKey>> = {
   complete: "unclearComplete",
 };
 
-export function unclearGuidanceKey(session: Pick<Session, "state" | "explainStep">): CopyKey {
+export function unclearGuidanceKey(
+  session: Pick<Session, "state" | "explainStep"> & {
+    recordConflict?: boolean;
+    helpFlow?: Session["helpFlow"];
+    showMethod?: Session["showMethod"];
+  },
+): CopyKey {
+  if (session.helpFlow?.stage === "confirm") return "unclearHelpConfirm";
+  if (session.state === "camera-permission" && session.showMethod === "choose") return "unclearShowMedicine";
   if (session.state === "explain") {
+    if (session.recordConflict) return "unclearRecordConflict";
+    if (session.explainStep === 1) return "unclearLabelCheck";
     return session.explainStep === 2 ? "unclearExplainLast" : "unclearExplain";
   }
   return UNCLEAR_GUIDANCE[session.state] ?? "voiceDidntCatch";
@@ -152,16 +164,10 @@ export function useVoiceConversation(opts: {
    * "next", "I understand" or "下一步" work either way. Replies follow the
    * language they used: Chinese input switches to Chinese, English to English.
    */
-  const interpretText = useCallback((text: string) => {
+  const interpretText = useCallback((text: string, confidence?: number, via: "typed" | "voice" = "voice") => {
     const { speakNotice: say, soundActive: soundOn } = latest.current;
     let s = latest.current.session;
     setNotice(null);
-
-    const detected = detectInputLanguage(text);
-    if (detected && detected !== s.language) {
-      dispatch({ type: "SET_LANGUAGE", language: detected });
-      s = { ...s, language: detected };
-    }
 
     // Notices are spoken from in here rather than from the session's line, so
     // they must be remembered for the echo guard too — otherwise the companion
@@ -174,12 +180,28 @@ export function useVoiceConversation(opts: {
       say(line);
     };
 
+    // The recogniser wasn't sure what it heard: ask again before classifying
+    // (or switching language on) a guess. Exactly 0 means "not provided".
+    if (confidence !== undefined && confidence > 0 && confidence < MIN_SPEECH_CONFIDENCE) {
+      sayNotice("didntCatch");
+      return;
+    }
+
+    const detected = detectInputLanguage(text);
+    if (detected && detected !== s.language) {
+      dispatch({ type: "SET_LANGUAGE", language: detected });
+      s = { ...s, language: detected };
+    }
+
     const intent = interpretUtterance(text, {
       state: s.state,
       nameCheckPending: s.nameCheckPending,
       contextualActions: s.contextualActions,
       candidateId: s.candidate?.candidateId ?? null,
       explainStep: s.explainStep,
+      recordConflict: s.recordConflict,
+      helpStage: s.helpFlow?.stage ?? null,
+      showMethod: s.showMethod,
       cameraLive: latest.current.cameraLive,
       pendingSpokenMedicineName: pendingSpokenName.current,
     });
@@ -188,9 +210,9 @@ export function useVoiceConversation(opts: {
       dispatch(intent.event);
     } else if (intent.kind === "message") {
       pendingSpokenName.current = null;
-      dispatch({ type: "USER_MESSAGE", text: text.slice(0, 300) });
+      dispatch({ type: "USER_MESSAGE", text: text.slice(0, 300), via });
     } else if (intent.kind === "ui") {
-      runVoiceAction(intent.action);
+      runCapture();
     } else if (intent.kind === "need-strength") {
       pendingSpokenName.current = intent.medicineName;
       sayNotice("askStrengthForSpokenLabel");
@@ -200,7 +222,7 @@ export function useVoiceConversation(opts: {
   }, []);
 
   const handleTranscript = useCallback(
-    (text: string) => {
+    (text: string, confidence?: number) => {
       if (latest.current.speaking) return; // never react to the companion's own voice
       // ...nor to the tail of it, arriving from a mic that was open while it spoke.
       if (
@@ -213,7 +235,7 @@ export function useVoiceConversation(opts: {
       }
       setInterim("");
       silentTurns.current = 0;
-      interpretText(text);
+      interpretText(text, confidence);
     },
     [interpretText],
   );
@@ -286,6 +308,7 @@ export function useVoiceConversation(opts: {
     micOn: enabled && !muted && !paused,
     notice,
     toggleMic,
-    submitText: interpretText,
+    // Typed input is exactly what she wrote — never treated as possibly misheard.
+    submitText: (text: string) => interpretText(text, undefined, "typed"),
   };
 }
