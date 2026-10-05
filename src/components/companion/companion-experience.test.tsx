@@ -539,6 +539,8 @@ describe("understanding pass — Claude answers what the person meant", () => {
     await settle(); // capability check
     send("I do have met for pain with me");
     expect(screen.getByText(/let me think about that/i)).toBeInTheDocument();
+    // No choices while it is still thinking — they arrive with the reply.
+    expect(screen.queryByRole("button", { name: /show medicine/i })).toBeNull();
     await settle();
 
     expect(screen.getByText(nameCheck)).toBeInTheDocument();

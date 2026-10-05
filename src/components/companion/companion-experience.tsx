@@ -343,7 +343,7 @@ export function CompanionExperience() {
         <ListeningActions
           t={t}
           session={session}
-          hideChoices={voiceHeld}
+          hideChoices={voiceHeld || companionThinking}
           onSend={conversation.submitText}
           onSelectRoute={(route) => dispatch({ type: "SELECT_ROUTE", route })}
         />
