@@ -91,8 +91,8 @@ These constraints are non-negotiable.
 4. Never label a candidate as certain; use `possible match` before confirmation.
 5. If label text is unreadable, ambiguous, conflicting, or not matched: block instructions and enter the safety state.
 6. If user asks unsupported medical questions or expresses urgent-risk language: do not call a model for medical advice; show safety escalation.
-7. Do not claim to call a pharmacy, clinic, caregiver, emergency service, or real record system unless a real action exists. Label unimplemented actions `— demo`.
-8. The app is demo-only; never represent seed data as a real pharmacy record.
+7. Help actions (pharmacist callback, family notification, clinic contact) behave like the real product but run through simulated services (amendment H). A confirmation such as "Request sent" may appear only after the service returns success. Never place a real call or message from the prototype. New emergency-number or crisis-line features are on hold pending amendment I.
+8. The app is a prototype with fictional data. The `PrototypeBadge` must be visible on every screen and the About page must explain what is simulated. Never use real patient data.
 9. Never expose Anthropic, Gemini, or Supabase service-role keys in client code, logs, git, or `NEXT_PUBLIC_*` variables.
 
 ## Required technology
@@ -251,7 +251,7 @@ Build this exact hierarchy:
 
 ```text
 Medication Companion
-[ Plan checked by BrightCare Pharmacy — demo record ]
+[ Plan checked by BrightCare Pharmacy · {verifiedDate} ]
 
 [ Animated companion orb ]
 
@@ -315,7 +315,7 @@ type OrbState = "idle" | "listening" | "speaking" | "camera" | "matched" | "safe
 - Provide `Show my face instead` / flip-camera control.
 - Camera preview is local only for MVP.
 - Capture still images only after user explicitly taps capture/analyse.
-- Provide deterministic `Use demo label`, image upload, and typed-label fallback.
+- Provide `Choose a photo` (gallery/computer upload), `Type the name`, and `Choose from my medicines` fallbacks (amendment H). `Use demo label` is removed from the UI; its fixtures remain for tests only.
 - Never require camera hardware for completing the demo.
 
 ### Voice
@@ -391,7 +391,7 @@ Mei Ling Tan
 Metformin 500 mg tablet
 Purpose: Helps manage blood sugar
 Verified instruction: Take 1 tablet twice daily with meals
-Source: BrightCare Pharmacy — demo record
+Source: BrightCare Pharmacy (fictional seed record, served by the simulated PharmacyService)
 ```
 
 Implement deterministic matching:
@@ -454,7 +454,7 @@ New intent `record-conflict`, valid only in `explain`. Patterns (deterministic, 
 
 Classifier order: `urgent-risk` → `unsupported-medical-question` → `record-conflict` → off-topic. So "my doctor said I can stop it" still escalates as a dose question.
 
-Response is fixed approved copy. `{instruction}` and `{verifiedDate}` are filled by code from the verified record — never typed into copy and never model-written. The record is never changed, hidden or softened. Actions: `Check with pharmacist — demo` (→ `safety`, help options) and `Carry on` (stay in `explain`). Audit event: `record-conflict-raised` (intent only, no free text).
+Response is fixed approved copy. `{instruction}` and `{verifiedDate}` are filled by code from the verified record — never typed into copy and never model-written. The record is never changed, hidden or softened. Actions: `Ask a pharmacist to call me` (→ the pharmacist callback flow in H4) and `Carry on` (stay in `explain`). Audit event: `record-conflict-raised` (intent only, no free text).
 
 | Key | EN | zh-Hans |
 |---|---|---|
@@ -462,7 +462,7 @@ Response is fixed approved copy. `{instruction}` and `{verifiedDate}` are filled
 
 ### D. Label check on the explanation (silent-error defence)
 
-The explanation screen must show its source (`BrightCare Pharmacy — demo record · checked {verifiedDate}`) and ask the person to compare it with the physical label, because a wrong answer nobody questions is the most dangerous failure.
+The explanation screen must show its source (`BrightCare Pharmacy · checked {verifiedDate}`) and ask the person to compare it with the physical label, because a wrong answer nobody questions is the most dangerous failure.
 
 - Prompt: `labelCheckPrompt` with actions `Yes, it matches` and `It looks different`.
 - `It looks different` → `safety` with `labelDiffers`.
@@ -478,7 +478,7 @@ The conversational-spine behaviour in `docs/decisions.md` stays. Add:
 
 1. **Turn cap.** After two consecutive off-topic turns, reply with `offTopicWrapUp` and offer `Show medicine` and `End call`. Any on-spine turn resets the count.
 2. **Health signals in casual talk.** This reverses one earlier decision: feeling and symptom language no longer falls through to the clarification prompt, because a redirect to "show me a label" brushes off something that may matter. Add to `unsupportedMedicalPatterns`: `(feel|feeling|been) (so |very |really )?(tired|dizzy|weak|unwell|sick|confused)`, `keep forgetting|so forgetful`, `can'?t sleep|not sleeping`, `头晕|很累|没力气|不舒服|睡不着|老是忘`. These go to the existing limitation + pharmacist/clinic path, not the urgent path. Record the reversal in `docs/decisions.md`.
-3. **Wellbeing.** Loneliness or low mood (`lonely|all alone|no one to talk|feel sad`, `孤单|寂寞|没人陪|难过`) → fixed `wellbeing` copy with the family-consent action (F) and `Carry on`. Self-harm language stays in `urgentPatterns`; for that case also show `Samaritans of Singapore (24 hours): 1767` and `Emergency: 995` as text — never as a claimed call.
+3. **Wellbeing.** Loneliness or low mood (`lonely|all alone|no one to talk|feel sad`, `孤单|寂寞|没人陪|难过`) → fixed `wellbeing` copy with the family-consent action (F) and `Carry on`. Self-harm language stays in `urgentPatterns` and keeps its existing escalation behaviour. The static `crisisLines` text already built for that path stays exactly as it is (text only, never a claimed call). Do not add to it, reword it, or show it anywhere else; that is on hold pending amendment I.
 4. **Misheard speech.** When the browser speech result reports a confidence above 0 and below `MIN_SPEECH_CONFIDENCE` (start at 0.5), reply with `didntCatch` before any classification. A result reporting exactly 0 means "not provided" and is classified normally.
 5. **Nothing personal is kept.** Off-topic and wellbeing audit events record the category only, never the words.
 
@@ -490,7 +490,7 @@ The conversational-spine behaviour in `docs/decisions.md` stays. Add:
 
 ### F. Asking family for help needs consent every time
 
-Add `Ask family to help — demo` to the safety options and to `wellbeing`. Tapping it shows `familyConsent` with `Yes, ask them — demo` and `Not now`. Only `Yes` writes the audit event `caregiver-help-requested`, which the caregiver dashboard shows as `Needs help`. Nothing is shared with family without that tap.
+Add `Let my family know` to the safety options and to `wellbeing`. Tapping it shows `familyConsent` with `Yes, let them know` and `Not now`; `Yes` runs the family notification flow in H4. Only `Yes` writes the audit event `caregiver-help-requested`, which the caregiver dashboard shows as `Needs help`. Nothing is shared with family without that tap.
 
 | Key | EN | zh-Hans |
 |---|---|---|
@@ -506,14 +506,106 @@ User testing needs controlled, repeatable AI errors. Live model output cannot be
 - A small `Study session` badge is visible on every screen in study mode, and the audit log tags each event with the condition, so the six signals (detection, verification, challenge, blind acceptance, recovery, decision quality) can be read off the timeline.
 - Participants are debriefed after the session: they are told which explanation was wrong.
 
-All new copy keys (B–F) are fixed approved copy and are **not** added to `UNDERSTAND_KEYS` or `CONVERSATIONAL_REPHRASE_KEYS`. zh-Hans lines need native-speaker review before external testing.
+### H. Real-product flows (prototype framing)
+
+The product is still a prototype with fictional data, but every flow must behave the way the production product would. Nothing in the UI should read as a demo shortcut. This section supersedes any earlier "demo" wording in this file.
+
+#### H1. Prototype framing
+- Remove every `— demo` suffix and every "demo record" phrase from user-facing copy (EN and zh-Hans).
+- Add one `PrototypeBadge` to `AppShell`: small, always visible, text `Prototype · fictional data` / `原型 · 虚构数据`. It replaces per-button demo labels.
+- The About page explains what is simulated: the pharmacy record, pharmacist callbacks, family notifications, and sign-in.
+- The persona picker becomes a sign-in stand-in: `Continue as Mei Ling`, with one line noting that the real product signs in with Singpass.
+
+#### H2. Showing the medicine: camera or photo
+After `Show medicine`, offer two equal primary actions and one text action:
+- `Use camera` → existing camera consent → live capture.
+- `Choose a photo` → first say `photoIntro`, then open `<input type="file" accept="image/*">` **without** `capture` (so phones offer the photo library and files; computers open the file dialog). No permission prompt is needed: the system picker hands over only the chosen file.
+- `Type the name` (text action).
+
+Photo handling, all client-side before upload:
+- Downscale to at most 2048 px on the long edge and re-encode as JPEG (quality about 0.85) via canvas. This keeps files under the 5 MB limit and drops EXIF metadata such as location.
+- If the browser returns HEIC and it cannot be decoded, show `photoFormat` and offer the camera or another photo. Test on a real iPhone.
+- The photo goes through the same `/api/label/analyze` route, and every gate still applies: possible match, confirmation, then explanation. Images are never stored.
+
+| Key | EN | zh-Hans |
+|---|---|---|
+| `photoIntro` | You can choose a photo of your medicine label. I'll only look at the medicine name, and the photo won't be kept. | 您可以选择一张药品标签的照片。我只看药品名称，照片不会被保存。 |
+| `photoFormat` | I couldn't open that photo. Would you like to try another one, or use the camera instead? | 这张照片我打不开。您想换一张，还是改用相机？ |
+
+#### H3. Choose from my medicines
+The fallback for "Not now" and for label trouble. It lists the medicines on the person's record (name and strength only, never instructions). Choosing one creates a possible match, which still goes to the confirmation screen ("Is this the medicine you're holding?"). It never skips confirmation.
+
+#### H4. Service adapters and help flows
+Put every outside system behind an interface in `src/lib/services/`, each with a `Simulated*` implementation selected by `SERVICE_MODE=simulated` (the only mode for now):
+
+```ts
+interface PharmacyService {
+  getRecord(patientId: string): Promise<PharmacyRecord>;
+  requestCallback(patientId: string, reason: HelpReason): Promise<{ ok: true; reference: string; expectedWindow: string } | { ok: false }>;
+}
+interface CareCircleService {
+  notifyCaregiver(patientId: string, reason: HelpReason, consentGiven: true): Promise<{ ok: true; caregiverName: string } | { ok: false }>;
+}
+interface IdentityService {
+  currentPatient(): Promise<{ patientId: string; displayName: string }>;
+}
+```
+
+Simulated services return realistic results (a reference number, an expected window of "within 1 working day", the caregiver's name from fictional seed data). They can be switched to fail so the error states can be shown and tested. The existing record in `demo-record.ts` becomes the simulated pharmacy's data source; rename it to `seed-record.ts`.
+
+Help flows, each with a confirm step, a sent state, and a failure state:
+
+| Flow | Confirm | Sent | Failure |
+|---|---|---|---|
+| Ask a pharmacist to call me | `callbackConfirm` | `callbackSent` | `serviceTrouble` |
+| Let my family know | `familyConsent` (F) | `familySent` | `serviceTrouble` |
+| Contact my clinic | shows the clinic's number from the record | — | — |
+
+Urgent routing is **not** part of H4. Do not add an emergency number, a `tel:` link, or a confirm-before-call step until amendment I is complete.
+
+| Key | EN | zh-Hans |
+|---|---|---|
+| `callbackConfirm` | I can ask BrightCare Pharmacy to call you on the number in your record. They usually call within one working day. Shall I send the request? | 我可以请BrightCare药房按您记录上的号码给您回电。他们通常会在一个工作日内联系您。要我发送请求吗？ |
+| `callbackSent` | Thank you. I've sent your request to BrightCare Pharmacy. Your reference is {reference}. Is there anything else I can help you with? | 谢谢，我已经把您的请求发给BrightCare药房了。您的参考编号是{reference}。还有什么我可以帮您的吗？ |
+| `familySent` | Thank you. I've let {caregiverName} know you'd like some help. Would you like to carry on while you wait? | 谢谢，我已经告诉{caregiverName}您需要帮忙了。等待的时候，要不要我们先继续？ |
+| `serviceTrouble` | I'm sorry, I couldn't send that just now. Would you like to try again, or see the pharmacy's phone number instead? | 不好意思，刚才没能发送成功。您想再试一次，还是看看药房的电话号码？ |
+
+Every help request writes an audit event (`pharmacist-callback-requested`, `caregiver-help-requested`) that the caregiver dashboard shows as `Needs help`.
+
+### I. Urgency detection and emergency routing — research and trial first (on hold)
+
+How the product should recognise an urgent situation and route someone to emergency help is **not yet researched**, so it is deliberately out of scope for this round. This is a safety decision, not a copy decision.
+
+**On hold — do not build:**
+- Any **new** emergency number, crisis helpline, or `tel:` link, or any new place where one is shown.
+- Any new urgent-risk patterns, thresholds, or wording beyond what already exists.
+- Any model or confidence score deciding that something is an emergency. Detection stays deterministic and conservative.
+
+**Keep as it is:** the existing `urgent-risk` classifier order, its current escalation screen, and the existing static `crisisLines` text on the self-harm path. Removing crisis information from a self-harm path would be a step backwards, so do not remove, extend, or reword any of it in this round.
+
+**Research to complete first** (record findings in `docs/decisions.md`):
+1. Clinical guidance on which statements about medicines and symptoms older adults should be sent to emergency help versus a pharmacist or clinic.
+2. Regulatory position (HSA guidance on software that triages or advises, MOH AI in Healthcare Guidelines) and what any emergency routing implies for the product's classification.
+3. How Singapore's emergency and crisis services expect to be reached, and what the product must and must not claim.
+4. How other health products word and limit emergency handoffs.
+
+**Trial plan before any build** (self-run is acceptable; label it as such):
+1. Write a labelled phrase set of at least 40 urgent and 40 non-urgent statements, in English and Simplified Chinese, including casual and misheard phrasing.
+2. Run the current deterministic classifier over the set and record missed urgent cases (false negatives) and unnecessary alarms (false positives).
+3. Review every miss and every false alarm with a pharmacist or clinician where possible.
+4. Set the acceptance bar before looking at results. Any missed urgent case blocks release of emergency routing.
+5. Only if the evidence supports it, specify the routing (what is shown, the confirm step, wording in both languages) as a new amendment and build it.
+
+**Why it is on hold:** showing an emergency number implies the product can tell when something is an emergency. That claim needs evidence, review, and a conservative design before users see it.
+
+All new copy keys (B–H) are fixed approved copy and are **not** added to `UNDERSTAND_KEYS`. zh-Hans lines need native-speaker review before external testing.
 
 ## Caregiver dashboard
 
 Build a compact, convincing one-patient demo dashboard:
 
 - Header clearly says `Caregiver view — prototype`.
-- Shows Mei Ling’s demo record source and one current medication.
+- Shows Mei Ling’s record source (BrightCare Pharmacy, verified date) and her current medicines.
 - Shows recent activity/audit timeline, including call start and contextual route selections.
 - Shows statuses: `Confirmed`, `Needs help`, `Pending`.
 - Includes a clear explanation that this is a demo and not a clinical system.
@@ -577,9 +669,9 @@ Work in small, tested phases. Do not jump directly to real-time APIs.
 ### Phase 2 — Deterministic product journey
 
 1. Implement explicit session state machine and `Call with companion` gate.
-2. Add seeded demo record and translation model.
+2. Add the fictional seed record and translation model.
 3. Implement intent routing that reveals contextual label/schedule actions only during active calls.
-4. Build `Use demo label` matching flow.
+4. Build the label matching flow (camera, photo, typed name, choose from my medicines).
 5. Build confirmation gate.
 6. Build explanation and language toggle.
 7. Build no-match/unreadable safety flow.
@@ -645,10 +737,15 @@ Minimum test coverage:
 - "My doctor said I can stop it" routes to unsupported-medical, not record-conflict.
 - Label check: "It looks different" reaches safety.
 - Tone words in a model reply fail `isSafeCompanionReply`.
-- Health-signal and wellbeing patterns route correctly; self-harm stays urgent.
+- Health-signal and wellbeing patterns route correctly; self-harm stays urgent with its existing behaviour.
+- Emergency-number text appears only in the existing `crisisLines` string, and no `tel:` link exists anywhere, until amendment I is complete.
 - Off-topic turn cap after two turns.
 - Family help writes an audit event only after consent.
 - Study mode is off in production even when `STUDY_MODE=true`.
+- No user-facing string contains "demo"; the `PrototypeBadge` renders on every screen.
+- `Choose a photo` uses a file input without `capture`; a large photo is downscaled and a photo still has to be confirmed before any explanation.
+- Choosing from my medicines still requires confirmation.
+- Help flows: confirm, then sent only on service success; a simulated failure shows `serviceTrouble`.
 
 ## Definition of done
 
@@ -673,6 +770,7 @@ The app is ready for a prototype review only when:
 - [ ] Casual health signals and low mood are not brushed off; family help needs consent.
 - [ ] Every companion line follows the tone contract.
 - [ ] Study mode works locally and on preview, and cannot run on production.
+- [ ] Flows behave like the real product: no demo labels, one Prototype badge, photo upload, choose from my medicines, and help requests with confirm, sent and failure states.
 
 ## Working style
 
