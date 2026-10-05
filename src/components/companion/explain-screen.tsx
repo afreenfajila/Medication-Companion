@@ -47,7 +47,7 @@ export function ExplainScreen({
           <PrimaryButton icon={<Phone className="h-5 w-5" aria-hidden="true" />} onClick={() => onConflictChoice("pharmacist")}>
             {t("askPharmacistCall")}
           </PrimaryButton>
-          <SecondaryButton onClick={() => onConflictChoice("carry-on")}>{t("carryOn")}</SecondaryButton>
+          {/* No "Carry on" button: saying or typing "carry on" / "next" does it, as the hint says. */}
         </div>
       )}
       {step === 1 && !recordConflict && onLabelCheck && (

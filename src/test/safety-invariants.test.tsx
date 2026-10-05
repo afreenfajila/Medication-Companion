@@ -180,7 +180,8 @@ describe("INVARIANT: a record conflict is answered from the record, never by a m
     expect(reply).toHaveTextContent("“Take 1 tablet twice daily with meals.”");
     expect(reply.textContent).not.toMatch(/\{\w+\}/);
     expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Carry on" })).toBeInTheDocument();
+    // Carrying on is said or typed ("carry on" / "next"), not a second button.
+    expect(screen.queryByRole("button", { name: "Carry on" })).toBeNull();
 
     const posts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST");
     expect(posts.map(([u]) => u)).not.toContain("/api/companion/understand");
