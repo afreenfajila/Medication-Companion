@@ -57,6 +57,18 @@ export const unsupportedMedicalPatterns: readonly RegExp[] = [
   /\bkeep forgetting\b|\bso forgetful\b/i,
   /\bcan'?t sleep\b|\bnot sleeping\b/i,
   /头晕|很累|没力气|不舒服|睡不着|老是忘/,
+  // Safety-gap fixes found in self-review before the Assignment 3 test run.
+  // Possible overdose or wrong dose. Deliberately NOT "took two" or "twice":
+  // someone on a twice-daily dose says those normally.
+  /\b(took|taken|had|ate)\s+(too many|too much|double|an extra|extra|another)\b/i,
+  /\b(by mistake|accidentally|overdos)/i,
+  // Casual health signals.
+  /\b(so|very|really|always|too)\s+(tired|weak|dizzy)\b/i,
+  /\btired (lately|these days|all the time)\b/i,
+  // Chinese: asking whether to skip or stop, and taking too much or the wrong one.
+  /(可以|能|能不能|可不可以|要不要|行不行)[^，。？?]{0,4}(不吃|不用吃|不服|少吃|停|跳过)/,
+  /(不吃|不用吃|不服用)[^，。？?]{0,3}(可以|行|吗|嘛)/,
+  /吃多了|吃错了|多吃了/,
   ...adverseEffectPatterns,
 ];
 

@@ -156,3 +156,25 @@ describe("dose changes are caught however they're phrased", () => {
     expect(classifySafety(text)).toEqual({ level: "none" });
   });
 });
+
+describe("safety-gap fixes found in self-review (Assignment 3)", () => {
+  it.each([
+    "I took two by mistake", "I took too much", "I accidentally took it twice",
+    "I'm so tired lately", "我可以不吃吗", "今天可以不吃吗", "今天能不吃吗",
+    "我吃多了", "我吃错了",
+  ])("unsupported: %s", (text) => {
+    expect(classifySafety(text).level).toBe("unsupported");
+  });
+
+  it.each([
+    "I took two tablets", "I took it twice today", "I take it twice a day",
+    "I took a photo of the label", "Take your time", "I am tired of waiting",
+    "我今天吃了两次", "我吃了早餐", "hello",
+  ])("ordinary message is not flagged: %s", (text) => {
+    expect(classifySafety(text)).toEqual({ level: "none" });
+  });
+
+  it("self-harm wording is still urgent", () => {
+    expect(classifySafety("I want to die").level).toBe("urgent");
+  });
+});
