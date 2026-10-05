@@ -228,6 +228,11 @@ describe("conversation routing and contextual actions", () => {
     expect(resolveExplanation(s, "en")).toBeNull();
   });
 
+  it("remembers whether the message was typed or spoken (spoken by default)", () => {
+    expect(run([startCall, { type: "USER_MESSAGE", text: "What is this for?", via: "typed" }]).userInputVia).toBe("typed");
+    expect(run([startCall, { type: "USER_MESSAGE", text: "What is this for?" }]).userInputVia).toBe("voice");
+  });
+
   it("never stores the raw typed text in the audit log", () => {
     const s = run([startCall, { type: "USER_MESSAGE", text: "My secret question about pills" }]);
     expect(JSON.stringify(s.audit)).not.toContain("secret");

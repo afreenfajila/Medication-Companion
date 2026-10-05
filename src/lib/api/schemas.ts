@@ -111,6 +111,8 @@ export const understandRequestSchema = z.object({
   /** Whether the deterministic reply is itself a "did you mean…?" name check. */
   checkingMedicineName: z.boolean().default(false),
   history: z.array(understandTurnSchema).max(8).default([]),
+  /** Typed is exactly what she wrote; spoken came through speech recognition. */
+  via: z.enum(["typed", "voice"]).default("voice"),
 });
 export const understandResponseDataSchema = z.object({
   text: z.string(),

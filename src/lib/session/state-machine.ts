@@ -43,6 +43,8 @@ export type Session = {
   sessionId: string;
   /** Transient, in-memory only. Never written to the audit log. */
   userText: string | null;
+  /** How `userText` arrived, so the understanding pass never "mishears" a typed message. */
+  userInputVia: "typed" | "voice";
   assistantKey: CopyKey;
   contextualActions: ContextualActionId[];
   /** True once `Show medicine` was chosen inside the active call. */
@@ -110,7 +112,8 @@ export type SessionEvent =
   /** From the root layout, which reads the study cookie server-side (study mode only). */
   | { type: "SET_STUDY_CONDITION"; condition: StudyCondition | null }
   | { type: "CALL_START" }
-  | { type: "USER_MESSAGE"; text: string }
+  /** `via`: typed (exactly what she wrote) or voice (speech recognition). Defaults to voice. */
+  | { type: "USER_MESSAGE"; text: string; via?: "typed" | "voice" }
   | { type: "SELECT_ROUTE"; route: ContextualActionId }
   /** "Use camera" on the show-medicine choice: next comes the camera-consent question. */
   | { type: "CHOOSE_CAMERA" }
@@ -178,6 +181,7 @@ export function createInitialSession(): Session {
     callCount: 0,
     sessionId: "demo-session",
     userText: null,
+    userInputVia: "voice",
     assistantKey: "callGreeting",
     contextualActions: [],
     labelRouteSelected: false,
@@ -447,6 +451,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       const heard: Session = {
         ...s,
         userText: text,
+        userInputVia: event.via ?? "voice",
         turnCount: s.turnCount + 1,
         replyTo: null,
         nameCheckPending: false,

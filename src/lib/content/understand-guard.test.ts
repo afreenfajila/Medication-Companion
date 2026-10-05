@@ -1,6 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { t } from "@/lib/content/translations";
-import { actionsForOffer, introducesUnsafeLanguage, isSafeCompanionReply, isUnderstandKey } from "./understand-guard";
+import { actionsForOffer, claimsMishearing, introducesUnsafeLanguage, isSafeCompanionReply, isUnderstandKey } from "./understand-guard";
+
+describe("claimsMishearing — untrue for a typed message", () => {
+  it.each([
+    "That part didn't come through clearly to me.",
+    "Sorry, I didn't quite catch that.",
+    "I couldn't hear the name.",
+    "Could you say that again?",
+    "我没听清楚。",
+  ])("flags %j", (reply) => expect(claimsMishearing(reply)).toBe(true));
+
+  it("does not flag guidance", () => {
+    expect(
+      claimsMishearing("Good question. To tell you what it's for, let's first check which medicine you're holding. Would you like to show me the label?"),
+    ).toBe(false);
+  });
+});
 
 describe("introducesUnsafeLanguage", () => {
   it("flags phrasing that resembles unsupported medical advice", () => {

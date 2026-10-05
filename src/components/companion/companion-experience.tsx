@@ -206,6 +206,7 @@ export function CompanionExperience() {
         offered,
         checkingMedicineName: session.nameCheckPending,
         history,
+        via: session.userInputVia,
       }),
       signal: controller.signal,
     })

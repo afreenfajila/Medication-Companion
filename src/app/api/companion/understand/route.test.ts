@@ -77,6 +77,21 @@ describe("POST /api/companion/understand", () => {
     });
   });
 
+  it("a typed message can't have been misheard: a 'didn't come through' reply falls back", async () => {
+    const misheard =
+      "Thank you for asking, that's a good habit. That part didn't come through clearly to me. Would you like to show me the medicine label, or tell me the name again?";
+    understandMessage.mockResolvedValue({ reply: misheard, offer: "show-medicine", checkingMedicineName: false });
+
+    const typed = await data(await POST(req({ ...BODY, key: "showLabelQuestion", message: "What is this medicine for?", via: "typed" })));
+    expect(typed.source).toBe("fallback");
+    expect(typed.text).toBe(t("en", "showLabelQuestion"));
+    expect(understandMessage).toHaveBeenLastCalledWith(expect.objectContaining({ via: "typed" }));
+
+    // Spoken, a mishearing is possible, so the same reply is allowed.
+    const spoken = await data(await POST(req({ ...BODY, key: "showLabelQuestion", message: "What is this medicine for?", via: "voice" })));
+    expect(spoken.source).toBe("claude");
+  });
+
   it("never asks the model about a safety-classified message", async () => {
     const d = await data(await POST(req({ ...BODY, message: "I have chest pain" })));
     expect(d.source).toBe("fallback");

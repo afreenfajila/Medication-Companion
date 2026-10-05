@@ -100,6 +100,17 @@ const ADVICE_PATTERNS: readonly RegExp[] = [
   /停药|停止服用|不要吃|别吃|不用吃|加倍|多吃|少吃|减量|加量/,
 ];
 
+/**
+ * "I didn't catch that" / "that didn't come through clearly". True for a misheard
+ * spoken word, untrue for a typed message — the route rejects it then.
+ */
+const MISHEARING_CLAIM =
+  /\b(didn['’]?t|did not|couldn['’]?t|could not)\s+(quite\s+)?(catch|hear|come through|understand)\b|\bcome through clearly\b|\bsay (it|that) again\b|\bwhat you said\b|没听清|没听清楚|再说一(次|遍)/i;
+
+export function claimsMishearing(text: string): boolean {
+  return MISHEARING_CLAIM.test(text);
+}
+
 const MAX_REPLY_CHARS = 320;
 const CJK = /[一-鿿]/;
 

@@ -164,7 +164,7 @@ export function useVoiceConversation(opts: {
    * "next", "I understand" or "下一步" work either way. Replies follow the
    * language they used: Chinese input switches to Chinese, English to English.
    */
-  const interpretText = useCallback((text: string, confidence?: number) => {
+  const interpretText = useCallback((text: string, confidence?: number, via: "typed" | "voice" = "voice") => {
     const { speakNotice: say, soundActive: soundOn } = latest.current;
     let s = latest.current.session;
     setNotice(null);
@@ -210,7 +210,7 @@ export function useVoiceConversation(opts: {
       dispatch(intent.event);
     } else if (intent.kind === "message") {
       pendingSpokenName.current = null;
-      dispatch({ type: "USER_MESSAGE", text: text.slice(0, 300) });
+      dispatch({ type: "USER_MESSAGE", text: text.slice(0, 300), via });
     } else if (intent.kind === "ui") {
       runCapture();
     } else if (intent.kind === "need-strength") {
@@ -308,6 +308,7 @@ export function useVoiceConversation(opts: {
     micOn: enabled && !muted && !paused,
     notice,
     toggleMic,
-    submitText: interpretText,
+    // Typed input is exactly what she wrote — never treated as possibly misheard.
+    submitText: (text: string) => interpretText(text, undefined, "typed"),
   };
 }
