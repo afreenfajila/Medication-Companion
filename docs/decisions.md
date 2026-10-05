@@ -671,3 +671,21 @@ fixed here; H covers choose-from-my-medicines, typed name on failure, real callb
 - `capabilityGuide` is an understanding key, so when Claude is configured it can say the same thing in
   its own words. The prompt now says to explain what it can help with when she seems unsure or says
   something unrelated.
+
+## Vague input is clarified back, never guessed
+
+- **Rule:** when a message is vague or could mean more than one thing, the companion asks one short
+  clarifying question instead of assuming.
+- **In the app's own rules (works without AI):**
+  - a medicine talked about or pointed at but not named ("I take it twice a day", "this one", "the
+    white one", "my pill", "这个") gets `whichMedicine`: "Which medicine do you mean?", plus Show
+    medicine;
+  - any other unclear message gets `capabilityGuide` (what the companion can do, then "a label or
+    your schedule?").
+  - Explicit questions keep their own replies ("What is this?" → `showLabelQuestion`; "When do I take
+    it?" → `clarificationPrompt`).
+- **In the understanding pass:** the prompt says to say back what was understood and ask one
+  clarifying question with easy options. The route also rejects any reply that names the record's
+  medicine when nobody else has; that check is deterministic.
+- **Limit:** pattern rules can't catch every vague phrasing. Anything they miss still lands on the
+  capability guide, which is itself a clarifying question.

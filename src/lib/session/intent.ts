@@ -93,6 +93,11 @@ export function mentionsRecordMedicine(text: string): boolean {
 const VAGUE_TAKING =
   /^\s*(?:(?:yes|yeah|well|so|um|uh|ok|okay)[,\s]+)?(?:i|i've|i have|i'm|i am)\s+(?:take|took|taking|been taking|usually take)\b(?![^?]*\?)|^我(?:每天|平时|今天|一天)?(?:都|在)?(?:吃|服用)(?!.*[吗？?])/i;
 
+// Points at a medicine without naming it: "this one", "the white one", "my pill", "这个".
+// Checked after the explicit questions ("what is this?") so those keep their own replies.
+const VAGUE_MEDICINE_REFERENCE =
+  /\b(?:this|that|the(?:\s+\w+)?|my)\s+(?:one|ones|pill|pills|tablet|tablets|capsule|capsules|medicine|medication)\b|这个|那个|这颗|那颗|这片|那片|这种|那种/i;
+
 // "I've got my medicine with me" — the person has something in hand to check.
 const MEDICINE_IN_HAND =
   /\b(i('ve| have| do have)|i('ve)? got)\b.*\b(with me|in my hand|right here|here with)\b|\b(i'?m |i am )holding\b|\bin my hand\b|我手上|我手里|我带着|我拿着/i;
@@ -260,6 +265,14 @@ export function routeMessage(
       intent: "schedule-question",
       assistantKey: "clarificationPrompt",
       contextualActions: ["show-medicine", "ask-schedule"],
+    };
+  }
+  // Vague: a medicine is pointed at but not named — ask which one, never assume.
+  if (!ctx.matchConfirmed && VAGUE_MEDICINE_REFERENCE.test(text)) {
+    return {
+      intent: "unknown-medicine-question",
+      assistantKey: "whichMedicine",
+      contextualActions: ["show-medicine"],
     };
   }
   // Unclear or random ("I don't know what to do", "banana"): say what the companion

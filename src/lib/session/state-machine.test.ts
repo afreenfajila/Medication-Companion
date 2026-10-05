@@ -192,6 +192,20 @@ describe("conversation routing and contextual actions", () => {
     },
   );
 
+  it.each(["this one", "the white one", "my pill is white", "it's the small tablet", "这个"])(
+    "pointing at a medicine without naming it (%j) → asks which medicine",
+    (text) => {
+      expect(routeMessage(text, none).assistantKey).toBe("whichMedicine");
+    },
+  );
+
+  it("explicit questions keep their own replies; non-medicine vagueness gets the capability guide", () => {
+    expect(routeMessage("What is this?", none).assistantKey).toBe("showLabelQuestion");
+    expect(routeMessage("这是什么", none).assistantKey).toBe("showLabelQuestion");
+    expect(routeMessage("That's great", none).assistantKey).toBe("capabilityGuide");
+    expect(routeMessage("hmm", none).assistantKey).toBe("capabilityGuide");
+  });
+
   it("a named medicine, or a question about taking it, is not treated as vague", () => {
     expect(routeMessage("I take Metformin twice a day", none).assistantKey).toBe("medicineMentioned");
     expect(routeMessage("When do I take it?", none).assistantKey).toBe("clarificationPrompt");
