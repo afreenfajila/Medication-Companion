@@ -71,6 +71,13 @@ export function resolveExplanation(
   };
 }
 
+/** "I found a possible match: Metformin, 500 mg. …" — name and strength come from the candidate. */
+export function fillCandidate(template: string, candidate: CandidateDisplay): string {
+  return template
+    .replace("{medicine}", candidate.medicineName.replace(` ${candidate.strength}`, ""))
+    .replace("{strength}", candidate.strength);
+}
+
 /** The record's verified date, e.g. "21 September 2026" / "2026年9月21日". */
 export function formatVerifiedDate(language: UiLanguage): string {
   return new Intl.DateTimeFormat(language === "en" ? "en-GB" : "zh-CN", {

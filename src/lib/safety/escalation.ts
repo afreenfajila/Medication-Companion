@@ -57,7 +57,7 @@ const LABEL_REASONS: readonly SafetyReason[] = [
   "multiple-candidates",
   "user-unsure",
   "service-failure",
-  "label-differs", // "Correction" state: try once more, ask a pharmacist, or carry on
+  // Not "label-differs": the "Incorrect output" state leads to a person, not another photo.
 ];
 
 /**

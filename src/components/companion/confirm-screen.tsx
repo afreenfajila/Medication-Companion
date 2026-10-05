@@ -3,7 +3,8 @@
 import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
 import { RecordCard } from "@/components/ui/record-card";
 import type { CandidateDisplay } from "@/types/content";
-import { StateLabel, type T } from "./screen-chrome";
+import { fillCandidate } from "@/lib/content/explanation";
+import type { T } from "./screen-chrome";
 
 /**
  * 05-confirm-medicine, as the pinned card for that step on the same call screen.
@@ -21,12 +22,8 @@ export function ConfirmScreen({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="text-center">
-        <StateLabel>{t("possibleMatch")}</StateLabel>
-        <h2 className="mt-1 text-[22px] font-bold leading-tight">
-          {t("confirmHeading").replace("{medicine}", candidate.medicineName)}
-        </h2>
-      </div>
+      {/* The heading itself says "possible match", so no separate state label repeating it. */}
+      <h2 className="text-center text-[22px] font-bold leading-tight">{fillCandidate(t("confirmHeading"), candidate)}</h2>
 
       <RecordCard
         candidate={candidate}

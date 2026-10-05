@@ -105,7 +105,7 @@ describe("the voice reads approved text only", () => {
     const e = metforminRecord.explanation;
     const line = [e.instructionIntro["zh-Hans"], e.instruction["zh-Hans"], e.sourceLine["zh-Hans"]].join(" ");
     expect((await POST(req({ text: line, language: "zh-Hans" }))).status).toBe(200);
-    const confirm = `${t("en", "possibleMatch")}. ${t("en", "confirmHeading").replace("{medicine}", "Metformin 500 mg")} ${t("en", "checkName")}`;
+    const confirm = `${t("en", "confirmHeading").replace("{medicine}", "Metformin").replace("{strength}", "500 mg")} ${t("en", "checkName")}`;
     expect((await POST(req({ text: confirm, language: "en" }))).status).toBe(200);
   });
 

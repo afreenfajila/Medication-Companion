@@ -1,4 +1,4 @@
-import { fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
+import { fillCandidate, fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
 import type { CopyKey } from "@/lib/content/translations";
 import { mentionsSelfHarm } from "@/lib/safety/classify";
 import { buildEscalation } from "@/lib/safety/escalation";
@@ -59,11 +59,7 @@ export function speakableText(
       return join(t("analyzingHeading"), t("analyzingBody"));
     case "confirm-match":
       if (!session.candidate) return null;
-      return join(
-        t("possibleMatch") + ".",
-        t("confirmHeading").replace("{medicine}", session.candidate.medicineName),
-        t("checkName"),
-      );
+      return join(fillCandidate(t("confirmHeading"), session.candidate), t("checkName"));
     case "explain": {
       if (!explanation) return null; // gate: no confirmed match → nothing medical is spoken
       if (session.recordConflict) return fillRecordFacts(t("recordConflict"), explanation, session.language);

@@ -12,6 +12,7 @@ import {
   toExplain,
   CTX,
 } from "@/test/helpers";
+import { buildEscalation } from "@/lib/safety/escalation";
 import { buildTimeline, deriveRecordStatus } from "./audit-view";
 import { routeMessage } from "./intent";
 import {
@@ -575,12 +576,13 @@ describe("recovery: carry on where they left off", () => {
     expect(resolveExplanation(back, "en")).toBeNull();
   });
 
-  it("'It looks different' offers one more try", () => {
+  it("'It looks different' leads to a person, not another photo (Incorrect output)", () => {
     const differs = run(
       [{ type: "EXPLAIN_STEP", direction: "next" }, { type: "LABEL_CHECK", matches: false }],
       toExplain(),
     );
-    expect(run([{ type: "TRY_ANOTHER_LABEL" }], differs).state).toBe("camera-guidance");
+    const actions = buildEscalation(differs.safetyReason!, differs.labelRouteSelected).actions.map((a) => a.id);
+    expect(actions).not.toContain("try-again");
   });
 });
 

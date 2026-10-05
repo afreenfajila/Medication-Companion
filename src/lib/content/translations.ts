@@ -39,7 +39,7 @@ const en = {
   getHelp: "Get help",
   endCall: "End call",
   listening: "I’m listening…",
-  callGreeting: "Hello, I’m an AI helper. What would you like to know today?",
+  callGreeting: "Hello, I’m an AI guide. What would you like to know today?",
   showLabelQuestion:
     "Let’s check this together. Would you like to show me the medicine label?",
   clarificationPrompt:
@@ -182,8 +182,8 @@ const en = {
 
   // Confirmation
   possibleMatch: "I found a possible match",
-  // {medicine} is filled from the candidate's record name — "may be", never certain.
-  confirmHeading: "I think this may be your {medicine}. Is this the one you’re holding?",
+  // {medicine} and {strength} are filled from the candidate's record — a *possible* match, never certain.
+  confirmHeading: "I found a possible match: {medicine}, {strength}. Is this the one you’re holding?",
   checkName: "Please check the name on the label before continuing.",
   yesMedicine: "Yes, this is my medicine",
   tryAgain: "No, try again",
@@ -316,7 +316,7 @@ const zhHans: Copy = {
   getHelp: "寻求帮助",
   endCall: "结束通话",
   listening: "我在听…",
-  callGreeting: "您好，我是AI助手。今天想了解什么呢？",
+  callGreeting: "您好，我是AI向导。今天想了解什么呢？",
   showLabelQuestion: "让我们一起查看。您想给我看药物标签吗？",
   clarificationPrompt: "您想给我看药物标签，还是询问您的服药时间？",
   scheduleNeedsRecord:
@@ -430,7 +430,7 @@ const zhHans: Copy = {
   analyzingBody: "请稍等一下。",
 
   possibleMatch: "我找到一个可能的匹配项",
-  confirmHeading: "这可能是您的{medicine}。是您手上的这一种吗？",
+  confirmHeading: "我找到一个可能的匹配：{medicine}，{strength}。是您手上的这一种吗？",
   checkName: "继续之前，请确认标签上的名称。",
   yesMedicine: "是的，这是我的药物",
   tryAgain: "不是，再试一次",

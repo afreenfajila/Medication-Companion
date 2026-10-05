@@ -59,7 +59,7 @@ describe("primary journey (deck): question → Show medicine → camera → poss
     click(/use demo label/i); // jsdom has no camera → demo/sample/typed fallback
     act(() => void vi.advanceTimersByTime(1000));
 
-    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument(); // possible match, not certain
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument(); // possible match, not certain
     expect(screen.queryByText(INSTRUCTION)).toBeNull();
     click(/yes, this is my medicine/i);
     // Moving on is said or typed — only the language switch is a button.

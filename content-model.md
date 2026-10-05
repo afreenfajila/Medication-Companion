@@ -411,7 +411,7 @@ Limit: Explain only these facts in the selected language. Do not add medical adv
 | Key | English | Simplified Chinese |
 |---|---|---|
 | `possibleMatch` | I found a possible match | 我找到一个可能的匹配项 |
-| `confirmHeading` | Is this the medicine you are holding? | 这是您手上拿着的药物吗？ |
+| `confirmHeading` | I found a possible match: {medicine}, {strength}. Is this the one you're holding? (see §19) | 我找到一个可能的匹配：{medicine}，{strength}。是您手上的这一种吗？ |
 | `checkName` | Please check the name on the label before continuing. | 继续之前，请确认标签上的名称。 |
 | `yesMedicine` | Yes, this is my medicine | 是的，这是我的药物 |
 | `tryAgain` | No, try again | 不是，再试一次 |
@@ -652,7 +652,7 @@ New safety reason `label-differs` (heading `labelSafetyHeading`, body `labelDiff
 
 | Key | English | Simplified Chinese |
 |---|---|---|
-| `callGreeting` | Hello, I'm an AI helper. What would you like to know today? | 您好，我是AI助手。今天想了解什么呢？ |
+| `callGreeting` | Hello, I'm an AI guide. What would you like to know today? | 您好，我是AI向导。今天想了解什么呢？ |
 | `analyzingHeading` / `analyzingBody` | Thank you, let me have a look. / This will just take a moment. | 谢谢，我来看一看。/ 请稍等一下。 |
-| `confirmHeading` | I think this may be your {medicine}. Is this the one you're holding? | 这可能是您的{medicine}。是您手上的这一种吗？ |
+| `confirmHeading` | I found a possible match: {medicine}, {strength}. Is this the one you're holding? | 我找到一个可能的匹配：{medicine}，{strength}。是您手上的这一种吗？ |
 | `recordHidden` | Your record is tucked away while we get you some help. | 在我们为您寻求帮助时，记录内容先收起来了。 |

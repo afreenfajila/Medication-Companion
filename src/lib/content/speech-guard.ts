@@ -19,6 +19,7 @@ const APPROVED: readonly string[] = [
   ...Object.values(studyWrongInstruction),
   candidateDisplayFor(metforminRecord).medicineName,
   metforminRecord.identity.genericName,
+  metforminRecord.identity.strength, // "I found a possible match: Metformin, 500 mg."
   metforminPurposeEn,
   recordSource.displayLabel,
 ]

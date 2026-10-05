@@ -258,7 +258,7 @@ describe("speakableText — spoken output is approved wording only, and gated", 
     const pending = toConfirmMatch();
     const said = speakableText(pending, t, resolveExplanation(pending, "en"))!;
     expect(said).toContain("possible match");
-    expect(said).toContain("Metformin 500 mg"); // identity only
+    expect(said).toContain("Metformin, 500 mg"); // identity only
     expect(said).not.toMatch(/blood sugar|Take 1 tablet|twice daily|meals/i);
   });
 

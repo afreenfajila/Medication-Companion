@@ -603,3 +603,8 @@ fixed here; H covers choose-from-my-medicines, typed name on failure, real callb
 - **Escalation never shows instructions, including in the transcript.** Record lines in the call
   transcript (explanation steps and the record-conflict reply) are replaced with "Your record is tucked
   away while we get you some help." while the call is in safety, and reappear when they carry on.
+- **Updated diagram (Incorrect output card).** A newer version of the diagram gives "It looks different"
+  its own "Incorrect output" state that leads to a person only, so the "one more try" above was
+  reverted. The greeting says "AI guide", and the confirm heading is "I found a possible match:
+  {medicine}, {strength}. Is this the one you're holding?" The separate "possible match" label above it
+  was removed because the heading now says it.
