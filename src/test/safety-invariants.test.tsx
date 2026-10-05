@@ -179,14 +179,16 @@ describe("INVARIANT: a record conflict is answered from the record, never by a m
     expect(reply).toHaveTextContent("checked on 21 September 2026");
     expect(reply).toHaveTextContent("“Take 1 tablet twice daily with meals.”");
     expect(reply.textContent).not.toMatch(/\{\w+\}/);
-    expect(screen.getByRole("button", { name: "Check with pharmacist — demo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Carry on" })).toBeInTheDocument();
 
     const posts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST");
     expect(posts.map(([u]) => u)).not.toContain("/api/companion/understand");
 
-    fireEvent.click(screen.getByRole("button", { name: "Check with pharmacist — demo" }));
-    expect(screen.getByText("Here are some ways to reach a person.")).toBeInTheDocument();
+    // The callback asks first; nothing is sent yet.
+    fireEvent.click(screen.getByRole("button", { name: "Ask a pharmacist to call me" }));
+    expect(screen.getByText(/Shall I send the request\?/)).toBeInTheDocument();
+    expect(posts.map(([u]) => u)).not.toContain("/api/help/request");
   });
 });
 

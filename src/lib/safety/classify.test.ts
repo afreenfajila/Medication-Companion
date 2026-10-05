@@ -84,18 +84,16 @@ describe("health signals in casual talk (Assignment 3, E2)", () => {
 });
 
 describe("escalation view", () => {
-  it("normal uncertainty offers only labelled demo human actions (plus try-again after a label route)", () => {
+  it("normal uncertainty offers a pharmacist, clinic or trusted helper, and family (plus try-again after a label route)", () => {
     const view = buildEscalation("record-mismatch", true);
     expect(view.urgent).toBe(false);
     expect(view.actions.map((a) => a.id)).toEqual([
       "try-again",
-      "pharmacy-demo",
-      "trusted-helper-demo",
-      "ask-family",
-      "clinic-demo",
+      "pharmacist-callback",
+      "clinic",
+      "trusted-helper",
+      "family",
     ]);
-    // No action other than "try again" pretends to be implemented.
-    expect(view.actions.filter((a) => a.implemented).map((a) => a.id)).toEqual(["try-again"]);
   });
 
   it("does not offer 'Try another photo' before the label route was chosen or for non-label reasons", () => {
@@ -123,12 +121,11 @@ describe("escalation view", () => {
     },
   );
 
-  it("urgent escalation is flagged, has no try-again, and no implemented (real) actions", () => {
+  it("urgent escalation is flagged and offers no actions until amendment I is done", () => {
     const view = buildEscalation("urgent-risk", true);
     expect(view.urgent).toBe(true);
     expect(view.headingKey).toBe("urgentHeading");
-    expect(view.actions.some((a) => a.id === "try-again")).toBe(false);
-    expect(view.actions.every((a) => !a.implemented)).toBe(true);
+    expect(view.actions).toEqual([]); // no emergency button, no help flow on the urgent path
   });
 });
 

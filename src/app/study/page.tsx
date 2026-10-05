@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { AppShell } from "@/components/ui/shell";
-import { metforminRecord } from "@/lib/content/demo-record";
+import { metforminRecord } from "@/lib/content/seed-record";
 import { studyWrongInstruction } from "@/lib/content/fixtures";
 import { getStudyCondition } from "@/lib/study/study-cookie";
 import { isStudyModeEnabled, parseStudyCondition, STUDY_COOKIE, STUDY_CONDITIONS } from "@/lib/study/study-mode";

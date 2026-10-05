@@ -1,5 +1,6 @@
 import { fillCandidate, fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
 import type { CopyKey } from "@/lib/content/translations";
+import { helpLine } from "@/lib/content/help-lines";
 import { mentionsSelfHarm } from "@/lib/safety/classify";
 import { buildEscalation } from "@/lib/safety/escalation";
 import { MAX_LABEL_RETRIES, type Session } from "@/lib/session/state-machine";
@@ -25,7 +26,7 @@ export function speakableText(
     | "recordConflict"
     | "language"
     | "userText"
-    | "familyConsentPending"
+    | "helpFlow"
   >,
   t: (key: CopyKey) => string,
   explanation: ExplanationView | null,
@@ -43,8 +44,8 @@ export function speakableText(
   const join = (...parts: Array<string | null | undefined>) =>
     parts.filter((p): p is string => Boolean(p)).join(" ");
 
-  // The family-consent question sits on top of whichever step asked it.
-  if (session.familyConsentPending) return t("familyConsent");
+  // A help request sits on top of whichever step asked it.
+  if (session.helpFlow) return helpLine(t, session.helpFlow);
 
   switch (session.state) {
     case "listening":

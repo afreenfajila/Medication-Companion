@@ -656,3 +656,27 @@ New safety reason `label-differs` (heading `labelSafetyHeading`, body `labelDiff
 | `analyzingHeading` / `analyzingBody` | Thank you, let me have a look. / This will just take a moment. | 谢谢，我来看一看。/ 请稍等一下。 |
 | `confirmHeading` | I found a possible match: {medicine}, {strength}. Is this the one you're holding? | 我找到一个可能的匹配：{medicine}，{strength}。是您手上的这一种吗？ |
 | `recordHidden` | Your record is tucked away while we get you some help. | 在我们为您寻求帮助时，记录内容先收起来了。 |
+
+### H4. Help flows (simulated services)
+
+The record module is now `seed-record.ts`, the simulated services' data source, with a fictional care circle (`careContacts`: BrightCare Pharmacy 6555 0123, Greenhill Family Clinic 6555 0100, family "Daniel", trusted helper "Mrs Lim"). The numbers follow the 555-01xx fiction pattern; replace them with numbers you're allowed to show before external testing.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `askPharmacistCall` | Ask a pharmacist to call me | 请药剂师给我回电 |
+| `contactClinic` | Contact my clinic | 联系我的诊所 |
+| `askHelper` | Ask my trusted helper | 请我信任的人帮忙 |
+| `letFamilyKnow` | Let my family know | 告诉我的家人 |
+| `callbackConfirm` | I can ask BrightCare Pharmacy to call you on the number in your record. They usually call within one working day. Shall I send the request? | 我可以请BrightCare药房按您记录上的号码给您回电。他们通常会在一个工作日内联系您。要我发送请求吗？ |
+| `callbackYes` | Yes, send the request | 好，发送请求 |
+| `callbackSent` | Thank you. I've sent your request to BrightCare Pharmacy. Your reference is {reference}. Is there anything else I can help you with? | 谢谢，我已经把您的请求发给BrightCare药房了。您的参考编号是{reference}。还有什么我可以帮您的吗？ |
+| `helperConsent` | Shall I let {name}, your trusted helper, know you'd like some help? I'll only do this if you say yes. | 需要我告诉您信任的{name}您想请他们帮忙吗？只有您同意，我才会联系。 |
+| `familyConsentYes` | Yes, let them know | 好，告诉他们 |
+| `familySent` | Thank you. I've let {caregiverName} know you'd like some help. Would you like to carry on while you wait? | 谢谢，我已经告诉{caregiverName}您需要帮忙了。等待的时候，要不要我们先继续？ |
+| `helpSending` | Sending your request… | 正在发送您的请求… |
+| `serviceTrouble` | I'm sorry, I couldn't send that just now. Would you like to try again, or see the pharmacy's phone number instead? | 不好意思，刚才没能发送成功。您想再试一次，还是看看药房的电话号码？ |
+| `sendAgain` / `seePharmacyNumber` | Try again / See the pharmacy's number | 再试一次 / 查看药房电话 |
+| `pharmacyNumber` / `clinicNumber` | You can call {name} on {phone}. Is there anything else I can help you with? | 您可以拨打{phone}联系{name}。还有什么我可以帮您的吗？ |
+| `unclearHelpConfirm` | I didn't quite catch that. You can say "yes", or "not now". | 我没太听清楚。您可以说「好」，或说「现在不用」。 |
+
+Removed: `checkPharmacy`, `checkWithPharmacist`, `askFamily`, `emergencyDemo`, `demoActionNotice`, `unclearFamilyConsent`. New audit event `pharmacist-callback-requested`; `caregiver-help-requested` is now written only after consent **and** the service's success.

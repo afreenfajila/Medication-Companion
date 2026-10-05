@@ -101,7 +101,7 @@ describe("the voice reads approved text only", () => {
   it("reads a full approved confirm/explanation line built from catalogue + record strings", async () => {
     synthesizeSpeechWav.mockResolvedValue(Buffer.from("RIFF", "ascii"));
     const { t } = await import("@/lib/content/translations");
-    const { metforminRecord } = await import("@/lib/content/demo-record");
+    const { metforminRecord } = await import("@/lib/content/seed-record");
     const e = metforminRecord.explanation;
     const line = [e.instructionIntro["zh-Hans"], e.instruction["zh-Hans"], e.sourceLine["zh-Hans"]].join(" ");
     expect((await POST(req({ text: line, language: "zh-Hans" }))).status).toBe(200);

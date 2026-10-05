@@ -1,4 +1,4 @@
-import { metforminPurposeEn, metforminRecord, recordSource } from "./demo-record";
+import { metforminPurposeEn, metforminRecord, recordSource } from "./seed-record";
 import { candidateIdFor } from "@/lib/matching/match-record";
 import type { StudyCondition } from "@/lib/study/study-mode";
 import { studyWrongInstruction } from "./fixtures";

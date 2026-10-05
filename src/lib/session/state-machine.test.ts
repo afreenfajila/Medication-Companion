@@ -397,13 +397,73 @@ describe("safety states block instructions", () => {
     expect(resolveExplanation(s, "en")).toBeNull();
   });
 
-  it("demo help actions are audited as not implemented", () => {
-    const s = run(
-      [{ type: "HELP_ACTION", action: "pharmacy-demo" }],
-      run([startCall, { type: "GET_HELP" }]),
+  it("contacting the clinic shows its number; nothing is sent", () => {
+    const s = run([{ type: "HELP_START", kind: "clinic" }], run([startCall, { type: "GET_HELP" }]));
+    expect(s.helpFlow).toMatchObject({ kind: "clinic", stage: "info" });
+    expect(blocked([{ type: "HELP_CONFIRM", granted: true }], s)).toBe(true);
+  });
+});
+
+describe("help flows: confirm, then sent only on service success (Assignment 3, H4)", () => {
+  const safety = () => run([startCall, { type: "GET_HELP" }]);
+  const helpEvents = (s: ReturnType<typeof run>) =>
+    s.audit.filter((e) => e.eventType === "pharmacist-callback-requested" || e.eventType === "caregiver-help-requested");
+
+  it("a pharmacist callback confirms first, sends, and is 'sent' with a reference only after success", () => {
+    const asked = run([{ type: "HELP_START", kind: "pharmacist-callback" }], safety());
+    expect(asked.helpFlow).toMatchObject({ kind: "pharmacist-callback", stage: "confirm", reason: "help-requested" });
+    const sending = run([{ type: "HELP_CONFIRM", granted: true }], asked);
+    expect(sending.helpFlow?.stage).toBe("sending");
+    expect(helpEvents(sending)).toHaveLength(0); // nothing claimed yet
+
+    const sent = run([{ type: "HELP_RESULT", ok: true, reference: "BC-123456" }], sending);
+    expect(sent.helpFlow).toMatchObject({ stage: "sent", reference: "BC-123456" });
+    expect(helpEvents(sent).map((e) => e.eventType)).toEqual(["pharmacist-callback-requested"]);
+    expect(deriveRecordStatus(buildTimeline(sent.audit))).toBe("Needs help");
+  });
+
+  it("a service failure shows the failure state, never 'sent'; try again or see the pharmacy's number", () => {
+    const sending = run([{ type: "HELP_START", kind: "pharmacist-callback" }, { type: "HELP_CONFIRM", granted: true }], safety());
+    const failed = run([{ type: "HELP_RESULT", ok: false }], sending);
+    expect(failed.helpFlow?.stage).toBe("failed");
+    expect(helpEvents(failed)).toHaveLength(0);
+    expect(run([{ type: "HELP_RETRY" }], failed).helpFlow?.stage).toBe("sending");
+    expect(run([{ type: "HELP_SHOW_NUMBER" }], failed).helpFlow?.stage).toBe("info");
+  });
+
+  it("a result that arrives when nothing is being sent is ignored", () => {
+    expect(blocked([{ type: "HELP_RESULT", ok: true, reference: "BC-1" }], safety())).toBe(true);
+  });
+
+  it("after 'sent', carry on continues the call where it left off", () => {
+    const atInstruction = run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain());
+    const flow = run(
+      [
+        { type: "GET_HELP" },
+        { type: "HELP_START", kind: "trusted-helper" },
+        { type: "HELP_CONFIRM", granted: true },
+        { type: "HELP_RESULT", ok: true, contactName: "Mrs Lim" },
+        { type: "HELP_DISMISS" },
+      ],
+      atInstruction,
     );
-    expect(s.helpAction).toBe("pharmacy-demo");
-    expect(s.audit.at(-1)?.details).toMatchObject({ action: "pharmacy-demo", implemented: false });
+    expect(flow.state).toBe("explain");
+    expect(flow.explainStep).toBe(1);
+    expect(flow.helpFlow).toBeNull();
+  });
+
+  it("is not offered on the urgent path", () => {
+    const urgent = run([startCall, { type: "USER_MESSAGE", text: "I have chest pain" }]);
+    expect(blocked([{ type: "HELP_START", kind: "pharmacist-callback" }], urgent)).toBe(true);
+  });
+
+  it("the record conflict's 'Ask a pharmacist to call me' opens the callback on top of the explanation", () => {
+    const s = run(
+      [{ type: "USER_MESSAGE", text: "That's not right" }, { type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" }],
+      toExplain(),
+    );
+    expect(s.state).toBe("explain");
+    expect(s.helpFlow).toMatchObject({ kind: "pharmacist-callback", stage: "confirm", reason: "record-conflict" });
   });
 });
 
@@ -441,11 +501,11 @@ describe("record conflict (“my doctor said…”)", () => {
     expect(routeMessage("That's not right", { matchConfirmed: false, explaining: true }).intent).not.toBe("record-conflict");
   });
 
-  it("offers pharmacist help (→ safety) or carrying on (stay on the explanation)", () => {
+  it("offers a pharmacist callback (on top of the explanation) or carrying on", () => {
     const raised = dispute("That's not right");
     const help = run([{ type: "RECORD_CONFLICT_CHOICE", choice: "pharmacist" }], raised);
-    expect(help.state).toBe("safety");
-    expect(help.safetyReason).toBe("help-requested");
+    expect(help.state).toBe("explain");
+    expect(help.helpFlow).toMatchObject({ kind: "pharmacist-callback", stage: "confirm" });
     expect(help.recordConflict).toBe(false);
 
     const carry = run([{ type: "RECORD_CONFLICT_CHOICE", choice: "carry-on" }], raised);
@@ -518,37 +578,42 @@ describe("family help needs consent every time (Assignment 3, F)", () => {
   const familyEvents = (s: ReturnType<typeof run>) =>
     s.audit.filter((e) => e.eventType === "caregiver-help-requested");
 
-  it("choosing 'Ask family to help' only asks — nothing is recorded yet", () => {
+  const yes = [
+    { type: "HELP_CONFIRM", granted: true },
+    { type: "HELP_RESULT", ok: true, contactName: "Daniel" },
+  ] as const;
+
+  it("choosing 'Let my family know' only asks — nothing is recorded yet", () => {
     const s = asked();
-    expect(s.familyConsentPending).toBe(true);
+    expect(s.helpFlow).toMatchObject({ kind: "family", stage: "confirm", reason: "wellbeing" });
     expect(familyEvents(s)).toHaveLength(0);
   });
 
   it("'Not now' leaves no trace", () => {
-    const s = run([{ type: "FAMILY_CONSENT", granted: false }], asked());
-    expect(s.familyConsentPending).toBe(false);
+    const s = run([{ type: "HELP_CONFIRM", granted: false }], asked());
+    expect(s.helpFlow).toBeNull();
     expect(familyEvents(s)).toHaveLength(0);
   });
 
-  it("only 'Yes' writes caregiver-help-requested, which the dashboard shows as Needs help", () => {
-    const s = run([{ type: "FAMILY_CONSENT", granted: true }], asked());
+  it("only 'Yes' (and the service's success) writes caregiver-help-requested, shown as Needs help", () => {
+    const s = run([...yes], asked());
     expect(familyEvents(s)).toHaveLength(1);
-    expect(familyEvents(s)[0].details).toEqual({ consent: true, implemented: false });
+    expect(familyEvents(s)[0].details).toEqual({ kind: "family", consent: true, reason: "wellbeing" });
+    expect(s.helpFlow).toMatchObject({ stage: "sent", contactName: "Daniel" });
     expect(deriveRecordStatus(buildTimeline(s.audit))).toBe("Needs help");
   });
 
   it("is on the non-urgent safety options too, and asks again every time", () => {
-    const safety = run([startCall, { type: "GET_HELP" }]);
-    const once = run([{ type: "ASK_FAMILY" }, { type: "FAMILY_CONSENT", granted: true }], safety);
+    const once = run([{ type: "HELP_START", kind: "family" }, ...yes, { type: "HELP_DISMISS" }], run([startCall, { type: "GET_HELP" }]));
     expect(familyEvents(once)).toHaveLength(1);
-    const again = run([{ type: "ASK_FAMILY" }], once);
-    expect(again.familyConsentPending).toBe(true);
+    const again = run([{ type: "GET_HELP" }, { type: "HELP_START", kind: "family" }], once);
+    expect(again.helpFlow?.stage).toBe("confirm");
     expect(familyEvents(again)).toHaveLength(1); // nothing new until a second "Yes"
   });
 
   it("can't be opened where it wasn't offered", () => {
-    expect(blocked([{ type: "ASK_FAMILY" }], run([startCall]))).toBe(true);
-    expect(blocked([{ type: "FAMILY_CONSENT", granted: true }], lonely())).toBe(true);
+    expect(blocked([{ type: "HELP_START", kind: "family" }], run([startCall]))).toBe(true);
+    expect(blocked([{ type: "HELP_CONFIRM", granted: true }], lonely())).toBe(true);
   });
 });
 

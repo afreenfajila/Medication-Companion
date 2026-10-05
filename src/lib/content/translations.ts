@@ -207,7 +207,6 @@ const en = {
   // by code from the verified record — never typed here, never model-written.
   recordConflict:
     "Thank you for telling me — it’s good to double-check. Your pharmacy record, checked on {verifiedDate}, says: “{instruction}” Sometimes a doctor changes things and the record takes a little while to catch up, so it’s no trouble to ask. Would you like help checking with the pharmacist, or shall we carry on for now?",
-  checkWithPharmacist: "Check with pharmacist — demo",
   carryOn: "Carry on",
   // Comparing the record with the physical label: a wrong answer nobody questions
   // is the most dangerous failure, so the explanation asks.
@@ -256,23 +255,35 @@ const en = {
     "I will not show any medicine instructions until we are sure.",
   tryPhoto: "Try another photo",
   retryUsed: "We have tried the label again. The safest next step is to ask a person to check it with you.",
-  checkPharmacy: "Check with pharmacy — demo",
-  contactClinic: "Contact clinic — demo",
-  askHelper: "Ask a trusted helper — demo",
+  // Help flows (CLAUDE.md § H4). Each asks first; "sent" only after the service succeeds.
+  askPharmacistCall: "Ask a pharmacist to call me",
+  contactClinic: "Contact my clinic",
+  askHelper: "Ask my trusted helper",
+  letFamilyKnow: "Let my family know",
   moreHelpOptions: "More ways to get help",
-  // Family help needs consent every time: the button only asks the question.
-  askFamily: "Ask family to help — demo",
+  callbackConfirm:
+    "I can ask BrightCare Pharmacy to call you on the number in your record. They usually call within one working day. Shall I send the request?",
+  callbackYes: "Yes, send the request",
+  callbackSent:
+    "Thank you. I’ve sent your request to BrightCare Pharmacy. Your reference is {reference}. Is there anything else I can help you with?",
+  // Family / trusted-helper help needs consent every time: the button only asks the question.
   familyConsent: "Shall I let your family know you’d like some help? I’ll only do this if you say yes.",
-  familyConsentYes: "Yes, ask them — demo",
-  unclearFamilyConsent: "I didn’t quite catch that. You can say “yes” to ask your family, or “not now”.",
-  emergencyDemo: "Emergency services — demo",
+  helperConsent: "Shall I let {name}, your trusted helper, know you’d like some help? I’ll only do this if you say yes.",
+  familyConsentYes: "Yes, let them know",
+  familySent: "Thank you. I’ve let {caregiverName} know you’d like some help. Would you like to carry on while you wait?",
+  helpSending: "Sending your request…",
+  serviceTrouble:
+    "I’m sorry, I couldn’t send that just now. Would you like to try again, or see the pharmacy’s phone number instead?",
+  sendAgain: "Try again",
+  seePharmacyNumber: "See the pharmacy’s number",
+  pharmacyNumber: "You can call {name} on {phone}. Is there anything else I can help you with?",
+  clinicNumber: "You can call {name} on {phone}. Is there anything else I can help you with?",
+  unclearHelpConfirm: "I didn’t quite catch that. You can say “yes”, or “not now”.",
   backToCall: "Back to the conversation",
   urgentLabel: "URGENT HELP",
   urgentHeading: "This may need urgent help.",
   urgentBody:
     "Please contact local emergency services or urgent medical care now. If you can, ask someone near you to help.",
-  demoActionNotice:
-    "Demo only — no call or message was sent. In a real service this would connect you to a person.",
   urgentNoCall: "This prototype cannot place emergency calls.",
   // Shown as text on the self-harm path — never as a call the app claims to make.
   crisisLines: "Samaritans of Singapore (24 hours): 1767 · Emergency: 995",
@@ -451,7 +462,6 @@ const zhHans: Copy = {
   explainHintDone: "准备好后，请说或输入「我明白了」",
   recordConflict:
     "谢谢您告诉我，多确认一下是很好的。您的药房记录（{verifiedDate}确认）写着：“{instruction}” 有时候医生会调整用药，记录可能还没来得及更新，所以问一问完全没关系。您想让我帮您联系药剂师确认一下，还是我们先继续？",
-  checkWithPharmacist: "向药剂师确认 — 示范",
   carryOn: "先继续",
   recordCheckedOn: "BrightCare Pharmacy — 示范记录 · {verifiedDate}核对",
   labelCheckPrompt: "这和您标签上印的一样吗？",
@@ -488,22 +498,31 @@ const zhHans: Copy = {
   reasonNoInstructions: "在确定之前，我不会显示任何用药指示。",
   tryPhoto: "再拍一张照片",
   retryUsed: "我们已经再试过一次标签。最安全的做法是请一位真人和您一起核对。",
-  checkPharmacy: "向药房确认 — 示范",
-  contactClinic: "联系诊所 — 示范",
-  askHelper: "询问可信任的人 — 示范",
+  askPharmacistCall: "请药剂师给我回电",
+  contactClinic: "联系我的诊所",
+  askHelper: "请我信任的人帮忙",
+  letFamilyKnow: "告诉我的家人",
   moreHelpOptions: "更多求助方式",
-  askFamily: "请家人帮忙 — 示范",
+  callbackConfirm:
+    "我可以请BrightCare药房按您记录上的号码给您回电。他们通常会在一个工作日内联系您。要我发送请求吗？",
+  callbackYes: "好，发送请求",
+  callbackSent: "谢谢，我已经把您的请求发给BrightCare药房了。您的参考编号是{reference}。还有什么我可以帮您的吗？",
   familyConsent: "需要我告诉您的家人您想请他们帮忙吗？只有您同意，我才会联系。",
-  familyConsentYes: "好，请告诉他们 — 示范",
-  unclearFamilyConsent: "我没太听清楚。您可以说「好」请家人帮忙，或说「现在不用」。",
-  emergencyDemo: "紧急服务 — 示范",
+  helperConsent: "需要我告诉您信任的{name}您想请他们帮忙吗？只有您同意，我才会联系。",
+  familyConsentYes: "好，告诉他们",
+  familySent: "谢谢，我已经告诉{caregiverName}您需要帮忙了。等待的时候，要不要我们先继续？",
+  helpSending: "正在发送您的请求…",
+  serviceTrouble: "不好意思，刚才没能发送成功。您想再试一次，还是看看药房的电话号码？",
+  sendAgain: "再试一次",
+  seePharmacyNumber: "查看药房电话",
+  pharmacyNumber: "您可以拨打{phone}联系{name}。还有什么我可以帮您的吗？",
+  clinicNumber: "您可以拨打{phone}联系{name}。还有什么我可以帮您的吗？",
+  unclearHelpConfirm: "我没太听清楚。您可以说「好」，或说「现在不用」。",
   backToCall: "回到对话",
   urgentLabel: "紧急求助",
   urgentHeading: "这可能需要紧急帮助。",
   urgentBody:
     "请立即联系当地紧急服务或紧急医疗机构。如果可以，请请身边的人协助您。",
-  demoActionNotice:
-    "仅为示范 — 没有拨出电话或发送信息。在真实服务中，这里会为您联系真人。",
   urgentNoCall: "此原型无法拨打紧急电话。",
   crisisLines: "新加坡援人协会（24小时）：1767 · 紧急电话：995",
 

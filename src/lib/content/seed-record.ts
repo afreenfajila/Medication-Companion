@@ -86,5 +86,18 @@ export const metforminRecord: MedicationRecord = {
   },
 };
 
+/**
+ * Mei Ling's fictional care circle and contacts — the simulated services'
+ * data source (CLAUDE.md § H4). The numbers use the 555-01xx pattern that is
+ * reserved for fiction elsewhere; replace them with numbers you are allowed to
+ * show before any external testing.
+ */
+export const careContacts = {
+  pharmacy: { name: "BrightCare Pharmacy", phone: "6555 0123" },
+  clinic: { name: "Greenhill Family Clinic", phone: "6555 0100" },
+  family: { name: "Daniel" }, // her son
+  trustedHelper: { name: "Mrs Lim" }, // her neighbour
+} as const;
+
 /** Purpose line for the caregiver record view (from the verified record brief). */
 export const metforminPurposeEn = "Helps manage blood sugar";

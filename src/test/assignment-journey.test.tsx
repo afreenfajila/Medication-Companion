@@ -102,7 +102,7 @@ describe("4. no-match / unreadable blocks instructions — one retry, then human
     expect(speakableText(s, (k) => t("en", k), null)).not.toMatch(INSTRUCTION);
   });
 
-  it("No, try again → one retry → a second failure leaves only demo-labelled human help", () => {
+  it("No, try again → one retry → a second failure leaves only human help", () => {
     render(<CompanionExperience />);
     click(/call with companion/i);
     send("What is this for?");
@@ -119,7 +119,7 @@ describe("4. no-match / unreadable blocks instructions — one retry, then human
 
     expect(screen.queryByRole("button", { name: "Try another photo" })).toBeNull();
     expect(screen.getByText(t("en", "retryUsed"))).toBeInTheDocument();
-    for (const name of ["Check with pharmacy — demo", "Ask a trusted helper — demo", "Contact clinic — demo"]) {
+    for (const name of ["Ask a pharmacist to call me", "Ask my trusted helper", "Contact my clinic"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
     expect(screen.queryByText(INSTRUCTION)).toBeNull();

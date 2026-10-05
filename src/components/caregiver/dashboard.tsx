@@ -3,7 +3,7 @@
 import { CircleCheck, Clock, LifeBuoy, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { DemoNotice } from "@/components/ui/notices";
-import { metforminPurposeEn, metforminRecord, patient, recordSource } from "@/lib/content/demo-record";
+import { metforminPurposeEn, metforminRecord, patient, recordSource } from "@/lib/content/seed-record";
 import {
   buildTimeline,
   chipForEvent,

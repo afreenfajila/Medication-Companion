@@ -180,7 +180,7 @@ describe("in-call flow", () => {
 
     fireEvent.click(within(check).getByRole("button", { name: "It looks different" }));
     expect(screen.getByText(/When the label and the record don’t agree, a pharmacist is the best person to look/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Check with pharmacy — demo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
     // "Incorrect output" leads to a person — not another photo.
     expect(screen.queryByRole("button", { name: "Try another photo" })).toBeNull();
     expect(screen.getByRole("button", { name: "Back to the conversation" })).toBeInTheDocument();
@@ -189,7 +189,7 @@ describe("in-call flow", () => {
     expect(screen.getAllByText("Your record is tucked away while we get you some help.").length).toBeGreaterThan(0);
   });
 
-  it("low mood: a warm reply, and family help asks for consent before anything happens", () => {
+  it("low mood: a warm reply, and family help asks for consent before anything happens", async () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("I feel so lonely");
@@ -200,14 +200,23 @@ describe("in-call flow", () => {
     expect(choices.querySelector(".lucide-users-round")).not.toBeNull();
     expect(choices.querySelector(".lucide-arrow-right")).not.toBeNull();
     expect(choices.querySelector(".lucide-calendar-clock")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Ask family to help — demo" }));
+    const fetchFn = vi.fn(async (url: string) =>
+      String(url) === "/api/help/request"
+        ? { ok: true, json: async () => ({ ok: true, data: { kind: "family", contactName: "Daniel" }, requestId: "r" }) }
+        : { ok: true, json: async () => ({ ok: true, data: { enabled: false }, requestId: "r" }) },
+    );
+    vi.stubGlobal("fetch", fetchFn);
+    fireEvent.click(screen.getByRole("button", { name: "Let my family know" }));
 
     const consent = screen.getByRole("group", { name: /Shall I let your family know/ });
     expect(primaryButtons(consent)).toHaveLength(0); // consent never nudges towards "yes"
-    expect(sessionStore.getSnapshot().audit.some((e) => e.eventType === "caregiver-help-requested")).toBe(false);
-    fireEvent.click(within(consent).getByRole("button", { name: "Yes, ask them — demo" }));
+    expect(fetchFn.mock.calls.some(([u]) => u === "/api/help/request")).toBe(false); // nothing sent yet
+    fireEvent.click(within(consent).getByRole("button", { name: "Yes, let them know" }));
+    await flush();
+    // "Sent" only after the (simulated) service said so, naming who was told.
+    expect(fetchFn.mock.calls.some(([u]) => u === "/api/help/request")).toBe(true);
+    expect(screen.getByText(/I’ve let Daniel know you’d like some help/)).toBeInTheDocument();
     expect(sessionStore.getSnapshot().audit.some((e) => e.eventType === "caregiver-help-requested")).toBe(true);
-    expect(screen.getByText(/no call or message was sent/i)).toBeInTheDocument();
   });
 
   it("self-harm wording shows the urgent screen with crisis line numbers as text, not a claimed call", () => {
@@ -235,19 +244,30 @@ describe("in-call flow", () => {
     expect(screen.getByText("Let’s check this one together.").closest("section")).not.toHaveClass("bg-danger-100");
     expect(screen.queryByText("I’m not sure enough to explain this safely.")).toBeNull();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Check with pharmacy — demo" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ask a trusted helper — demo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask my trusted helper" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try another photo" })).toBeInTheDocument();
     // Only two filled/outlined buttons in view; the other help options are one tap away.
-    expect(screen.getByRole("button", { name: "Ask a trusted helper — demo" }).closest("details")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Ask my trusted helper" }).closest("details")).not.toBeNull();
     const pinned = document.querySelector("[data-pinned]")!;
     const inView = [...pinned.querySelectorAll('[data-variant="primary"], [data-variant="secondary"]')].filter(
       (b) => !b.closest("details"),
     );
     expect(inView).toHaveLength(2);
 
-    fireEvent.click(screen.getByRole("button", { name: "Check with pharmacy — demo" }));
-    expect(screen.getByText(/no call or message was sent/i)).toBeInTheDocument();
+    // A callback confirms first; when the service is down it says so plainly and never claims "sent".
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 503, json: async () => ({ ok: false, error: { code: "service_unavailable", message: "x", safeNextAction: "retry" }, requestId: "r" }) })),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ask a pharmacist to call me" }));
+    expect(screen.getByText(/Shall I send the request\?/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Yes, send the request" }));
+    await flush();
+    expect(screen.getByText(/I couldn’t send that just now/)).toBeInTheDocument();
+    expect(screen.queryByText(/I’ve sent your request/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "See the pharmacy’s number" }));
+    expect(screen.getByText(/You can call BrightCare Pharmacy on 6555 0123/)).toBeInTheDocument();
   });
 
   it("typed-label fallback: validates required fields, then a correct label reaches a possible match", async () => {

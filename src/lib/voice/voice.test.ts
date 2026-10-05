@@ -344,13 +344,23 @@ describe("interpretUtterance — family consent", () => {
     explainStep: 0 as const,
     cameraLive: false,
     pendingSpokenMedicineName: null,
-    familyConsentPending: true,
+    helpStage: "confirm" as const,
   };
 
   it("only a clear, short yes consents; no or a hedge declines; anything else re-asks", () => {
-    expect(interpretUtterance("yes please", ctx)).toEqual({ kind: "event", event: { type: "FAMILY_CONSENT", granted: true } });
-    expect(interpretUtterance("not now", ctx)).toEqual({ kind: "event", event: { type: "FAMILY_CONSENT", granted: false } });
-    expect(interpretUtterance("maybe", ctx)).toEqual({ kind: "event", event: { type: "FAMILY_CONSENT", granted: false } });
+    expect(interpretUtterance("yes please", ctx)).toEqual({ kind: "event", event: { type: "HELP_CONFIRM", granted: true } });
+    expect(interpretUtterance("not now", ctx)).toEqual({ kind: "event", event: { type: "HELP_CONFIRM", granted: false } });
+    expect(interpretUtterance("maybe", ctx)).toEqual({ kind: "event", event: { type: "HELP_CONFIRM", granted: false } });
     expect(interpretUtterance("what would they be told about my medicine", ctx)).toEqual({ kind: "unclear" });
+  });
+
+  it("after a failure: 'try again' resends and 'the number' shows the pharmacy's phone", () => {
+    const failed = { ...ctx, helpStage: "failed" as const };
+    expect(interpretUtterance("try again", failed)).toEqual({ kind: "event", event: { type: "HELP_RETRY" } });
+    expect(interpretUtterance("what's the phone number", failed)).toEqual({ kind: "event", event: { type: "HELP_SHOW_NUMBER" } });
+    expect(interpretUtterance("carry on", { ...ctx, helpStage: "sent" as const })).toEqual({
+      kind: "event",
+      event: { type: "HELP_DISMISS" },
+    });
   });
 });

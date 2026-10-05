@@ -33,8 +33,8 @@ export type CommandContext = {
   nameCheckPending?: boolean;
   /** The companion just answered "my doctor said…" and asked: pharmacist, or carry on? */
   recordConflict?: boolean;
-  /** The companion asked "Shall I let your family know…?" */
-  familyConsentPending?: boolean;
+  /** Stage of a help request on screen (confirm, sent, failed…), if any. */
+  helpStage?: "confirm" | "sending" | "sent" | "failed" | "info" | null;
   /** Set once a spoken name has been heard and we're waiting on its strength. */
   pendingSpokenMedicineName: string | null;
 };
@@ -97,11 +97,23 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
   const negative = NEGATIVE.test(n);
   const affirm = AFFIRM.test(n);
 
-  // "Shall I let your family know…?" Consent must be a clear, short yes.
-  if (ctx.familyConsentPending) {
-    if (negative || hedge) return { kind: "event", event: { type: "FAMILY_CONSENT", granted: false } };
-    if (affirm && isShort(n)) return { kind: "event", event: { type: "FAMILY_CONSENT", granted: true } };
-    return { kind: "unclear" };
+  // A help request on screen. Consent/confirmation must be a clear, short yes.
+  switch (ctx.helpStage) {
+    case "confirm":
+      if (negative || hedge) return { kind: "event", event: { type: "HELP_CONFIRM", granted: false } };
+      if (affirm && isShort(n)) return { kind: "event", event: { type: "HELP_CONFIRM", granted: true } };
+      return { kind: "unclear" };
+    case "failed":
+      if (TRY_AGAIN.test(n)) return { kind: "event", event: { type: "HELP_RETRY" } };
+      if (/\b(number|phone)\b|电话|号码/.test(n)) return { kind: "event", event: { type: "HELP_SHOW_NUMBER" } };
+      if (negative) return { kind: "event", event: { type: "HELP_DISMISS" } };
+      return { kind: "unclear" };
+    case "sent":
+    case "info":
+      if (NEXT.test(n) || BACK_TO_CALL.test(n) || negative || affirm) return { kind: "event", event: { type: "HELP_DISMISS" } };
+      return { kind: "unclear" };
+    case "sending":
+      return { kind: "unclear" };
   }
 
   switch (ctx.state) {

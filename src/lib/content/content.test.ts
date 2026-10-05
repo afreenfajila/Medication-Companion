@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildTimeline, deriveRecordStatus } from "@/lib/session/audit-view";
 import { toExplain } from "@/test/helpers";
-import { metforminRecord } from "./demo-record";
+import { metforminRecord } from "./seed-record";
 import { resolveExplanation } from "./explanation";
+import { helpLine } from "./help-lines";
 import { copy, t } from "./translations";
 import { usesBlameWords } from "./understand-guard";
 
@@ -68,10 +69,29 @@ describe("copy catalogue", () => {
     }
   });
 
-  it("labels every unimplemented human action as a demo", () => {
+  it("help lines fill names, numbers and references from data, never leaving a placeholder", () => {
+    const en = (k: Parameters<typeof t>[1]) => t("en", k);
+    const lines = [
+      helpLine(en, { kind: "pharmacist-callback", stage: "confirm", reason: "help-requested" }),
+      helpLine(en, { kind: "pharmacist-callback", stage: "sent", reason: "help-requested", reference: "BC-123456" }),
+      helpLine(en, { kind: "trusted-helper", stage: "confirm", reason: "help-requested" }),
+      helpLine(en, { kind: "family", stage: "sent", reason: "wellbeing", contactName: "Daniel" }),
+      helpLine(en, { kind: "clinic", stage: "info", reason: "help-requested" }),
+      helpLine(en, { kind: "family", stage: "info", reason: "help-requested" }),
+    ];
+    for (const line of lines) expect(line).not.toMatch(/\{\w+\}/);
+    expect(lines[1]).toContain("BC-123456");
+    expect(lines[2]).toContain("Mrs Lim");
+    expect(lines[3]).toContain("Daniel");
+    expect(lines[4]).toContain("Greenhill Family Clinic");
+    expect(lines[5]).toContain("BrightCare Pharmacy"); // a failed request offers the pharmacy's own number
+  });
+
+  it("no help line places a call: numbers are text, and there is no emergency number", () => {
     for (const lang of ["en", "zh-Hans"] as const) {
-      for (const key of ["checkPharmacy", "contactClinic", "askHelper", "emergencyDemo"] as const) {
-        expect(copy[lang][key]).toMatch(/demo|示范/i);
+      for (const [key, line] of Object.entries(copy[lang])) {
+        if (key === "crisisLines") continue; // the existing self-harm text, unchanged until amendment I
+        expect(line, key).not.toMatch(/\b(995|999|911|1767)\b|tel:/);
       }
     }
   });

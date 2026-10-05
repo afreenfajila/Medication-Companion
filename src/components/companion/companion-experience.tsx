@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CallFooter } from "@/components/ui/call-footer";
 import { CompanionOrb } from "@/components/ui/companion-orb";
 import { PhoneShell, ScreenBody } from "@/components/ui/shell";
-import { understandCapabilityResponseSchema, understandResponseSchema } from "@/lib/api/schemas";
+import { helpResponseSchema, understandCapabilityResponseSchema, understandResponseSchema } from "@/lib/api/schemas";
 import { fillRecordFacts, resolveExplanation } from "@/lib/content/explanation";
 import { isUnderstandKey } from "@/lib/content/understand-guard";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
@@ -21,7 +21,7 @@ import { CompleteScreen } from "./complete-screen";
 import { ConfirmScreen } from "./confirm-screen";
 import { ExplainScreen } from "./explain-screen";
 import { ListeningActions } from "./listening-screen";
-import { FamilyConsent, SafetyScreen } from "./safety-screen";
+import { HelpFlowCard, SafetyScreen } from "./safety-screen";
 import { DisclosureFooter, ScreenHeader } from "./screen-chrome";
 import { StartScreen } from "./start-screen";
 import { useCallFeed } from "./use-call-feed";
@@ -94,6 +94,33 @@ export function CompanionExperience() {
     const id = window.setTimeout(() => dispatch({ type: "RESOLVE_ANALYSIS" }), ANALYSIS_DELAY_MS);
     return () => window.clearTimeout(id);
   }, [session.state, pendingMode, sessionId]);
+
+  // Sending a confirmed help request. "Sent" is shown only when the service
+  // answers ok; any failure (including the network) is the failure state.
+  const helpSending = session.helpFlow?.stage === "sending" ? session.helpFlow : null;
+  useEffect(() => {
+    if (!helpSending || helpSending.kind === "clinic") return;
+    const controller = new AbortController();
+    fetch("/api/help/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, kind: helpSending.kind, reason: helpSending.reason }),
+      signal: controller.signal,
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        const parsed = helpResponseSchema.safeParse(json);
+        dispatch(
+          parsed.success && parsed.data.ok
+            ? { type: "HELP_RESULT", ok: true, reference: parsed.data.data.reference, contactName: parsed.data.data.contactName }
+            : { type: "HELP_RESULT", ok: false },
+        );
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) dispatch({ type: "HELP_RESULT", ok: false });
+      });
+    return () => controller.abort();
+  }, [helpSending, sessionId]);
 
   // Move focus once at the big transitions (into/out of a call) — not on every
   // step within it, since that would fight the continuous "one call" feeling.
@@ -382,8 +409,7 @@ export function CompanionExperience() {
           t={t}
           session={session}
           onTryAnother={() => dispatch({ type: "TRY_ANOTHER_LABEL" })}
-          onAskFamily={() => dispatch({ type: "ASK_FAMILY" })}
-          onDemoAction={(action) => dispatch({ type: "HELP_ACTION", action })}
+          onHelp={(kind) => dispatch({ type: "HELP_START", kind })}
           onReturn={() => dispatch({ type: "RETURN_TO_CALL" })}
         />
       );
@@ -395,9 +421,18 @@ export function CompanionExperience() {
     default:
       pinnedActions = null;
   }
-  // Family help is asked every time, on top of whichever step offered it.
-  if (session.familyConsentPending) {
-    pinnedActions = <FamilyConsent t={t} onAnswer={(granted) => dispatch({ type: "FAMILY_CONSENT", granted })} />;
+  // A help request sits on top of whichever step offered it, until it is done.
+  if (session.helpFlow) {
+    pinnedActions = (
+      <HelpFlowCard
+        t={t}
+        flow={session.helpFlow}
+        onConfirm={(granted) => dispatch({ type: "HELP_CONFIRM", granted })}
+        onRetry={() => dispatch({ type: "HELP_RETRY" })}
+        onShowNumber={() => dispatch({ type: "HELP_SHOW_NUMBER" })}
+        onDismiss={() => dispatch({ type: "HELP_DISMISS" })}
+      />
+    );
   }
 
   return (

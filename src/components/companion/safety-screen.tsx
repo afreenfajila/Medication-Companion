@@ -2,37 +2,71 @@
 
 import { Camera, Phone, Stethoscope, UserRound, UsersRound } from "lucide-react";
 import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
-import { DemoNotice } from "@/components/ui/notices";
 import { SafetyCard } from "@/components/ui/safety-card";
+import { helpLine } from "@/lib/content/help-lines";
 import type { CopyKey } from "@/lib/content/translations";
 import { mentionsSelfHarm } from "@/lib/safety/classify";
 import { buildEscalation, type HelpActionId } from "@/lib/safety/escalation";
-import { canRetryLabel, isMatchConfirmed, type Session } from "@/lib/session/state-machine";
+import { canRetryLabel, isMatchConfirmed, type HelpFlow, type HelpKind, type Session } from "@/lib/session/state-machine";
 import type { T } from "./screen-chrome";
 
 const ACTION_ICONS: Record<HelpActionId, React.ReactNode> = {
   "try-again": <Camera className="h-5 w-5" aria-hidden="true" />,
-  "pharmacy-demo": <Phone className="h-5 w-5" aria-hidden="true" />,
-  "clinic-demo": <Stethoscope className="h-5 w-5" aria-hidden="true" />,
-  "trusted-helper-demo": <UserRound className="h-5 w-5" aria-hidden="true" />,
-  "ask-family": <UsersRound className="h-5 w-5" aria-hidden="true" />,
-  "urgent-care": <Phone className="h-5 w-5" aria-hidden="true" />,
+  "pharmacist-callback": <Phone className="h-5 w-5" aria-hidden="true" />,
+  clinic: <Stethoscope className="h-5 w-5" aria-hidden="true" />,
+  "trusted-helper": <UserRound className="h-5 w-5" aria-hidden="true" />,
+  family: <UsersRound className="h-5 w-5" aria-hidden="true" />,
 };
 
 /**
- * "Shall I let your family know you'd like some help?" — asked every time
- * family help is chosen, from the safety options or the wellbeing reply.
- * Only "Yes" records anything; "Not now" leaves no trace.
+ * A help request in progress (CLAUDE.md § H4), pinned on top of whichever step
+ * offered it. Confirm (or consent) first; "sent" only after the service succeeds;
+ * a failure offers another try or the pharmacy's own number. Yes and "not now"
+ * carry equal weight, so nothing nudges towards sending.
  */
-export function FamilyConsent({ t, onAnswer }: { t: T; onAnswer: (granted: boolean) => void }) {
+export function HelpFlowCard({
+  t,
+  flow,
+  onConfirm,
+  onRetry,
+  onShowNumber,
+  onDismiss,
+}: {
+  t: T;
+  flow: HelpFlow;
+  onConfirm: (granted: boolean) => void;
+  onRetry: () => void;
+  onShowNumber: () => void;
+  onDismiss: () => void;
+}) {
+  const line = helpLine(t, flow);
   return (
-    <div role="group" aria-label={t("familyConsent")} className="flex flex-col gap-3">
-      <p className="text-lg font-bold leading-snug">{t("familyConsent")}</p>
-      {/* Consent: "yes" and "not now" carry equal weight — nothing nudges towards sharing. */}
-      <SecondaryButton icon={<UsersRound className="h-5 w-5" aria-hidden="true" />} onClick={() => onAnswer(true)}>
-        {t("familyConsentYes")}
-      </SecondaryButton>
-      <SecondaryButton onClick={() => onAnswer(false)}>{t("notNow")}</SecondaryButton>
+    <div role="group" aria-label={line} className="flex flex-col gap-3">
+      <p role={flow.stage === "sending" ? "status" : undefined} className="text-lg font-bold leading-snug">
+        {line}
+      </p>
+      {flow.stage === "confirm" && (
+        <>
+          <SecondaryButton icon={ACTION_ICONS[flow.kind]} onClick={() => onConfirm(true)}>
+            {t(flow.kind === "pharmacist-callback" ? "callbackYes" : "familyConsentYes")}
+          </SecondaryButton>
+          <SecondaryButton onClick={() => onConfirm(false)}>{t("notNow")}</SecondaryButton>
+        </>
+      )}
+      {flow.stage === "failed" && (
+        <>
+          <SecondaryButton onClick={onRetry}>{t("sendAgain")}</SecondaryButton>
+          <SecondaryButton icon={ACTION_ICONS["pharmacist-callback"]} onClick={onShowNumber}>
+            {t("seePharmacyNumber")}
+          </SecondaryButton>
+          <TextAction className="self-center" onClick={onDismiss}>
+            {t("notNow")}
+          </TextAction>
+        </>
+      )}
+      {(flow.stage === "sent" || flow.stage === "info") && (
+        <PrimaryButton onClick={onDismiss}>{t("carryOn")}</PrimaryButton>
+      )}
     </div>
   );
 }
@@ -40,22 +74,19 @@ export function FamilyConsent({ t, onAnswer }: { t: T; onAnswer: (granted: boole
 /**
  * 07-safety-escalation, as the pinned card for that step on the same call
  * screen. Says what is uncertain, that no instructions will be shown, and
- * offers human options. Every non-"try again" action is a labelled demo —
- * nothing is called or sent.
+ * offers human help. Every help option opens its own confirm step first.
  */
 export function SafetyScreen({
   t,
   session,
   onTryAnother,
-  onAskFamily,
-  onDemoAction,
+  onHelp,
   onReturn,
 }: {
   t: T;
   session: Session;
   onTryAnother: () => void;
-  onAskFamily: () => void;
-  onDemoAction: (id: Exclude<HelpActionId, "try-again" | "ask-family">) => void;
+  onHelp: (kind: HelpKind) => void;
   onReturn: () => void;
 }) {
   const reason = session.safetyReason ?? "help-requested";
@@ -69,8 +100,7 @@ export function SafetyScreen({
   // away behind "More ways to get help" (native <details>, no state).
   const [main, second, ...more] = view.actions;
 
-  const run = (id: HelpActionId) =>
-    id === "try-again" ? onTryAnother() : id === "ask-family" ? onAskFamily() : onDemoAction(id);
+  const run = (id: HelpActionId) => (id === "try-again" ? onTryAnother() : onHelp(id));
 
   const label = (key: CopyKey) => t(key);
 
@@ -114,10 +144,6 @@ export function SafetyScreen({
               ))}
             </div>
           </details>
-        )}
-
-        {session.helpAction && (
-          <DemoNotice role="status">{t("demoActionNotice")}</DemoNotice>
         )}
 
         {!view.urgent && (

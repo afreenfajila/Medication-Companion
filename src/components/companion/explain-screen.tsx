@@ -45,7 +45,7 @@ export function ExplainScreen({
       {recordConflict && onConflictChoice && (
         <div className="flex flex-col gap-2">
           <PrimaryButton icon={<Phone className="h-5 w-5" aria-hidden="true" />} onClick={() => onConflictChoice("pharmacist")}>
-            {t("checkWithPharmacist")}
+            {t("askPharmacistCall")}
           </PrimaryButton>
           <SecondaryButton onClick={() => onConflictChoice("carry-on")}>{t("carryOn")}</SecondaryButton>
         </div>

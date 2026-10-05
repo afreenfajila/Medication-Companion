@@ -399,6 +399,8 @@ The response is built from the local content model, not an unconstrained LLM ans
 
 ### `POST /api/help/request`
 
+> **Superseded by §16 H4** (help flows through simulated services). Kept for history.
+
 Creates a demo audit event and returns non-deceptive help options.
 
 Request:
@@ -661,3 +663,14 @@ See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 
 - The root layout reads the cookie server-side and passes the condition to `StudyBadge`, which shows "Study session" on every screen (never the condition itself) and dispatches `SET_STUDY_CONDITION`.
 - `resolveExplanation(session, language, studyCondition)` swaps only the instruction, and only for a confirmed match. Call start, camera consent and confirmation all still apply.
 - The caregiver timeline shows a `Study: <condition>` tag on tagged events.
+
+### H4. Service adapters and help flows
+
+- `src/lib/services/`: `PharmacyService`, `CareCircleService` and `IdentityService` interfaces, `Simulated*` implementations, `getServices()` selected by `SERVICE_MODE=simulated` (the only mode, and the default). `SIMULATED_SERVICE_FAILURE=pharmacy,care-circle` switches failures on. `notifyCaregiver` takes an optional `contact: "family" | "trusted-helper"`.
+- `POST /api/help/request` (replaces the earlier demo contract): `{ sessionId, kind: "pharmacist-callback" | "family" | "trusted-helper", reason: HelpReason }` → `{ kind, reference?, expectedWindow?, contactName? }`, or a 503 `service_unavailable` envelope. Origin check and rate limit as for the other routes. There is no emergency kind (amendment I).
+- Session `helpFlow: { kind, stage: "confirm" | "sending" | "sent" | "failed" | "info", reason, reference?, contactName? } | null` replaces `helpAction` and `familyConsentPending`. Events: `HELP_START`, `HELP_CONFIRM`, `HELP_RESULT`, `HELP_RETRY`, `HELP_SHOW_NUMBER`, `HELP_DISMISS`.
+  - `HELP_START` is allowed on non-urgent safety screens (all kinds), and for `family` after the wellbeing reply. The record conflict's "Ask a pharmacist to call me" opens the callback on top of the explanation.
+  - The client posts to the API only in `sending`. `sent` is set only by `HELP_RESULT ok`.
+  - `HELP_DISMISS` after `sent` on a safety screen continues the call where it left off.
+- Clinic shows the clinic's number as text. No `tel:` links anywhere.
+- Urgent-risk screen: no actions until amendment I.

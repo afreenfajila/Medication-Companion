@@ -608,3 +608,22 @@ fixed here; H covers choose-from-my-medicines, typed name on failure, real callb
   reverted. The greeting says "AI guide", and the confirm heading is "I found a possible match:
   {medicine}, {strength}. Is this the one you're holding?" The separate "possible match" label above it
   was removed because the heading now says it.
+
+## H4. Simulated services and real help flows
+
+- **Order of work.** H4 went first (before H1–H3) because it replaces every "— demo" help action. Doing
+  H1's "no demo wording" first would have left help buttons claiming things they didn't do.
+- **The client never claims "sent".** It moves to `sending` on consent, posts to `/api/help/request`, and
+  only the service's `ok` sets `sent` (with the reference or the person told). A network error or a 503
+  is the `serviceTrouble` state, with try again or the pharmacy's own number.
+- **Trusted helper is a fourth flow.** The interaction-states diagram lists "pharmacist, clinic or trusted
+  helper", so it stays, with the same consent step as family and the same simulated care-circle service.
+- **Urgent screen: no actions for now.** The product owner chose to remove the "Emergency services —
+  demo" button rather than strip its suffix. The trusted-helper option there would have become a real
+  (simulated) notification on the urgent path, which amendment I puts on hold. The urgent screen keeps
+  its fixed message, the "this prototype cannot place emergency calls" line and, for self-harm, the
+  existing crisis-lines text. To revisit under amendment I.
+- **Reasons, not words.** Each request carries a `HelpReason` (label trouble, medical question, record
+  conflict, wellbeing, help requested) derived from where the person is. Nothing they said is sent.
+- **Fictional contacts.** Phone numbers use the 555-01xx fiction pattern. They are shown as text, never
+  as `tel:` links, and need replacing with numbers you are allowed to show before external testing.

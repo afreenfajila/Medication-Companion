@@ -1,20 +1,11 @@
 import type { CopyKey } from "@/lib/content/translations";
+import type { HelpKind } from "@/lib/session/state-machine";
 import type { SafetyReason } from "@/types/content";
 
-export type HelpActionId =
-  | "try-again"
-  | "pharmacy-demo"
-  | "clinic-demo"
-  | "trusted-helper-demo"
-  | "ask-family" // opens the family-consent question; nothing is shared without "Yes"
-  | "urgent-care";
+/** "Try another photo", or one of the help flows (CLAUDE.md § H4) — each confirms before sending. */
+export type HelpActionId = "try-again" | HelpKind;
 
-export type HelpAction = {
-  id: HelpActionId;
-  labelKey: CopyKey;
-  /** No real call/message exists in this prototype, so every action is a demo. */
-  implemented: boolean;
-};
+export type HelpAction = { id: HelpActionId; labelKey: CopyKey };
 
 export type EscalationView = {
   urgent: boolean;
@@ -81,23 +72,23 @@ export function buildEscalation(
       reasonKey: "urgentNoCall",
       retryUsedKey: null,
       crisisKey: selfHarm ? "crisisLines" : null,
-      actions: [
-        { id: "urgent-care", labelKey: "emergencyDemo", implemented: false },
-        { id: "trusted-helper-demo", labelKey: "askHelper", implemented: false },
-      ],
+      // No actions on the urgent path until amendment I's research and trial are done:
+      // no emergency button, and no help flow that would amount to urgent routing.
+      actions: [],
     };
   }
 
   const actions: HelpAction[] = [];
   const labelProblem = labelRouteSelected && LABEL_REASONS.includes(reason);
   if (labelProblem && canRetry) {
-    actions.push({ id: "try-again", labelKey: "tryPhoto", implemented: true });
+    actions.push({ id: "try-again", labelKey: "tryPhoto" });
   }
+  // Pharmacist, clinic or trusted helper (the escalation card), plus family (F).
   actions.push(
-    { id: "pharmacy-demo", labelKey: "checkPharmacy", implemented: false },
-    { id: "trusted-helper-demo", labelKey: "askHelper", implemented: false },
-    { id: "ask-family", labelKey: "askFamily", implemented: false },
-    { id: "clinic-demo", labelKey: "contactClinic", implemented: false },
+    { id: "pharmacist-callback", labelKey: "askPharmacistCall" },
+    { id: "clinic", labelKey: "contactClinic" },
+    { id: "trusted-helper", labelKey: "askHelper" },
+    { id: "family", labelKey: "letFamilyKnow" },
   );
 
   const gentle = GENTLE_LABEL_REASONS.includes(reason) || reason === "label-differs";

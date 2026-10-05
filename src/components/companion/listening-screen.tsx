@@ -3,7 +3,6 @@
 import { Send } from "lucide-react";
 import { useId, useState } from "react";
 import { ContextualChoiceGroup } from "@/components/ui/contextual-choice-group";
-import { DemoNotice } from "@/components/ui/notices";
 import type { CopyKey } from "@/lib/content/translations";
 import type { Session } from "@/lib/session/state-machine";
 import type { ContextualActionId } from "@/types/content";
@@ -14,7 +13,7 @@ const CHOICE_LABEL: Record<ContextualActionId, CopyKey> = {
   "ask-schedule": "askSchedule",
   "end-call": "endCall",
   "carry-on": "carryOn",
-  "ask-family": "askFamily",
+  "ask-family": "letFamilyKnow",
 };
 
 /**
@@ -44,7 +43,6 @@ export function ListeningActions({
 
   return (
     <div className="flex flex-col gap-2">
-      {session.helpAction === "ask-family" && <DemoNotice role="status">{t("demoActionNotice")}</DemoNotice>}
       <ContextualChoiceGroup
         choices={choices}
         groupLabel={t("companionSays")}

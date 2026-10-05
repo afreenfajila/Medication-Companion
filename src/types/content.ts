@@ -208,7 +208,8 @@ export type AuditEventType =
   | "understanding-confirmed" // extension
   | "record-conflict-raised" // extension: intent only, never the words
   | "label-check-answered" // extension: "Does this match your label?" → matches / differs
-  | "caregiver-help-requested" // extension: written ONLY after "Yes, ask them — demo"
+  | "caregiver-help-requested" // extension: family/trusted helper told, ONLY after consent and service success
+  | "pharmacist-callback-requested" // extension: callback request accepted by the (simulated) pharmacy
   | "language-changed"
   | "help-requested"
   | "urgent-safety-triggered"

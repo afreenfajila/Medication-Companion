@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { UNDERSTAND_KEYS } from "@/lib/content/understand-guard";
+import { HELP_REASONS } from "@/lib/services/reasons";
 
 // Shared request/response contracts (site-contract.md §8). Used by the route
 // to build responses and by the client to validate what it receives.
@@ -60,6 +61,26 @@ export const labelAnalyzeFieldsSchema = z.object({
   sessionId: z.string().min(1).max(64),
   inputMode: z.literal("image"),
 });
+
+/**
+ * Help requests (CLAUDE.md § H4): a pharmacist callback or a care-circle
+ * notification, through the simulated services. "Sent" may only be shown
+ * after this returns `ok`.
+ */
+export const HELP_KINDS = ["pharmacist-callback", "family", "trusted-helper"] as const;
+export const helpRequestSchema = z.object({
+  sessionId: z.string().min(1).max(64),
+  kind: z.enum(HELP_KINDS),
+  reason: z.enum(HELP_REASONS),
+});
+export const helpResultSchema = z.object({
+  kind: z.enum(HELP_KINDS),
+  reference: z.string().optional(),
+  expectedWindow: z.string().optional(),
+  contactName: z.string().optional(),
+});
+export type HelpResult = z.infer<typeof helpResultSchema>;
+export const helpResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(helpResultSchema), apiFailureSchema]);
 
 /**
  * Speech output: renders already-approved text to audio (never generates

@@ -1,8 +1,8 @@
 import type { CopyKey } from "@/lib/content/translations";
 import type { LabelAnalysis } from "@/lib/api/schemas";
-import { metforminRecord } from "@/lib/content/demo-record";
+import { metforminRecord } from "@/lib/content/seed-record";
 import { candidateDisplayFor, candidateIdFor, matchLabelInput } from "@/lib/matching/match-record";
-import type { HelpActionId } from "@/lib/safety/escalation";
+import type { HelpReason } from "@/lib/services/reasons";
 import type { StudyCondition } from "@/lib/study/study-mode";
 import type {
   AuditEvent,
@@ -20,6 +20,16 @@ import { routeMessage } from "./intent";
 // Explicit, pure session state machine. Every transition is guarded: an event
 // that is not legal in the current state returns the SAME session object
 // (reference-equal), so callers/tests can detect a blocked transition.
+
+export type HelpKind = "pharmacist-callback" | "family" | "trusted-helper" | "clinic";
+export type HelpFlow = {
+  kind: HelpKind;
+  stage: "confirm" | "sending" | "sent" | "failed" | "info";
+  reason: HelpReason;
+  /** From the service on success: the callback reference, or who was told. */
+  reference?: string;
+  contactName?: string;
+};
 
 export type CameraMode = "preview" | "fallback";
 export type CameraIssue = "denied" | "unavailable";
@@ -74,9 +84,12 @@ export type Session = {
   nameCheckPending: boolean;
   /** Consecutive off-topic turns; the second gets a friendly wrap-up. Any other turn resets it. */
   offTopicStreak: number;
-  helpAction: HelpActionId | null;
-  /** "Shall I let your family know…?" is on screen. Nothing is shared until "Yes". */
-  familyConsentPending: boolean;
+  /**
+   * A help request in progress (CLAUDE.md § H4), shown on top of whichever step
+   * offered it: confirm → sending → sent | failed, or an info card with a number.
+   * Nothing is sent until the person confirms; "sent" only after the service succeeds.
+   */
+  helpFlow: HelpFlow | null;
   /** Study mode only (set from the server's cookie); null otherwise. Tags every audit event. */
   studyCondition: StudyCondition | null;
   /** Label retries used for the current medicine. One retry, then human help only. */
@@ -113,10 +126,14 @@ export type SessionEvent =
   | { type: "GET_HELP" }
   | { type: "TRY_ANOTHER_LABEL" }
   | { type: "RETURN_TO_CALL" }
-  | { type: "HELP_ACTION"; action: Exclude<HelpActionId, "try-again" | "ask-family"> }
-  /** Opens the family-consent question (safety options, or the wellbeing reply). */
-  | { type: "ASK_FAMILY" }
-  | { type: "FAMILY_CONSENT"; granted: boolean }
+  /** Opens a help flow: the confirm/consent step, or the clinic's number. */
+  | { type: "HELP_START"; kind: HelpKind }
+  | { type: "HELP_CONFIRM"; granted: boolean }
+  /** The service's answer to a confirmed request (dispatched by the client after the API call). */
+  | { type: "HELP_RESULT"; ok: boolean; reference?: string; contactName?: string }
+  | { type: "HELP_RETRY" }
+  | { type: "HELP_SHOW_NUMBER" }
+  | { type: "HELP_DISMISS" }
   | { type: "REPEAT" }
   | { type: "END_CALL" }
   /**
@@ -168,8 +185,7 @@ export function createInitialSession(): Session {
     replyTo: null,
     nameCheckPending: false,
     offTopicStreak: 0,
-    helpAction: null,
-    familyConsentPending: false,
+    helpFlow: null,
     studyCondition: null,
     labelRetries: 0,
     audit: [],
@@ -232,6 +248,39 @@ export function pathForState(state: CompanionState): string {
 
 // ---- Transition helpers -----------------------------------------------------
 
+/** Why help is being asked for, from where the person is (sent with the request, never their words). */
+function helpReasonFor(s: Session): HelpReason {
+  if (s.state === "explain") return "record-conflict";
+  if (s.state === "listening") return "wellbeing";
+  switch (s.safetyReason) {
+    case "unreadable-label":
+    case "record-mismatch":
+    case "multiple-candidates":
+    case "user-unsure":
+    case "service-failure":
+    case "label-differs":
+      return "label-trouble";
+    case "unsupported-medical-question":
+    case "adverse-effect-question":
+      return "medical-question";
+    default:
+      return "help-requested";
+  }
+}
+
+/**
+ * Closes a help flow. After a request was sent from the safety screen, "Carry on"
+ * continues the call where it left off (Recovery); otherwise it just closes.
+ */
+function closeHelp(s: Session, ctx: ReduceContext, resume: boolean): Session {
+  const closed: Session = { ...s, helpFlow: null };
+  if (closed.state === "listening") {
+    return { ...closed, assistantKey: "anotherMedicineGuide", contextualActions: [], replyTo: null };
+  }
+  if (resume && closed.state === "safety") return reduceSession(closed, { type: "RETURN_TO_CALL" }, ctx);
+  return closed;
+}
+
 function enterSafety(
   s: Session,
   ctx: ReduceContext,
@@ -247,8 +296,7 @@ function enterSafety(
     state: "safety",
     safetyReason: reason,
     contextualActions: [],
-    helpAction: null,
-    familyConsentPending: false,
+    helpFlow: null,
     recordConflict: false,
   };
   return withAudit(next, ctx, {
@@ -367,7 +415,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           matchStatus: null,
           safetyReason: null,
           explainStep: 0,
-          helpAction: null,
+          helpFlow: null,
           labelRetries: 0,
         },
         ctx,
@@ -392,8 +440,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         replyTo: null,
         nameCheckPending: false,
         offTopicStreak: routed.intent === "off-topic" ? s.offTopicStreak + 1 : 0,
-        familyConsentPending: false, // moving on without answering is a "not now"
-        helpAction: null,
+        helpFlow: null, // moving on without answering a help question is a "not now"
       };
 
       // Urgent-risk overrides the normal path from ANY active-call state.
@@ -503,7 +550,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       if (event.route === "carry-on") {
         return { ...s, assistantKey: "anotherMedicineGuide", contextualActions: [], replyTo: null };
       }
-      if (event.route === "ask-family") return reduceSession(s, { type: "ASK_FAMILY" }, ctx);
+      if (event.route === "ask-family") return reduceSession(s, { type: "HELP_START", kind: "family" }, ctx);
       return applyRoute(s, ctx, event.route, "button");
     }
 
@@ -723,7 +770,12 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
     case "RECORD_CONFLICT_CHOICE": {
       if (s.state !== "explain" || !s.recordConflict || !isMatchConfirmed(s)) return s;
       if (event.choice === "carry-on") return { ...s, recordConflict: false };
-      return enterSafety(s, ctx, "help-requested", {}, { from: "record-conflict" });
+      // "Ask a pharmacist to call me": the callback flow, on top of the explanation.
+      return {
+        ...s,
+        recordConflict: false,
+        helpFlow: { kind: "pharmacist-callback", stage: "confirm", reason: "record-conflict" },
+      };
     }
 
     case "LABEL_CHECK": {
@@ -795,7 +847,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         resumeExplainStep: null,
         state: "camera-guidance",
         safetyReason: null,
-        helpAction: null,
+        helpFlow: null,
         cameraMode: s.cameraMode ?? "fallback",
         candidate: null,
         matchStatus: null,
@@ -812,8 +864,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           explainStep: s.resumeExplainStep,
           resumeExplainStep: null,
           safetyReason: null,
-          helpAction: null,
-          familyConsentPending: false,
+          helpFlow: null,
           contextualActions: [],
         };
       }
@@ -821,8 +872,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         ...s,
         state: "listening",
         safetyReason: null,
-        helpAction: null,
-        familyConsentPending: false,
+        helpFlow: null,
         assistantKey: "anotherMedicineGuide",
         contextualActions: [],
         replyTo: null,
@@ -832,36 +882,72 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       };
     }
 
-    case "HELP_ACTION": {
-      if (s.state !== "safety") return s;
-      return withAudit({ ...s, helpAction: event.action }, ctx, {
-        eventType: "help-requested",
-        summary: `Demo help action selected: ${event.action} (nothing was sent)`,
-        details: { action: event.action, implemented: false },
-      });
-    }
-
-    case "ASK_FAMILY": {
-      // Offered on the non-urgent safety options, and after the wellbeing reply.
+    case "HELP_START": {
+      // Offered on the non-urgent safety options (all kinds), and as "Let my family
+      // know" after the wellbeing reply. Never on the urgent path (§ I, on hold).
       const fromSafety = s.state === "safety" && s.safetyReason !== "urgent-risk";
-      const fromWellbeing = s.state === "listening" && s.contextualActions.includes("ask-family");
-      if (!s.callActive || !(fromSafety || fromWellbeing)) return s;
-      return { ...s, familyConsentPending: true, helpAction: null };
+      const fromWellbeing =
+        s.state === "listening" && event.kind === "family" && s.contextualActions.includes("ask-family");
+      if (!s.callActive || s.helpFlow || !(fromSafety || fromWellbeing)) return s;
+      return {
+        ...s,
+        helpFlow: { kind: event.kind, stage: event.kind === "clinic" ? "info" : "confirm", reason: helpReasonFor(s) },
+      };
     }
 
-    case "FAMILY_CONSENT": {
-      if (!s.familyConsentPending) return s;
-      const after: Partial<Session> =
-        s.state === "listening"
-          ? { assistantKey: "anotherMedicineGuide", contextualActions: [], replyTo: null }
-          : {};
-      if (!event.granted) return { ...s, ...after, familyConsentPending: false };
-      // The only place this event is written: after an explicit "Yes".
-      return withAudit({ ...s, ...after, familyConsentPending: false, helpAction: "ask-family" }, ctx, {
-        eventType: "caregiver-help-requested",
-        summary: "Mei Ling agreed to ask family for help (demo — nothing was sent)",
-        details: { consent: true, implemented: false },
-      });
+    case "HELP_CONFIRM": {
+      if (s.helpFlow?.stage !== "confirm") return s;
+      if (!event.granted) return closeHelp(s, ctx, false);
+      // Consent given: the client now sends the request. Nothing is "sent" until the service says so.
+      return { ...s, helpFlow: { ...s.helpFlow, stage: "sending" } };
+    }
+
+    case "HELP_RESULT": {
+      const flow = s.helpFlow;
+      if (flow?.stage !== "sending") return s;
+      if (!event.ok) {
+        return withAudit({ ...s, helpFlow: { ...flow, stage: "failed" } }, ctx, {
+          eventType: "service-fallback-used",
+          summary: "Help request couldn’t be sent; try again or the pharmacy’s number offered",
+          actor: "system",
+          route: "local-fallback",
+          validationStatus: "blocked",
+          details: { kind: flow.kind },
+        });
+      }
+      const sent: HelpFlow = { ...flow, stage: "sent", reference: event.reference, contactName: event.contactName };
+      return withAudit(
+        { ...s, helpFlow: sent },
+        ctx,
+        flow.kind === "pharmacist-callback"
+          ? {
+              eventType: "pharmacist-callback-requested",
+              summary: `Pharmacist callback requested (simulated service, ref ${event.reference ?? "—"})`,
+              details: { reason: flow.reason },
+            }
+          : {
+              // Only ever after an explicit "Yes" on the consent step.
+              eventType: "caregiver-help-requested",
+              summary: `${flow.kind === "family" ? "Family" : "Trusted helper"} told Mei Ling would like help (simulated service)`,
+              details: { kind: flow.kind, consent: true, reason: flow.reason },
+            },
+      );
+    }
+
+    case "HELP_RETRY": {
+      if (s.helpFlow?.stage !== "failed") return s;
+      return { ...s, helpFlow: { ...s.helpFlow, stage: "sending" } };
+    }
+
+    case "HELP_SHOW_NUMBER": {
+      // From the failure state: the pharmacy's own number, to call themselves.
+      if (s.helpFlow?.stage !== "failed") return s;
+      return { ...s, helpFlow: { ...s.helpFlow, stage: "info" } };
+    }
+
+    case "HELP_DISMISS": {
+      if (!s.helpFlow || s.helpFlow.stage === "sending") return s;
+      return closeHelp(s, ctx, s.helpFlow.stage === "sent");
     }
 
     case "REPEAT": {
