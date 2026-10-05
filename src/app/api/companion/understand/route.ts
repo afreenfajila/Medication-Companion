@@ -10,6 +10,11 @@ import {
 import { t } from "@/lib/content/translations";
 import { actionsForOffer, claimsMishearing, isSafeCompanionReply } from "@/lib/content/understand-guard";
 import { classifySafety } from "@/lib/safety/classify";
+import { mentionsRecordMedicine } from "@/lib/session/intent";
+
+/** Replies that are about the medicine's name, so they may say it. */
+const NAME_KEYS = new Set(["prescriptionsListed", "medicineMentioned", "medicineNameCheck", "medicineNameRetry"]);
+const namesRecordMedicine = (reply: string) => /metformin|二甲双胍/i.test(reply);
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,6 +73,11 @@ export async function POST(request: Request): Promise<Response> {
     if (!isSafeCompanionReply(out.reply, language)) return fallback();
     // A typed message can't have been misheard: "I didn't catch that" would be untrue.
     if (via === "typed" && claimsMishearing(out.reply)) return fallback();
+    // Never assume which medicine she means: the reply may name the record's medicine
+    // only if she (or the conversation) did, or the reply is about the name itself.
+    const named =
+      NAME_KEYS.has(key) || mentionsRecordMedicine(message) || history.some((h) => h.speaker === "user" && mentionsRecordMedicine(h.text));
+    if (!named && namesRecordMedicine(out.reply)) return fallback();
     return ok(
       understandResponseDataSchema.parse({
         text: out.reply.trim(),

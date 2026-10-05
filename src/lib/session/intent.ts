@@ -79,6 +79,20 @@ function joinSpelledLetters(text: string): string {
   return text.replace(/(?<![\w'’])([a-z])[\s.-]+(?=[a-z](?![\w'’]))/gi, "$1");
 }
 
+/**
+ * True when the record's medicine is named (or spelled, or a common mishearing).
+ * The understanding guard uses this too: a reply may only name the medicine if
+ * the person did first.
+ */
+export function mentionsRecordMedicine(text: string): boolean {
+  return RECORD_MEDICINE_NAME.test(joinSpelledLetters(text)) || RECORD_MEDICINE_SOUNDALIKE.test(text);
+}
+
+// "I take it twice a day" — talking about taking a medicine without saying which.
+// A statement only (anchored at the start), so "When do I take it?" stays a schedule question.
+const VAGUE_TAKING =
+  /^\s*(?:(?:yes|yeah|well|so|um|uh|ok|okay)[,\s]+)?(?:i|i've|i have|i'm|i am)\s+(?:take|took|taking|been taking|usually take)\b(?![^?]*\?)|^我(?:每天|平时|今天|一天)?(?:都|在)?(?:吃|服用)(?!.*[吗？?])/i;
+
 // "I've got my medicine with me" — the person has something in hand to check.
 const MEDICINE_IN_HAND =
   /\b(i('ve| have| do have)|i('ve)? got)\b.*\b(with me|in my hand|right here|here with)\b|\b(i'?m |i am )holding\b|\bin my hand\b|我手上|我手里|我带着|我拿着/i;
@@ -208,6 +222,14 @@ export function routeMessage(
     return {
       intent: "medicine-mentioned",
       assistantKey: "medicineNameCheck",
+      contextualActions: ["show-medicine"],
+    };
+  }
+  // A medicine is being talked about but not named: ask which one, never assume.
+  if (!ctx.matchConfirmed && VAGUE_TAKING.test(text)) {
+    return {
+      intent: "unknown-medicine-question",
+      assistantKey: "whichMedicine",
       contextualActions: ["show-medicine"],
     };
   }

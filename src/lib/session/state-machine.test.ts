@@ -183,6 +183,21 @@ describe("conversation routing and contextual actions", () => {
     expect(r.contextualActions).toEqual([]);
   });
 
+  it.each(["I take it twice a day", "I took it this morning", "yes I have been taking it", "我每天吃两次"])(
+    "a medicine talked about but not named (%j) → asks which medicine, never assumes",
+    (text) => {
+      const r = routeMessage(text, none);
+      expect(r.assistantKey).toBe("whichMedicine");
+      expect(r.contextualActions).toEqual(["show-medicine"]);
+    },
+  );
+
+  it("a named medicine, or a question about taking it, is not treated as vague", () => {
+    expect(routeMessage("I take Metformin twice a day", none).assistantKey).toBe("medicineMentioned");
+    expect(routeMessage("When do I take it?", none).assistantKey).toBe("clarificationPrompt");
+    expect(routeMessage("I take it twice a day?", none).assistantKey).not.toBe("whichMedicine");
+  });
+
   it.each(["I need something", "i dont know what to do", "banana", "我不知道该怎么办"])(
     "unclear or random %j → says what the companion can do, then offers both actions",
     (text) => {

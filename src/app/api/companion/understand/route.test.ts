@@ -92,6 +92,23 @@ describe("POST /api/companion/understand", () => {
     expect(spoken.source).toBe("claude");
   });
 
+  it("never assumes the medicine: naming Metformin when nobody did falls back to asking which one", async () => {
+    const assumed =
+      "Thank you for telling me. It sounds like you may have your Metformin with you. Would you like to show me the label?";
+    understandMessage.mockResolvedValue({ reply: assumed, offer: "show-medicine", checkingMedicineName: false });
+    const vague = { ...BODY, key: "whichMedicine", message: "I take it twice a day", via: "typed", history: [] };
+
+    const r = await data(await POST(req(vague)));
+    expect(r.source).toBe("fallback");
+    expect(r.text).toBe(t("en", "whichMedicine"));
+
+    // Once she has named it earlier in the call, referring to it by name is fine.
+    const earlier = await data(
+      await POST(req({ ...vague, history: [{ speaker: "user", text: "I have my metformin here" }] })),
+    );
+    expect(earlier.source).toBe("claude");
+  });
+
   it("never asks the model about a safety-classified message", async () => {
     const d = await data(await POST(req({ ...BODY, message: "I have chest pain" })));
     expect(d.source).toBe("fallback");

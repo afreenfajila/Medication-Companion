@@ -128,6 +128,15 @@ describe("in-call flow", () => {
     expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull();
   });
 
+  it("'I take it twice a day' asks which medicine — it never assumes", () => {
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    send("I take it twice a day");
+    expect(screen.getByText(/Which medicine do you mean\?/)).toBeInTheDocument();
+    expect(document.querySelector("main")!.textContent).not.toMatch(/Metformin/);
+    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+  });
+
   it("when the person is unsure what to do, the companion explains what it can help with", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
