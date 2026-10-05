@@ -84,4 +84,18 @@ describe("synthesizeSpeechWav", () => {
     expect(await synthesizeSpeechWav("Shall we check the label?")).toBe(first);
     expect(generateContent).toHaveBeenCalledTimes(1);
   });
+
+  it("when the first model is rate-limited, the fallback model speaks, and the busy one rests for a minute", async () => {
+    generateContent
+      .mockRejectedValueOnce(Object.assign(new Error('{"error":{"code":429}}'), { status: 429 }))
+      .mockResolvedValue(audioResponse(shortPcmBase64));
+    await synthesizeSpeechWav("Shall we check the label?");
+    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual([
+      "gemini-3.1-flash-tts-preview",
+      "gemini-2.5-flash-preview-tts",
+    ]);
+
+    await synthesizeSpeechWav("Would you like to type it?");
+    expect(generateContent.mock.calls[2][0].model).toBe("gemini-2.5-flash-preview-tts");
+  });
 });
