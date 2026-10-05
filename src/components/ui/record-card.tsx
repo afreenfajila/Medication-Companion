@@ -12,7 +12,7 @@ export type RecordCardLabels = {
 
 /**
  * Where the explained record comes from and when it was checked
- * ("BrightCare Pharmacy — demo record · checked 21 September 2026"), shown
+ * ("BrightCare Pharmacy · checked 21 September 2026"), shown
  * beside the instruction so it can be compared with the physical label.
  */
 export function RecordSourceLine({ children }: { children: string }) {

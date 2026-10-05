@@ -90,7 +90,7 @@ export type Patient = {
 export type RecordSource = {
   id: "source_brightcare_demo";
   name: "BrightCare Pharmacy";
-  displayLabel: "BrightCare Pharmacy — demo record";
+  displayLabel: "BrightCare Pharmacy";
   recordStatus: "current-demo";
   verifiedAt: string;
   disclaimer: "Prototype information — not connected to a real pharmacy.";
@@ -171,7 +171,7 @@ export type CandidateDisplay = {
   medicineName: "Metformin 500 mg";
   strength: "500 mg";
   dosageForm: "tablet";
-  recordSource: "BrightCare Pharmacy — demo record";
+  recordSource: "BrightCare Pharmacy";
 };
 
 export type MatchResult =
@@ -224,7 +224,7 @@ export type AuditEvent = {
   actor: "primary-user" | "caregiver" | "system";
   summary: string;
   route:
-    | "deterministic-demo"
+    | "deterministic"
     | "claude-vision"
     | "claude-understanding"
     | "typed-input"

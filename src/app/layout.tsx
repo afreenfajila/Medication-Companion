@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
+import { PrototypeBadge } from "@/components/prototype-badge";
 import { StudyBadge } from "@/components/study-badge";
 import { getStudyCondition } from "@/lib/study/study-cookie";
 import "@/styles/globals.css";
@@ -15,7 +16,7 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "Medication Companion — prototype",
   description:
-    "A safety-bounded AI companion prototype that explains a fictional demo pharmacy record. Not a medical device.",
+    "A safety-bounded AI companion prototype that explains a fictional pharmacy record. Not a medical device.",
 };
 
 export const viewport: Viewport = {
@@ -31,6 +32,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className={dmSans.variable}>
       <body className="antialiased">
+        <PrototypeBadge />
         <StudyBadge condition={study} />
         {children}
       </body>

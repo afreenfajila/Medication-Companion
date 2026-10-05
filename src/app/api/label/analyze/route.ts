@@ -85,7 +85,7 @@ export async function POST(request: Request): Promise<Response> {
     return fail(
       503,
       "ai_unavailable",
-      "I can’t read photos right now. You can type what the label says or use the demo label.",
+      "I can’t read photos right now. You can type what the label says or choose from your medicines.",
       "type_label",
       requestId,
     );

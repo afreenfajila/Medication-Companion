@@ -59,7 +59,7 @@ export type SampleAuditSeed = {
   timestamp: string;
   eventType: AuditEventType;
   summary: string;
-  route: "deterministic-demo";
+  route: "deterministic";
   validationStatus: "passed" | "blocked" | "not-applicable";
 };
 
@@ -70,7 +70,7 @@ export const sampleAuditSeeds: readonly SampleAuditSeed[] = [
     timestamp: "2026-09-20T08:02:00.000Z",
     eventType: "call-started",
     summary: "Call started",
-    route: "deterministic-demo",
+    route: "deterministic",
     validationStatus: "not-applicable",
   },
   {
@@ -78,7 +78,7 @@ export const sampleAuditSeeds: readonly SampleAuditSeed[] = [
     timestamp: "2026-09-20T08:03:10.000Z",
     eventType: "candidate-presented",
     summary: "Possible match presented: Metformin 500 mg",
-    route: "deterministic-demo",
+    route: "deterministic",
     validationStatus: "passed",
   },
   {
@@ -86,7 +86,7 @@ export const sampleAuditSeeds: readonly SampleAuditSeed[] = [
     timestamp: "2026-09-20T08:03:40.000Z",
     eventType: "candidate-confirmed",
     summary: "User confirmed the possible match",
-    route: "deterministic-demo",
+    route: "deterministic",
     validationStatus: "passed",
   },
   {
@@ -94,7 +94,7 @@ export const sampleAuditSeeds: readonly SampleAuditSeed[] = [
     timestamp: "2026-09-20T08:04:05.000Z",
     eventType: "explanation-viewed",
     summary: "Record-backed explanation viewed (English)",
-    route: "deterministic-demo",
+    route: "deterministic",
     validationStatus: "passed",
   },
 ];

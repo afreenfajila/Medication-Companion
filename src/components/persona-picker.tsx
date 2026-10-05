@@ -1,40 +1,17 @@
 "use client";
 
-import { ArrowRight, HeartHandshake, UserRound } from "lucide-react";
+import { ArrowRight, HeartHandshake } from "lucide-react";
 import Link from "next/link";
 import { CompanionOrb } from "@/components/ui/companion-orb";
-import { DemoNotice, TrustBadge } from "@/components/ui/notices";
+import { DemoNotice } from "@/components/ui/notices";
 import { PhoneShell, ScreenBody } from "@/components/ui/shell";
 import { dispatch } from "@/lib/session/session-store";
-import type { Persona } from "@/types/content";
 
-const PERSONAS: Array<{
-  persona: Persona;
-  href: string;
-  name: string;
-  role: string;
-  blurb: string;
-  icon: React.ReactNode;
-}> = [
-  {
-    persona: "mei-ling",
-    href: "/companion",
-    name: "Mei Ling",
-    role: "Older adult",
-    blurb: "Call the companion and understand a medicine from a demo record.",
-    icon: <UserRound className="h-6 w-6" aria-hidden="true" />,
-  },
-  {
-    persona: "caregiver",
-    href: "/caregiver",
-    name: "Caregiver",
-    role: "Trusted helper — read-only",
-    blurb: "Review the demo record and prototype activity timeline.",
-    icon: <HeartHandshake className="h-6 w-6" aria-hidden="true" />,
-  },
-];
-
-/** Persona picker + prototype introduction. No production authentication. */
+/**
+ * Sign-in stand-in (CLAUDE.md § H1). The real product would sign Mei Ling in
+ * with Singpass; the prototype simply continues as her. The caregiver view is
+ * a quieter second door.
+ */
 export function PersonaPicker() {
   return (
     <PhoneShell>
@@ -48,33 +25,39 @@ export function PersonaPicker() {
               to a person when it is not sure.
             </p>
           </div>
-          <TrustBadge label="Demo record — fictional data" />
         </div>
 
-        <h2 className="mt-8 text-[22px] font-bold leading-tight">Who is using the prototype?</h2>
-        <ul className="mt-4 flex flex-col gap-3">
-          {PERSONAS.map((p) => (
-            <li key={p.persona}>
-              <Link
-                href={p.href}
-                onClick={() => dispatch({ type: "SELECT_PERSONA", persona: p.persona })}
-                className="flex min-h-[4.5rem] items-center gap-4 rounded-lg border border-line bg-surface p-4 shadow-card transition-colors hover:border-teal-600"
-              >
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-pill bg-teal-100 text-navy-900">
-                  {p.icon}
-                </span>
-                <span className="flex-1">
-                  <span className="block text-lg font-bold">{p.name}</span>
-                  <span className="block text-sm font-medium text-teal-800">{p.role}</span>
-                  <span className="mt-0.5 block text-[15px] leading-snug text-navy-700">
-                    {p.blurb}
-                  </span>
-                </span>
-                <ArrowRight className="h-5 w-5 shrink-0" aria-hidden="true" />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-8 flex flex-col gap-2">
+          <Link
+            href="/companion"
+            onClick={() => dispatch({ type: "SELECT_PERSONA", persona: "mei-ling" })}
+            data-variant="primary"
+            className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-pill bg-navy-900 px-6 py-3 text-lg font-bold text-white hover:bg-[#1f4368]"
+          >
+            <span>Continue as Mei Ling</span>
+            <ArrowRight className="h-5 w-5" aria-hidden="true" />
+          </Link>
+          <p className="text-center text-sm text-navy-700">
+            The real product signs you in with Singpass. This prototype skips that step.
+          </p>
+        </div>
+
+        <Link
+          href="/caregiver"
+          onClick={() => dispatch({ type: "SELECT_PERSONA", persona: "caregiver" })}
+          className="mt-8 flex min-h-[4.5rem] items-center gap-4 rounded-lg border border-line bg-surface p-4 shadow-card transition-colors hover:border-teal-600"
+        >
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-pill bg-teal-100 text-navy-900">
+            <HeartHandshake className="h-6 w-6" aria-hidden="true" />
+          </span>
+          <span className="flex-1">
+            <span className="block text-lg font-bold">Caregiver view</span>
+            <span className="mt-0.5 block text-[15px] leading-snug text-navy-700">
+              Read-only: Mei Ling’s record and recent activity.
+            </span>
+          </span>
+          <ArrowRight className="h-5 w-5 shrink-0" aria-hidden="true" />
+        </Link>
 
         <DemoNotice className="mt-6">
           Prototype information — not connected to a real pharmacy. This is an AI guide, not a

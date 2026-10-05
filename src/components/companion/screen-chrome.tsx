@@ -1,15 +1,26 @@
 import Link from "next/link";
+import { formatVerifiedDate } from "@/lib/content/explanation";
 import type { CopyKey } from "@/lib/content/translations";
+import type { UiLanguage } from "@/types/content";
 import { TrustBadge } from "@/components/ui/notices";
 
 export type T = (key: CopyKey) => string;
 
 /** App name + trust badge. Present on every primary-user state (design-standard §4). */
-export function ScreenHeader({ t, control }: { t: T; control?: React.ReactNode }) {
+export function ScreenHeader({
+  t,
+  language,
+  control,
+}: {
+  t: T;
+  language: UiLanguage;
+  control?: React.ReactNode;
+}) {
   return (
     <header className="flex flex-col items-center gap-2 px-6 pb-2 pt-6 text-center">
       <p className="text-[17px] font-bold tracking-tight">{t("appName")}</p>
-      <TrustBadge label={t("trustBadge")} />
+      {/* "Plan checked by BrightCare Pharmacy · 21 September 2026" — the date comes from the record. */}
+      <TrustBadge label={t("trustBadge").replace("{verifiedDate}", formatVerifiedDate(language))} />
       {control}
     </header>
   );

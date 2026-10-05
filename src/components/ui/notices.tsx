@@ -2,7 +2,7 @@ import { Info, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 
-/** Light-teal pill naming the demo record. The text itself states "demo record". */
+/** Light-teal pill naming the record's source and when it was checked. */
 export function TrustBadge({ label, className }: { label: string; className?: string }) {
   return (
     <p

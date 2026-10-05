@@ -18,7 +18,7 @@ const candidateAnalysis: LabelAnalysis = {
     medicineName: "Metformin 500 mg",
     strength: "500 mg",
     dosageForm: "tablet",
-    sourceLabel: "BrightCare Pharmacy — demo record",
+    sourceLabel: "BrightCare Pharmacy",
     matchStatus: "possible",
   },
 };

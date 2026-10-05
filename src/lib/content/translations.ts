@@ -4,9 +4,10 @@ const en = {
   // Global
   appName: "Medication Companion",
   aiDisclosure: "AI guide · Not a pharmacist or doctor",
-  demoRecord: "BrightCare Pharmacy — demo record",
-  trustBadge: "Plan checked by BrightCare Pharmacy — demo record",
+  trustBadge: "Plan checked by BrightCare Pharmacy · {verifiedDate}",
   prototypeNotice: "Prototype information — not connected to a real pharmacy",
+  // The one prototype marker on every screen (CLAUDE.md § H1); replaces per-button "demo" labels.
+  prototypeBadge: "Prototype · fictional data",
   aboutLink: "About this prototype",
   close: "Close",
 
@@ -23,7 +24,7 @@ const en = {
   // Utility sheets
   helpSheetTitle: "How this works",
   helpSheetBody:
-    "Start a call, then tell me what you need. I only explain information from a demo pharmacy record, and I always ask you to confirm the medicine first.",
+    "Start a call, then tell me what you need. I only explain information from your pharmacy record, and I always ask you to confirm the medicine first.",
   helpSheetLimit:
     "I am an AI guide. I cannot diagnose, prescribe, or change how you take a medicine.",
   languageSheetTitle: "Language",
@@ -32,7 +33,7 @@ const en = {
   settingsSwitchPersona: "Switch persona",
   settingsMotion:
     "Animations follow your device’s reduced-motion setting.",
-  settingsDemo: "Demo mode is on. All information is fictional.",
+  settingsDemo: "This is a prototype. All information is fictional.",
 
   // Active call
   repeat: "Repeat slowly",
@@ -47,12 +48,12 @@ const en = {
   scheduleNeedsRecord:
     "To talk about your schedule, I first need to check a medicine against your record. Would you like to show me the medicine label?",
   prescriptionsListed:
-    "Your demo pharmacy record shows one medicine on file: Metformin 500 mg. Would you like to show me the label so I can explain it?",
+    "Your pharmacy record shows one medicine on file: Metformin 500 mg. Would you like to show me the label so I can explain it?",
   // The person named (or roughly named — speech recognition often hears
   // "Metformin" as "met for pain") the medicine in their hand. Acknowledge it
   // without treating it as confirmed: only the label check can confirm.
   medicineMentioned:
-    "It sounds like you may have your Metformin with you — that’s the medicine on your demo pharmacy record. So I can check it’s the same one, would you like to show me the label?",
+    "It sounds like you may have your Metformin with you — that’s the medicine on your pharmacy record. So I can check it’s the same one, would you like to show me the label?",
   // Heard something CLOSE to the record's medicine name, but not the name
   // itself. Check what was meant before moving on — and offer ways to answer
   // that don't depend on pronunciation — rather than jumping to the label.
@@ -67,7 +68,7 @@ const en = {
   offTopicWorld:
     "I’d enjoy talking about that, but it’s outside what I know. What I can help with is the medicine information in your pharmacy record. Would you like to show me a medicine label, or ask about your schedule?",
   offTopicCapability:
-    "I can’t do that in this demo — I’m not connected to a pharmacy or a phone. Tap Get help to reach a real person. I can also help you understand the medicine information in your record.",
+    "I can’t do that myself. If you tap Get help, I can ask a pharmacist to call you or let your family know. I can also help you understand the medicine information in your record.",
   // After two off-topic turns in a row: warm, and hands the choice back.
   offTopicWrapUp:
     "It’s been lovely chatting with you. Shall we look at your medicine together, or would you like to end the call for now?",
@@ -135,7 +136,7 @@ const en = {
   cameraPermissionBody:
     "To read the medicine label, may I use the camera on the other side of your phone?",
   cameraPurpose:
-    "The camera is used only to help match your medicine with the current demo record.",
+    "The camera is used only to help match your medicine with your current pharmacy record.",
   switchCamera: "Yes, switch camera",
   notNow: "Not now",
   cameraGuidanceLabel: "SHOW ONE MEDICINE",
@@ -214,7 +215,7 @@ const en = {
   carryOn: "Carry on",
   // Comparing the record with the physical label: a wrong answer nobody questions
   // is the most dangerous failure, so the explanation asks.
-  recordCheckedOn: "BrightCare Pharmacy — demo record · checked {verifiedDate}",
+  recordCheckedOn: "BrightCare Pharmacy · checked {verifiedDate}",
   labelCheckPrompt: "Does this match what’s printed on your label?",
   // Shown in place of record lines in the transcript while the call is escalated.
   recordHidden: "Your record is tucked away while we get you some help.",
@@ -247,7 +248,7 @@ const en = {
     "Thank you for checking. That happens sometimes, and I’d rather be careful than guess. Would you like to try another photo, or ask someone to check it with you?",
   reasonUnreadable: "I couldn’t read the label clearly.",
   reasonMismatch:
-    "The label doesn’t match a medicine in your current demo record.",
+    "The label doesn’t match a medicine in your current pharmacy record.",
   reasonUnsure:
     "Since this may not be the right medicine, I won’t explain it.",
   reasonMedicalQuestion:
@@ -302,9 +303,9 @@ type Copy = Record<CopyKey, string>;
 const zhHans: Copy = {
   appName: "Medication Companion",
   aiDisclosure: "AI 助手 · 不是药剂师或医生",
-  demoRecord: "BrightCare Pharmacy — 示范记录",
-  trustBadge: "方案已由 BrightCare Pharmacy 核对 — 示范记录",
+  trustBadge: "方案已由 BrightCare Pharmacy 核对 · {verifiedDate}",
   prototypeNotice: "原型信息 — 未连接真实药房",
+  prototypeBadge: "原型 · 虚构数据",
   aboutLink: "关于此原型",
   close: "关闭",
 
@@ -318,14 +319,14 @@ const zhHans: Copy = {
 
   helpSheetTitle: "使用方法",
   helpSheetBody:
-    "先开始通话，再告诉我您需要什么。我只会解释示范药房记录中的信息，并且总会先请您确认药物。",
+    "先开始通话，再告诉我您需要什么。我只会解释您药房记录中的信息，并且总会先请您确认药物。",
   helpSheetLimit: "我是 AI 助手，不能诊断、开药，也不能更改您的服药方式。",
   languageSheetTitle: "语言",
   settingsSheetTitle: "设置",
   settingsPersona: "当前身份：Mei Ling（长者）",
   settingsSwitchPersona: "切换身份",
   settingsMotion: "动画会遵循您设备的“减少动态效果”设置。",
-  settingsDemo: "示范模式已开启。所有信息均为虚构。",
+  settingsDemo: "这是原型，所有信息均为虚构。",
 
   repeat: "慢速重复",
   getHelp: "寻求帮助",
@@ -337,9 +338,9 @@ const zhHans: Copy = {
   scheduleNeedsRecord:
     "要谈服药时间，我需要先对照您的记录核对药物。您想给我看药物标签吗？",
   prescriptionsListed:
-    "您的示范药房记录显示您有一种药物：二甲双胍 500 毫克。您想给我看标签，让我为您解释吗？",
+    "您的药房记录显示您有一种药物：二甲双胍 500 毫克。您想给我看标签，让我为您解释吗？",
   medicineMentioned:
-    "听起来您手边可能有二甲双胍——这是您示范药房记录中的药物。为了确认是同一种药，您想给我看标签吗？",
+    "听起来您手边可能有二甲双胍——这是您药房记录中的药物。为了确认是同一种药，您想给我看标签吗？",
   medicineNameCheck:
     "我想确认我没有听错。您是说二甲双胍吗？您可以说“是”，再说一次药名，或在下方输入。如果更方便，也可以给我看标签。",
   medicineNameRetry:
@@ -349,7 +350,7 @@ const zhHans: Copy = {
   offTopicWorld:
     "我也很想聊这个，不过这超出了我知道的范围。我能帮您了解的是您药房记录中的药物信息。您想给我看药物标签，还是询问您的服药时间？",
   offTopicCapability:
-    "在这个示范中我做不到——我没有连接药房或电话。请点击「寻求帮助」联系真人。我也可以帮您了解记录中的药物信息。",
+    "这个我自己做不到。点击「寻求帮助」，我可以请药剂师给您回电，或告诉您的家人。我也可以帮您了解记录中的药物信息。",
   offTopicWrapUp: "和您聊天很开心。我们一起看看您的药，还是先结束通话？",
   wellbeing:
     "谢谢您告诉我，这听起来不容易。我只是一个用药小帮手，但您不必一个人面对。需要我告诉您的家人您想有人陪陪您吗，还是我们一起继续？",
@@ -401,7 +402,7 @@ const zhHans: Copy = {
   cameraPermissionHeading: "我需要清楚地看见标签上的文字。",
   cameraPermissionBody:
     "为了阅读药物标签，我可以使用您手机另一面的摄像头吗？",
-  cameraPurpose: "摄像头仅用于帮助将您的药物与当前示范记录进行比对。",
+  cameraPurpose: "摄像头仅用于帮助将您的药物与您当前的药房记录进行比对。",
   switchCamera: "好，切换摄像头",
   notNow: "现在不要",
   cameraGuidanceLabel: "请展示一种药物",
@@ -468,7 +469,7 @@ const zhHans: Copy = {
   recordConflict:
     "谢谢您告诉我，多确认一下是很好的。您的药房记录（{verifiedDate}确认）写着：“{instruction}” 有时候医生会调整用药，记录可能还没来得及更新，所以问一问完全没关系。您想让我帮您联系药剂师确认一下，还是我们先继续？",
   carryOn: "先继续",
-  recordCheckedOn: "BrightCare Pharmacy — 示范记录 · {verifiedDate}核对",
+  recordCheckedOn: "BrightCare Pharmacy · {verifiedDate}核对",
   labelCheckPrompt: "这和您标签上印的一样吗？",
   recordHidden: "在我们为您寻求帮助时，记录内容先收起来了。",
   labelMatches: "是的，一样",
@@ -494,7 +495,7 @@ const zhHans: Copy = {
   labelSafetyBody:
     "谢谢您的确认。这种情况很常见，我宁可小心一点也不想猜。您想再拍一张，还是请人和您一起核对？",
   reasonUnreadable: "我无法清楚地阅读标签。",
-  reasonMismatch: "标签与您当前示范记录中的药物不符。",
+  reasonMismatch: "标签与您当前药房记录中的药物不符。",
   reasonUnsure: "由于这可能不是对应的药物，我不会解释它。",
   reasonMedicalQuestion:
     "这个问题需要请教药剂师或诊所。我只能解释您的记录中显示的内容。",

@@ -97,7 +97,7 @@ describe("analyzeExtraction (deterministic decision on top of model output)", ()
     expect(a.candidate).toMatchObject({
       medicineName: "Metformin 500 mg",
       matchStatus: "possible",
-      sourceLabel: "BrightCare Pharmacy — demo record",
+      sourceLabel: "BrightCare Pharmacy",
     });
   });
 

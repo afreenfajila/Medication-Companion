@@ -44,7 +44,7 @@ export default async function StudyPage() {
         <p className="text-[13px] font-bold uppercase tracking-wide text-teal-800">Researcher only · not for participants</p>
         <h1 className="mt-1 text-[28px] font-bold leading-tight">Study setup</h1>
         <p className="mt-3 text-lg">
-          Current condition: <strong>{current ? CONDITION_LABEL[current] : "none (normal demo)"}</strong>
+          Current condition: <strong>{current ? CONDITION_LABEL[current] : "none (normal prototype)"}</strong>
         </p>
 
         <form action={setCondition} className="mt-6 flex flex-col gap-3">
@@ -69,7 +69,7 @@ export default async function StudyPage() {
             Tell the participant which explanation they saw. In the wrong-explanation condition the companion said:
           </p>
           <p className="mt-2 font-bold">“{studyWrongInstruction.en}”</p>
-          <p className="mt-2">The demo record actually says:</p>
+          <p className="mt-2">The record actually says:</p>
           <p className="mt-2 font-bold">“{metforminRecord.verifiedInstruction.canonicalText}.”</p>
           <p className="mt-4 text-sm text-navy-700">
             Every audit event in the caregiver view is tagged with the condition, so detection, verification,

@@ -30,7 +30,7 @@ export function ExplainScreen({
   t: T;
   language: UiLanguage;
   step: 0 | 1 | 2;
-  /** "BrightCare Pharmacy — demo record · checked <date>", filled from the record. */
+  /** "BrightCare Pharmacy · checked <date>", filled from the record. */
   sourceLine?: string;
   /** Answer to "Does this match what's printed on your label?" (step 1). */
   onLabelCheck?: (matches: boolean) => void;

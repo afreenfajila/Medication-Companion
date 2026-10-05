@@ -649,3 +649,14 @@ fixed here; H covers choose-from-my-medicines, typed name on failure, real callb
   test. HEIC handling still needs a check on a real iPhone, as H2 says.
 - **The demo label leaves the UI, not the tests.** Reducer tests keep the deterministic fixtures. The
   rendered tests now use the real paths: typed details, choose from my medicines, and a picked photo.
+
+## H1. Prototype framing
+
+- **One badge, in the root layout rather than `AppShell`.** H1 asks for the badge in `AppShell`, but the
+  About and 404 pages don't use `AppShell`, and the badge must appear on every screen. The layout covers
+  them all. It sits in the top padding band (like the study badge) so it never covers a heading.
+- **"Demo" is gone from what people see, not from the code.** Internal ids
+  (`source_brightcare_demo`, `demo-call-1`), the test fixtures, and the `DemoNotice` component name stay;
+  none of them is shown. The audit route was renamed because the caregiver view displays it, and the
+  understanding prompt dropped "demo" so Claude doesn't repeat it.
+- **H1 went last** so that its "no demo anywhere" test could pass from the commit that adds it.

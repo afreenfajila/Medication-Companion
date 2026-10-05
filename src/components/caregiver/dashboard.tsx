@@ -3,7 +3,8 @@
 import { CircleCheck, Clock, LifeBuoy, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { DemoNotice } from "@/components/ui/notices";
-import { metforminPurposeEn, metforminRecord, patient, recordSource } from "@/lib/content/seed-record";
+import { formatVerifiedDate } from "@/lib/content/explanation";
+import { metforminPurposeEn, metforminRecord, patient, recordMedicines, recordSource } from "@/lib/content/seed-record";
 import {
   buildTimeline,
   chipForEvent,
@@ -79,7 +80,7 @@ export function CaregiverDashboard() {
         </p>
         <h1 className="mt-1 text-[28px] font-bold leading-tight">Caregiver view — prototype</h1>
         <DemoNotice className="mt-4" role="note">
-          <strong>Demo only — not a clinical system.</strong> {recordSource.disclaimer} This view
+          <strong>Prototype — not a clinical system.</strong> {recordSource.disclaimer} This view
           is read-only: nothing here can change a medicine or its instructions.
         </DemoNotice>
       </header>
@@ -87,13 +88,13 @@ export function CaregiverDashboard() {
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
         <section aria-labelledby="record-heading">
           <h2 id="record-heading" className="text-[22px] font-bold leading-tight">
-            Demo record
+            Pharmacy record
           </h2>
           <div className="mt-3 rounded-lg border border-line bg-surface p-5 shadow-card">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="inline-flex items-center gap-1.5 rounded-pill bg-teal-100 px-3 py-1.5 text-[13px] font-medium">
                 <ShieldCheck className="h-4 w-4 text-teal-800" aria-hidden="true" />
-                {recordSource.displayLabel}
+                {recordSource.displayLabel} · verified {formatVerifiedDate("en")}
               </p>
               <StatusChipView chip={status} />
             </div>
@@ -105,14 +106,16 @@ export function CaregiverDashboard() {
             )}
             <dl className="mt-3 divide-y divide-line">
               <Row term="Patient">{patient.displayName}</Row>
-              <Row term="Medicine">
-                {metforminRecord.identity.displayName} {metforminRecord.identity.dosageForm}
-              </Row>
+              {recordMedicines.map((m) => (
+                <Row key={m.id} term="Medicine">
+                  {m.identity.displayName} {m.identity.dosageForm}
+                </Row>
+              ))}
               <Row term="Purpose">{metforminPurposeEn}</Row>
               <Row term="Verified instruction">
                 {metforminRecord.verifiedInstruction.canonicalText}
               </Row>
-              <Row term="Record status">Current — demo</Row>
+              <Row term="Record status">Current</Row>
               <Row term="Source">{recordSource.displayLabel}</Row>
             </dl>
           </div>

@@ -704,3 +704,13 @@ After "Show medicine": `showMedicineHeading` with `photoIntro`, two equal primar
 | `unclearShowMedicine` | I didn't quite catch that. You can say "camera", choose a photo, or tell me the medicine name and strength. | 我没太听清楚。您可以说「相机」、选择照片，或告诉我药物名称和剂量。 |
 
 Removed: `useDemoLabel`, `uploadPhoto`, `samplePicker*`, `sample*`, `sampleLoadError`. Rewritten without demo-label wording: `cameraDeniedBody`, `cameraUnavailableBody`, `fallbackBody`, `reasonService`, `unclearCameraGuidance`.
+
+### H1. Prototype framing
+
+No user-facing copy or record wording says "demo" (a test checks both languages and the rendered sign-in, caregiver and About pages). One `PrototypeBadge`, `Prototype · fictional data` / `原型 · 虚构数据`, is mounted in the root layout so it shows on every screen, including About and 404 (pages that don't use `AppShell`).
+
+- Record source: `displayLabel` is now `BrightCare Pharmacy`; the explanation says "Your current pharmacy record says:" and "Source: BrightCare Pharmacy."
+- `trustBadge`: `Plan checked by BrightCare Pharmacy · {verifiedDate}`; `recordCheckedOn`: `BrightCare Pharmacy · checked {verifiedDate}`.
+- `offTopicCapability`: "I can't do that myself. If you tap Get help, I can ask a pharmacist to call you or let your family know. I can also help you understand the medicine information in your record."
+- The sign-in stand-in says "Continue as Mei Ling" and notes that the real product signs in with Singpass. The About page explains what is simulated.
+- The audit route `deterministic-demo` is now `deterministic` (it is shown in the caregiver view).

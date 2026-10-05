@@ -26,8 +26,9 @@ it is not connected to any real pharmacy.
    name correctly, it checks with you ("Did you mean Metformin?") and suggests typing or spelling
    the name instead.
 3. **Show medicine.** When a label is needed, the companion offers **Show medicine**. It explains
-   why it wants the camera before it asks for permission. You can use the camera, upload a photo,
-   type what the label says, or use a built-in demo label.
+   how you'd like to show it: **Use camera** (it explains why before asking for permission) or
+   **Choose a photo** from your gallery or files. You can also type the name, or choose from the
+   medicines on your record.
 4. **Confirm.** The companion shows a **possible match** and never claims certainty. Nothing about
    the medicine is explained until you say "Yes, this is my medicine".
 5. **Understand.** The companion explains the record in three short steps: what the medicine is
@@ -38,8 +39,9 @@ it is not connected to any real pharmacy.
 
 If a label is blurry, unreadable, for a different medicine, or you aren't sure it's yours, the
 companion **gives no medicine instructions at all**. It says plainly that it can't be sure and offers
-human help instead: check with the pharmacy, contact the clinic, or ask a trusted helper. These are
-marked "— demo" because nothing is actually sent.
+human help instead: ask a pharmacist to call, contact the clinic, ask a trusted helper, or let family
+know. Each one confirms first (family and helper need consent) and shows "sent" only when the
+(simulated) service succeeds.
 
 Questions it must not answer, such as "Should I stop taking it?" or "What are the side effects?",
 and urgent wording such as "I have chest pain" are caught by fixed rules before any AI is involved.
@@ -48,7 +50,7 @@ They go straight to a safety screen.
 ### Caregiver view
 
 `/caregiver` is a read-only, single-patient view for a family member or helper. It shows Mei Ling's
-demo record and a timeline of what happened in the call: call started, route chosen, match
+pharmacy record and a timeline of what happened in the call: call started, route chosen, match
 confirmed, or help needed. The timeline records steps and outcomes, never what she said.
 
 ---
@@ -60,10 +62,11 @@ These rules hold whatever the AI says and whichever path the conversation takes:
 - Diagnose, prescribe, recommend treatment, change a dose, or tell anyone whether to take, stop or
   skip a medicine.
 - Invent medication facts. Everything it says about a medicine comes word for word from the local
-  demo record.
+  fictional record.
 - Explain a medicine before the person confirms the possible match.
 - Treat a blurry, conflicting or unmatched label as good enough.
-- Pretend to contact a pharmacy, clinic, caregiver or emergency service.
+- Place a real call or send a real message: help requests go to simulated services, and "sent" is
+  shown only after the service succeeds. It does not route anyone to emergency services.
 
 Each of these is enforced in code by an explicit state machine
 ([`src/lib/session/state-machine.ts`](src/lib/session/state-machine.ts)), not by prompting. For
@@ -85,8 +88,8 @@ AI makes the companion easier to talk to, but every decision that matters is mad
 
 All AI runs on the server, and keys never reach the browser (`npm run check:bundle` enforces this).
 Every AI reply is validated with a schema and then a content guard, and it falls back to approved
-wording if anything fails. **The whole demo works with no API keys at all**: replies use the
-approved wording, and the demo label and typed label need no AI.
+wording if anything fails. **The whole prototype works with no API keys at all**: replies use
+the approved wording, and typing the name or choosing from your medicines needs no AI.
 
 Speech-to-text uses the browser's built-in speech recognition, and typing always works as well.
 
@@ -94,8 +97,8 @@ Speech-to-text uses the browser's built-in speech recognition, and typing always
 
 ## Try it
 
-**Demo route with no keys and no camera:** Call with companion → type "What is this for?" → Show
-medicine → Not now → Use demo label → Yes, this is my medicine.
+**Route with no keys and no camera:** Call with companion → type "What is this for?" → Show
+medicine → Type the name (`metformin` / `500 mg`) → Yes, this is my medicine.
 
 **Safety route:** the same steps, but type the label as `metformin` / `850 mg` (the wrong strength),
 or type "Should I stop taking it?" during the call.
@@ -169,8 +172,8 @@ src/
   lib/
     session/            state machine, intent routing, off-topic handling
     safety/             deterministic urgent / unsupported-question classifier
-    matching/           name + strength matching against the demo record
-    content/            demo record, English + Chinese copy, AI output guards
+    matching/           name + strength matching against the record
+    content/            seed record, English + Chinese copy, AI output guards
     ai/                 Claude and Gemini calls (server-only)
     voice/              browser speech recognition, voice commands, echo guard
 ```
@@ -182,7 +185,7 @@ src/
 | [`prd.md`](prd.md) | Product requirements: users, journey, scope |
 | [`design-standard.md`](design-standard.md) | Visual system, components, accessibility rules |
 | [`site-contract.md`](site-contract.md) | Routes, API contracts, states and transitions |
-| [`content-model.md`](content-model.md) | The demo record and approved copy |
+| [`content-model.md`](content-model.md) | The fictional record and approved copy |
 | [`docs/decisions.md`](docs/decisions.md) | Design decisions and trade-offs made during the build |
 | [`CLAUDE.md`](CLAUDE.md) | Rules for AI-assisted development of this repository |
 
@@ -191,7 +194,7 @@ src/
 ## Limitations
 
 - One fictional patient and one medicine: Mei Ling Tan, Metformin 500 mg.
-- The "— demo" help actions don't contact anyone.
+- Help requests run through simulated services and don't contact anyone.
 - There is no real-time streaming voice model. Voice is browser speech recognition plus spoken
   replies.
 - Nothing is stored between sessions. The caregiver timeline lives in the browser session.

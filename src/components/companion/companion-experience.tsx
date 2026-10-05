@@ -447,7 +447,7 @@ export function CompanionExperience() {
   return (
     <PhoneShell>
       <div lang={language} className="flex min-h-0 flex-1 flex-col">
-        <ScreenHeader t={t} />
+        <ScreenHeader t={t} language={language} />
         <ScreenBody>
           <main
             ref={mainRef}

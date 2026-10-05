@@ -299,7 +299,7 @@ describe("match → confirmation gate → explanation", () => {
     expect(s.matchStatus).toBe("confirmed");
     const view = resolveExplanation(s, "en");
     expect(view?.explanation.instruction).toBe("Take 1 tablet twice daily with meals.");
-    expect(view?.recordSource).toBe("BrightCare Pharmacy — demo record");
+    expect(view?.recordSource).toBe("BrightCare Pharmacy");
   });
 
   it("rejects confirmation for the wrong candidate id or outside confirm-match", () => {

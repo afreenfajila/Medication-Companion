@@ -225,7 +225,7 @@ function withAudit(s: Session, ctx: ReduceContext, ...events: AuditInput[]): Ses
       eventType: e.eventType,
       actor: e.actor ?? "primary-user",
       summary: e.summary,
-      route: e.route ?? "deterministic-demo",
+      route: e.route ?? "deterministic",
       validationStatus: e.validationStatus ?? "not-applicable",
       // Study sessions tag every event, so the six signals can be read off the timeline.
       details: s.studyCondition ? { ...e.details, studyCondition: s.studyCondition } : (e.details ?? {}),
@@ -620,7 +620,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         summary: "Label submitted for checking",
         route:
           input.mode === "demo"
-            ? "deterministic-demo"
+            ? "deterministic"
             : input.mode === "typed"
               ? "typed-input"
               : "claude-vision",

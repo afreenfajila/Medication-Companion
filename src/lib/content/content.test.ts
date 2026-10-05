@@ -30,8 +30,8 @@ describe("explanation data resolver", () => {
     expect(en.medicine.whatItIsFor).toBe("Helps manage blood sugar");
     expect(en.explanation.caution).toBe("I can explain this record, but I cannot change your medicine instructions.");
     expect(zh.explanation.instruction).toBe(metforminRecord.explanation.instruction["zh-Hans"]);
-    expect(zh.explanation.sourceLine).toContain("示范记录");
-    expect(en.recordSource).toBe("BrightCare Pharmacy — demo record");
+    expect(zh.explanation.sourceLine).toContain("BrightCare Pharmacy");
+    expect(en.recordSource).toBe("BrightCare Pharmacy");
   });
 });
 

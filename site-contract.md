@@ -685,3 +685,8 @@ See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 
 - `SUBMIT_LABEL` is accepted on the choice step for inputs that need no camera: `image` with `source: "upload"`, or `typed`. A camera photo still needs consent.
 - Photos are prepared in the browser (`preparePhoto`): long edge at most 2048 px, JPEG about 0.85, which drops EXIF. Anything undecodable (e.g. HEIC) shows `photoFormat` and nothing is sent. The upload then uses the same `/api/label/analyze` route and the same gates; images are never stored.
 - Voice on the choice step: "camera" → `CHOOSE_CAMERA`; saying the name and strength submits it as typed. A photo needs a tap, because the system picker can't be opened from speech.
+
+### H1. Prototype framing
+
+- `PrototypeBadge` (client, in the session's language) is rendered once in `src/app/layout.tsx`, fixed in the top padding band beside the study badge.
+- `CandidateDisplay.recordSource`, `RecordSource.displayLabel` and the label-analysis `sourceLabel` literal are now `"BrightCare Pharmacy"`.

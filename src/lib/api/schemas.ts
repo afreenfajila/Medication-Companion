@@ -40,7 +40,7 @@ export const labelAnalysisSchema = z.object({
       medicineName: z.string(),
       strength: z.string(),
       dosageForm: z.string(),
-      sourceLabel: z.literal("BrightCare Pharmacy — demo record"),
+      sourceLabel: z.literal("BrightCare Pharmacy"),
       matchStatus: z.literal("possible"),
     })
     .optional(),

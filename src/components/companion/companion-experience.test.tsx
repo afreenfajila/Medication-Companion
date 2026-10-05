@@ -36,7 +36,7 @@ const candidate = {
     medicineName: "Metformin 500 mg",
     strength: "500 mg",
     dosageForm: "tablet",
-    sourceLabel: "BrightCare Pharmacy — demo record",
+    sourceLabel: "BrightCare Pharmacy",
     matchStatus: "possible",
   },
 };
@@ -105,7 +105,7 @@ describe("landing (01-start-call)", () => {
     const names = buttons.map((b) => b.textContent);
     expect(names).toEqual(["Call with companion", "Help", "Language", "Settings"]);
     expect(screen.getByText("AI guide · Not a pharmacist or doctor")).toBeInTheDocument();
-    expect(screen.getByText("Plan checked by BrightCare Pharmacy — demo record")).toBeInTheDocument();
+    expect(screen.getByText("Plan checked by BrightCare Pharmacy · 21 September 2026")).toBeInTheDocument();
   });
 });
 
@@ -186,7 +186,7 @@ describe("in-call flow", () => {
     sessionStore.setForTest(run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain()));
     render(<CompanionExperience />);
     expect(screen.getByText("Take 1 tablet twice daily with meals.")).toBeInTheDocument();
-    expect(screen.getByText("BrightCare Pharmacy — demo record · checked 21 September 2026")).toBeInTheDocument();
+    expect(screen.getByText("BrightCare Pharmacy · checked 21 September 2026")).toBeInTheDocument();
     const check = screen.getByRole("group", { name: "Does this match what’s printed on your label?" });
     expect(within(check).getByRole("button", { name: "Yes, it matches" })).toBeInTheDocument();
     // Neither answer looks like the default: no filled "yes" to agree with without looking.
