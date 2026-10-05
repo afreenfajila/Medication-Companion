@@ -23,7 +23,9 @@ export function ConfirmScreen({
     <div className="flex flex-col gap-4">
       <div className="text-center">
         <StateLabel>{t("possibleMatch")}</StateLabel>
-        <h2 className="mt-1 text-[22px] font-bold leading-tight">{t("confirmHeading")}</h2>
+        <h2 className="mt-1 text-[22px] font-bold leading-tight">
+          {t("confirmHeading").replace("{medicine}", candidate.medicineName)}
+        </h2>
       </div>
 
       <RecordCard

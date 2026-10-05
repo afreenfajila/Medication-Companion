@@ -39,7 +39,7 @@ const en = {
   getHelp: "Get help",
   endCall: "End call",
   listening: "I’m listening…",
-  callGreeting: "Hello, Mei Ling. What would you like help with?",
+  callGreeting: "Hello, I’m an AI helper. What would you like to know today?",
   showLabelQuestion:
     "Let’s check this together. Would you like to show me the medicine label?",
   clarificationPrompt:
@@ -177,13 +177,13 @@ const en = {
   fallbackBody:
     "That’s okay. Without the camera, you can use the demo label to see how this works.",
   analyzingLabel: "CHECKING",
-  analyzingHeading: "Reading the label…",
-  analyzingBody:
-    "I’m comparing it with your demo record. This only takes a moment.",
+  analyzingHeading: "Thank you, let me have a look.",
+  analyzingBody: "This will just take a moment.",
 
   // Confirmation
   possibleMatch: "I found a possible match",
-  confirmHeading: "Is this the medicine you are holding?",
+  // {medicine} is filled from the candidate's record name — "may be", never certain.
+  confirmHeading: "I think this may be your {medicine}. Is this the one you’re holding?",
   checkName: "Please check the name on the label before continuing.",
   yesMedicine: "Yes, this is my medicine",
   tryAgain: "No, try again",
@@ -213,6 +213,8 @@ const en = {
   // is the most dangerous failure, so the explanation asks.
   recordCheckedOn: "BrightCare Pharmacy — demo record · checked {verifiedDate}",
   labelCheckPrompt: "Does this match what’s printed on your label?",
+  // Shown in place of record lines in the transcript while the call is escalated.
+  recordHidden: "Your record is tucked away while we get you some help.",
   labelMatches: "Yes, it matches",
   labelLooksDifferent: "It looks different",
   labelDiffers:
@@ -314,7 +316,7 @@ const zhHans: Copy = {
   getHelp: "寻求帮助",
   endCall: "结束通话",
   listening: "我在听…",
-  callGreeting: "您好，Mei Ling。您需要什么帮助？",
+  callGreeting: "您好，我是AI助手。今天想了解什么呢？",
   showLabelQuestion: "让我们一起查看。您想给我看药物标签吗？",
   clarificationPrompt: "您想给我看药物标签，还是询问您的服药时间？",
   scheduleNeedsRecord:
@@ -424,11 +426,11 @@ const zhHans: Copy = {
   fallbackHeading: "您仍然可以继续。",
   fallbackBody: "没关系。不使用摄像头，您也可以用示范标签体验流程。",
   analyzingLabel: "正在核对",
-  analyzingHeading: "正在阅读标签…",
-  analyzingBody: "我正在与您的示范记录比对，只需片刻。",
+  analyzingHeading: "谢谢，我来看一看。",
+  analyzingBody: "请稍等一下。",
 
   possibleMatch: "我找到一个可能的匹配项",
-  confirmHeading: "这是您手上拿着的药物吗？",
+  confirmHeading: "这可能是您的{medicine}。是您手上的这一种吗？",
   checkName: "继续之前，请确认标签上的名称。",
   yesMedicine: "是的，这是我的药物",
   tryAgain: "不是，再试一次",
@@ -453,6 +455,7 @@ const zhHans: Copy = {
   carryOn: "先继续",
   recordCheckedOn: "BrightCare Pharmacy — 示范记录 · {verifiedDate}核对",
   labelCheckPrompt: "这和您标签上印的一样吗？",
+  recordHidden: "在我们为您寻求帮助时，记录内容先收起来了。",
   labelMatches: "是的，一样",
   labelLooksDifferent: "看起来不一样",
   labelDiffers:

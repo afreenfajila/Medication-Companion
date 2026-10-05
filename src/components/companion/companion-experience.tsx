@@ -430,7 +430,13 @@ export function CompanionExperience() {
                 <div className="flex flex-col items-center gap-1">
                   <CompanionOrb size="sm" state={orbState} />
                 </div>
-                <CallFeed entries={feed} interim={conversation.interim} thinking={companionThinking || voiceHeld} t={t} />
+                <CallFeed
+                  entries={feed}
+                  interim={conversation.interim}
+                  thinking={companionThinking || voiceHeld}
+                  hideRecord={session.state === "safety"}
+                  t={t}
+                />
               </div>
             )}
           </main>

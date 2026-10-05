@@ -224,7 +224,7 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     await flush(); // no camera → explained fallback
     fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
     await flush();
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(INSTRUCTION);
     fireEvent.click(screen.getByRole("button", { name: /yes, this is my medicine/i }));
     await flush();
@@ -254,7 +254,7 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500 mg" } });
     fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
     await flush();
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
     noRawError();
   });
 });

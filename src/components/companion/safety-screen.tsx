@@ -7,7 +7,7 @@ import { SafetyCard } from "@/components/ui/safety-card";
 import type { CopyKey } from "@/lib/content/translations";
 import { mentionsSelfHarm } from "@/lib/safety/classify";
 import { buildEscalation, type HelpActionId } from "@/lib/safety/escalation";
-import { canRetryLabel, type Session } from "@/lib/session/state-machine";
+import { canRetryLabel, isMatchConfirmed, type Session } from "@/lib/session/state-machine";
 import type { T } from "./screen-chrome";
 
 const ACTION_ICONS: Record<HelpActionId, React.ReactNode> = {
@@ -122,7 +122,8 @@ export function SafetyScreen({
 
         {!view.urgent && (
           <TextAction className="self-center" onClick={onReturn}>
-            {t("backToCall")}
+            {/* Recovery: when they left mid-explanation, this goes back to exactly that step. */}
+            {session.resumeExplainStep !== null && isMatchConfirmed(session) ? t("carryOn") : t("backToCall")}
           </TextAction>
         )}
       </div>

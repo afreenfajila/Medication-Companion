@@ -647,3 +647,12 @@ New safety reason `label-differs` (heading `labelSafetyHeading`, body `labelDiff
 ### G. Study mode fixture
 
 `studyWrongInstruction` (`src/lib/content/fixtures.ts`): en `Take 1 tablet once daily at bedtime.`, zh-Hans `每日一次，睡前服用一片。` (needs native-speaker review). Used only in the `wrong-explanation` study condition, in place of the record's `instruction` after every gate has passed. It is never shown outside study mode, and participants are debriefed afterwards. Every audit event in a study session carries `details.studyCondition`.
+
+### Interaction-state wording (from the states diagram)
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `callGreeting` | Hello, I'm an AI helper. What would you like to know today? | 您好，我是AI助手。今天想了解什么呢？ |
+| `analyzingHeading` / `analyzingBody` | Thank you, let me have a look. / This will just take a moment. | 谢谢，我来看一看。/ 请稍等一下。 |
+| `confirmHeading` | I think this may be your {medicine}. Is this the one you're holding? | 这可能是您的{medicine}。是您手上的这一种吗？ |
+| `recordHidden` | Your record is tucked away while we get you some help. | 在我们为您寻求帮助时，记录内容先收起来了。 |

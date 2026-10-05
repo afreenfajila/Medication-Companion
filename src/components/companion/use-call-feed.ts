@@ -5,7 +5,13 @@ import { fillRecordFacts, type ExplanationView } from "@/lib/content/explanation
 import type { Session } from "@/lib/session/state-machine";
 import type { T } from "./screen-chrome";
 
-export type FeedMessage = { id: string; speaker: "user" | "companion"; lines: string[] };
+export type FeedMessage = {
+  id: string;
+  speaker: "user" | "companion";
+  lines: string[];
+  /** Record content (the explanation, or a conflict reply quoting it): hidden while escalated. */
+  record?: boolean;
+};
 
 type Seen = {
   callCount: number;
@@ -71,6 +77,10 @@ export function useCallFeed(
       idRef.current += 1;
       additions.push({ id: `f${idRef.current}`, speaker, lines });
     };
+    const pushRecord = (...lines: string[]) => {
+      idRef.current += 1;
+      additions.push({ id: `f${idRef.current}`, speaker: "companion", lines, record: true });
+    };
 
     // Keyed by turn, not by text: saying the same thing twice is two turns, and
     // must look like two turns.
@@ -107,13 +117,13 @@ export function useCallFeed(
       const explainSig = `${session.explainStep}:${session.language}`;
       if (explainSig !== seen.current.explainSig) {
         seen.current.explainSig = explainSig;
-        push("companion", ...explainStepLines(session.explainStep, explanation.explanation));
+        pushRecord(...explainStepLines(session.explainStep, explanation.explanation));
       }
       // "My doctor said…" is answered from the record, once per turn and language.
       const conflictSig = `${session.turnCount}:${session.language}`;
       if (session.recordConflict && conflictSig !== seen.current.conflictSig) {
         seen.current.conflictSig = conflictSig;
-        push("companion", fillRecordFacts(t("recordConflict"), explanation, session.language));
+        pushRecord(fillRecordFacts(t("recordConflict"), explanation, session.language));
       }
     } else if (session.state !== "explain") {
       seen.current.inExplain = false;

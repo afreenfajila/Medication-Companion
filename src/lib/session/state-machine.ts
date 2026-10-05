@@ -46,6 +46,11 @@ export type Session = {
   safetyReason: SafetyReason | null;
   explainStep: 0 | 1 | 2;
   /**
+   * The explanation step they were on when they left for safety/help, so
+   * "Carry on" returns them to where they left off. Null otherwise.
+   */
+  resumeExplainStep: 0 | 1 | 2 | null;
+  /**
    * The person disputed the record while it was explained ("my doctor said…").
    * The explanation stays; the companion answers from the record and offers
    * pharmacist help or carrying on.
@@ -156,6 +161,7 @@ export function createInitialSession(): Session {
     matchStatus: null,
     safetyReason: null,
     explainStep: 0,
+    resumeExplainStep: null,
     recordConflict: false,
     repeatCount: 0,
     turnCount: 0,
@@ -237,6 +243,7 @@ function enterSafety(
   const next: Session = {
     ...s,
     ...extra,
+    resumeExplainStep: s.state === "explain" ? s.explainStep : null,
     state: "safety",
     safetyReason: reason,
     contextualActions: [],
@@ -785,6 +792,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       return {
         ...s,
         labelRetries: s.labelRetries + 1,
+        resumeExplainStep: null,
         state: "camera-guidance",
         safetyReason: null,
         helpAction: null,
@@ -796,6 +804,19 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
 
     case "RETURN_TO_CALL": {
       if (s.state !== "safety" || !s.callActive || s.safetyReason === "urgent-risk") return s;
+      // Recovery: back to the explanation step they left, when the record is still confirmed.
+      if (s.resumeExplainStep !== null && isMatchConfirmed(s)) {
+        return {
+          ...s,
+          state: "explain",
+          explainStep: s.resumeExplainStep,
+          resumeExplainStep: null,
+          safetyReason: null,
+          helpAction: null,
+          familyConsentPending: false,
+          contextualActions: [],
+        };
+      }
       return {
         ...s,
         state: "listening",
@@ -807,6 +828,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         replyTo: null,
         nameCheckPending: false,
         labelRouteSelected: false,
+        resumeExplainStep: null,
       };
     }
 

@@ -74,7 +74,7 @@ describe("the call starts voice automatically — no separate button", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
 
-    expect(fake.utterances[0].text).toBe("Hello, Mei Ling. What would you like help with?");
+    expect(fake.utterances[0].text).toBe("Hello, I’m an AI helper. What would you like to know today?");
     expect(screen.getByText(/^speaking…$/i)).toBeInTheDocument(); // reading the greeting aloud
     expect(fake.recognitions).toHaveLength(0); // not yet — still speaking
 
@@ -117,7 +117,7 @@ describe("the call starts voice automatically — no separate button", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     // Synthesis-only: the greeting is still spoken (no recognition needed for that)...
-    expect(fake.utterances[0].text).toBe("Hello, Mei Ling. What would you like help with?");
+    expect(fake.utterances[0].text).toBe("Hello, I’m an AI helper. What would you like to know today?");
     // ...but there is no mic status/mute control, since there is nothing to listen with.
     expect(screen.queryByRole("button", { name: /mic on|mic off/i })).toBeNull();
 
@@ -132,7 +132,7 @@ describe("the call starts voice automatically — no separate button", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     expect(fake.utterances).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /mic on|mic off/i })).toBeNull();
-    expect(screen.getByText("Hello, Mei Ling. What would you like help with?")).toBeInTheDocument();
+    expect(screen.getByText("Hello, I’m an AI helper. What would you like to know today?")).toBeInTheDocument();
   });
 });
 
@@ -232,7 +232,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     expect(screen.getByText(/what strength does the label say/i)).toBeInTheDocument();
     respond(fake, "500 milligrams");
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
   });
 
   it("an off-topic question (the weather) is acknowledged, then redirected to the two supported actions", () => {
@@ -305,7 +305,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
     finishSpeaking(fake); // let the "possible match" heading finish before answering
 
     respond(fake, "yes, that's right");
@@ -350,7 +350,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     // so the re-prompt never nudges toward confirming.
     expect(screen.getByText(/didn’t quite catch that/i)).toBeInTheDocument();
     expect(screen.getByText(/say “yes”, “no”, or “I’m not sure”/i)).toBeInTheDocument();
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument(); // unchanged
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument(); // unchanged
   });
 
   it("after a confirmed match, an unrecognised question names the next step instead of stalling", () => {
@@ -411,7 +411,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     respond(fake, "It's Metformin, 500 milligrams");
     act(() => vi.advanceTimersByTime(1000)); // the brief "checking" beat before a result
 
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
   });
 
   it("a medicine name with no strength yet is asked for the strength, then completes on the next turn", () => {
@@ -428,7 +428,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
 
     respond(fake, "500 milligrams");
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
   });
 
   it("a wrong name and strength said together is a safe no-match, not a guess", () => {
@@ -523,7 +523,7 @@ describe("hands-free conversation — recovery and control", () => {
 });
 
 describe("words and voice arrive together", () => {
-  const GREETING = "Hello, Mei Ling. What would you like help with?";
+  const GREETING = "Hello, I’m an AI helper. What would you like to know today?";
   function installSlowGemini() {
     let start: (ok: boolean) => void = () => undefined;
     const player = {

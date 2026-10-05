@@ -18,7 +18,7 @@ const BODY = {
   language: "en",
   offered: ["show-medicine"],
   checkingMedicineName: true,
-  history: [{ speaker: "companion", text: "Hello, Mei Ling. What would you like help with?" }],
+  history: [{ speaker: "companion", text: "Hello, I’m an AI helper. What would you like to know today?" }],
 };
 
 function req(body: unknown = BODY, headers?: Record<string, string>) {

@@ -56,12 +56,12 @@ export function speakableText(
         ? t("cameraGuidanceHeading")
         : t("fallbackHeading");
     case "analyzing":
-      return t("analyzingHeading");
+      return join(t("analyzingHeading"), t("analyzingBody"));
     case "confirm-match":
+      if (!session.candidate) return null;
       return join(
         t("possibleMatch") + ".",
-        t("confirmHeading"),
-        session.candidate?.medicineName ? session.candidate.medicineName + "." : null,
+        t("confirmHeading").replace("{medicine}", session.candidate.medicineName),
         t("checkName"),
       );
     case "explain": {

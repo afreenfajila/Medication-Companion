@@ -140,13 +140,13 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /yes, switch camera/i }));
 
     fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
-    expect(screen.getByText("Reading the label…")).toBeInTheDocument();
+    expect(screen.getByText("Thank you, let me have a look.")).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(1000);
     });
 
     // Possible match only — no instruction visible.
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
     expect(screen.getAllByText("Metformin 500 mg").length).toBeGreaterThan(0);
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
     expect(screen.queryByText(/blood sugar/)).toBeNull();
@@ -181,7 +181,12 @@ describe("in-call flow", () => {
     fireEvent.click(within(check).getByRole("button", { name: "It looks different" }));
     expect(screen.getByText(/When the label and the record don’t agree, a pharmacist is the best person to look/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check with pharmacy — demo" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Try another photo" })).toBeNull();
+    // Correction state: try once more · ask a pharmacist · carry on.
+    expect(screen.getByRole("button", { name: "Try another photo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to the conversation" })).toBeInTheDocument();
+    // Escalated: the instruction already shown is tucked away, not left on screen.
+    expect(screen.queryByText("Take 1 tablet twice daily with meals.")).toBeNull();
+    expect(screen.getAllByText("Your record is tucked away while we get you some help.").length).toBeGreaterThan(0);
   });
 
   it("low mood: a warm reply, and family help asks for consent before anything happens", () => {
@@ -256,7 +261,7 @@ describe("in-call flow", () => {
     fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500mg" } });
     fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
     await flush();
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
 
@@ -267,7 +272,7 @@ describe("in-call flow", () => {
     expect(screen.queryByRole("button", { name: /take photo of label/i })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
     await flush();
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
   });
 
   it("mock upload: a sample photo is POSTed to the real analyze route and shows a possible match", async () => {
@@ -285,7 +290,7 @@ describe("in-call flow", () => {
     expect(init.method).toBe("POST");
     expect(init.body.get("inputMode")).toBe("image");
     expect(init.body.get("image")).toBeInstanceOf(Blob);
-    expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+    expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
     // Only the sample list + analyze route were fetched — plus the once-per-call
     // check for whether the understanding pass is configured. No other network use.
@@ -347,7 +352,7 @@ describe("in-call flow", () => {
       fireEvent.click(screen.getByRole("button", { name: "Try another photo" }));
       fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
       await flush();
-      expect(screen.getByText("Is this the medicine you are holding?")).toBeInTheDocument();
+      expect(screen.getByText("I think this may be your Metformin 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
     },
   );
 

@@ -551,6 +551,39 @@ describe("family help needs consent every time (Assignment 3, F)", () => {
   });
 });
 
+describe("recovery: carry on where they left off", () => {
+  it("help from mid-explanation, then carry on, returns to the same step with the record still confirmed", () => {
+    const atInstruction = run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain());
+    const help = run([{ type: "GET_HELP" }], atInstruction);
+    expect(help.state).toBe("safety");
+    expect(help.resumeExplainStep).toBe(1);
+
+    const back = run([{ type: "RETURN_TO_CALL" }], help);
+    expect(back.state).toBe("explain");
+    expect(back.explainStep).toBe(1);
+    expect(back.matchStatus).toBe("confirmed");
+    expect(back.resumeExplainStep).toBeNull();
+  });
+
+  it("without a confirmed record (e.g. the label looked different) it returns to the conversation", () => {
+    const differs = run(
+      [{ type: "EXPLAIN_STEP", direction: "next" }, { type: "LABEL_CHECK", matches: false }],
+      toExplain(),
+    );
+    const back = run([{ type: "RETURN_TO_CALL" }], differs);
+    expect(back.state).toBe("listening");
+    expect(resolveExplanation(back, "en")).toBeNull();
+  });
+
+  it("'It looks different' offers one more try", () => {
+    const differs = run(
+      [{ type: "EXPLAIN_STEP", direction: "next" }, { type: "LABEL_CHECK", matches: false }],
+      toExplain(),
+    );
+    expect(run([{ type: "TRY_ANOTHER_LABEL" }], differs).state).toBe("camera-guidance");
+  });
+});
+
 describe("label check beside the instruction", () => {
   const atInstruction = () => run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain());
 

@@ -580,3 +580,26 @@ An over-engineering audit found both rephrase features largely redundant once th
   into `understand-guard.ts`.
 - **CLAUDE.md is unchanged.** Task 2 is still permitted, just not used; re-adding it for a real
   translation gap (for example Malay or Tamil) would be a new, narrower route.
+
+---
+
+# Decisions (matching the interaction-states diagram)
+
+The Assignment 3 "Interaction states" diagram (Default, Loading, Success, Uncertainty, Failure,
+Correction, Recovery, Escalation) was checked against the app. Gaps that amendment H doesn't cover were
+fixed here; H covers choose-from-my-medicines, typed name on failure, real callbacks and sent states.
+
+- **Default / Loading / Uncertainty wording now matches the diagram.** Greeting: "Hello, I'm an AI
+  helper. What would you like to know today?" (the AI disclosure is spoken, not only in the footer).
+  Loading: "Thank you, let me have a look. This will just take a moment." The thinking indicator shows
+  "Let me think about that…" as visible words, not only dots. Confirm: "I think this may be your
+  {medicine}. Is this the one you're holding?", with `{medicine}` filled from the candidate's record name.
+- **Correction: "It looks different" offers one more try.** `label-differs` joins the label reasons that
+  get the single photo retry, alongside the pharmacist options and "Back to the conversation".
+- **Recovery: carry on where they left off.** Entering safety from the explanation remembers the step
+  (`resumeExplainStep`). If the record is still confirmed, "Carry on" returns to that step; otherwise
+  it returns to the conversation as before. A label that looked different clears the match, so it never
+  resumes into the explanation.
+- **Escalation never shows instructions, including in the transcript.** Record lines in the call
+  transcript (explanation steps and the record-conflict reply) are replaced with "Your record is tucked
+  away while we get you some help." while the call is in safety, and reappear when they carry on.
