@@ -1,6 +1,6 @@
 import type { CopyKey } from "@/lib/content/translations";
 import type { LabelAnalysis } from "@/lib/api/schemas";
-import { metforminRecord } from "@/lib/content/seed-record";
+import { metforminRecord, recordMedicines } from "@/lib/content/seed-record";
 import { candidateDisplayFor, candidateIdFor, matchLabelInput } from "@/lib/matching/match-record";
 import type { HelpReason } from "@/lib/services/reasons";
 import type { StudyCondition } from "@/lib/study/study-mode";
@@ -109,6 +109,8 @@ export type SessionEvent =
   | { type: "CAMERA_CONSENT"; granted: boolean }
   | { type: "CAMERA_FAILED"; issue: CameraIssue }
   | { type: "SUBMIT_LABEL"; input: LabelInput }
+  /** "Choose from my medicines": a medicine picked from the record list — still only a possible match. */
+  | { type: "CHOOSE_MEDICINE"; medicineId: string }
   | { type: "RESOLVE_ANALYSIS" } // deterministic demo/typed inputs (local)
   | { type: "ANALYSIS_RESULT"; analysis: LabelAnalysis } // image inputs (server-validated)
   | { type: "ANALYSIS_FAILED" }
@@ -613,6 +615,21 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
                 ? input.source
                 : null,
         },
+      });
+    }
+
+    case "CHOOSE_MEDICINE": {
+      // Offered beside the camera (after "Not now", or another try). Picking one is a
+      // possible match like any other: it still has to be confirmed before anything is explained.
+      if (s.state !== "camera-guidance") return s;
+      const record = recordMedicines.find((m) => m.id === event.medicineId);
+      if (!record) return s;
+      const display = candidateDisplayFor(record);
+      return withAudit({ ...s, state: "confirm-match", candidate: display, matchStatus: "possible" }, ctx, {
+        eventType: "candidate-presented",
+        summary: `Possible match chosen from the record list: ${display.medicineName}`,
+        route: "record-list",
+        validationStatus: "passed",
       });
     }
 

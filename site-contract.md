@@ -674,3 +674,7 @@ See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 
   - `HELP_DISMISS` after `sent` on a safety screen continues the call where it left off.
 - Clinic shows the clinic's number as text. No `tel:` links anywhere.
 - Urgent-risk screen: no actions until amendment I.
+
+### H3. Choose from my medicines
+
+- `CHOOSE_MEDICINE { medicineId }`, valid only in `camera-guidance` and only for an id in `recordMedicines`. It sets a possible candidate and moves to `confirm-match`. Confirmation is still required before any explanation.

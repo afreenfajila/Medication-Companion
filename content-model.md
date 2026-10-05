@@ -680,3 +680,13 @@ The record module is now `seed-record.ts`, the simulated services' data source, 
 | `unclearHelpConfirm` | I didn't quite catch that. You can say "yes", or "not now". | 我没太听清楚。您可以说「好」，或说「现在不用」。 |
 
 Removed: `checkPharmacy`, `checkWithPharmacist`, `askFamily`, `emergencyDemo`, `demoActionNotice`, `unclearFamilyConsent`. New audit event `pharmacist-callback-requested`; `caregiver-help-requested` is now written only after consent **and** the service's success.
+
+### H3. Choose from my medicines
+
+Offered in the camera step's other ways (reached after "Not now" and after another try). It lists `recordMedicines` by name and strength only. Choosing one creates a possible match (`candidate-presented`, route `record-list`), which still goes to the confirm step.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `chooseFromMedicines` | Choose from my medicines | 从我的药物中选择 |
+| `medicineListHeading` | Which medicine are you holding? | 您手上拿的是哪一种药？ |
+| `medicineListNote` | These are the medicines on your BrightCare Pharmacy record. You'll still check it on the next step. | 这些是您在BrightCare药房记录中的药物。下一步您仍需要确认。 |

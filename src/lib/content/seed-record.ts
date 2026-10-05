@@ -86,6 +86,9 @@ export const metforminRecord: MedicationRecord = {
   },
 };
 
+/** Every medicine on her record — what "Choose from my medicines" lists (name and strength only). */
+export const recordMedicines: readonly MedicationRecord[] = [metforminRecord];
+
 /**
  * Mei Ling's fictional care circle and contacts — the simulated services'
  * data source (CLAUDE.md § H4). The numbers use the 555-01xx pattern that is

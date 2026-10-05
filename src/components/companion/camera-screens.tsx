@@ -1,11 +1,12 @@
 "use client";
 
-import { Camera, FileImage, ScanLine, SwitchCamera } from "lucide-react";
+import { Camera, FileImage, ListChecks, Pill, ScanLine, SwitchCamera } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
 import { CameraPreview } from "@/components/ui/camera-preview";
 import { samplePhotos } from "@/lib/content/samples";
+import { recordMedicines } from "@/lib/content/seed-record";
 import { setPendingImage } from "@/lib/label/pending-image";
 import { registerCapture } from "@/lib/voice/actions";
 import { validateImage } from "@/lib/label/image-validation";
@@ -57,19 +58,21 @@ export function CameraGuidanceScreen({
   mode,
   issue,
   onSubmit,
+  onChooseMedicine,
   onCameraFailed,
 }: {
   t: T;
   mode: CameraMode;
   issue: CameraIssue | null;
   onSubmit: (input: LabelInput) => void;
+  onChooseMedicine: (medicineId: string) => void;
   onCameraFailed: (issue: CameraIssue) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [facing, setFacing] = useState<CameraFacing>("environment");
   const [live, setLive] = useState(false);
   const [canFlip, setCanFlip] = useState(false);
-  const [panel, setPanel] = useState<"samples" | "typed" | null>(null);
+  const [panel, setPanel] = useState<"samples" | "typed" | "medicines" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -200,6 +203,38 @@ export function CameraGuidanceScreen({
                       className="h-[51px] w-[72px] shrink-0 rounded-sm object-cover"
                     />
                     <span>{t(p.labelKey)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <SecondaryButton
+          aria-expanded={panel === "medicines"}
+          onClick={() => setPanel(panel === "medicines" ? null : "medicines")}
+          icon={<ListChecks className="h-5 w-5" aria-hidden="true" />}
+        >
+          {t("chooseFromMedicines")}
+        </SecondaryButton>
+        {panel === "medicines" && (
+          <section
+            aria-label={t("medicineListHeading")}
+            className="fade-in flex flex-col gap-3 rounded-lg border border-line bg-surface p-4"
+          >
+            <h3 className="text-[18px] font-bold leading-tight">{t("medicineListHeading")}</h3>
+            <p className="text-sm leading-snug text-navy-700">{t("medicineListNote")}</p>
+            {/* Name and strength only — never instructions. Picking one is a possible match to confirm. */}
+            <ul className="flex flex-col gap-2">
+              {recordMedicines.map((m) => (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => onChooseMedicine(m.id)}
+                    className="flex min-h-14 w-full items-center gap-3 rounded-md border border-line bg-canvas px-4 py-2 text-left text-lg font-medium hover:border-teal-600"
+                  >
+                    <Pill className="h-5 w-5 shrink-0 text-teal-800" aria-hidden="true" />
+                    <span>{m.identity.displayName}</span>
                   </button>
                 </li>
               ))}

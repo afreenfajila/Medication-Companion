@@ -364,6 +364,7 @@ export function CompanionExperience() {
           mode={session.cameraMode ?? "fallback"}
           issue={session.cameraIssue}
           onSubmit={(input) => dispatch({ type: "SUBMIT_LABEL", input })}
+          onChooseMedicine={(medicineId) => dispatch({ type: "CHOOSE_MEDICINE", medicineId })}
           onCameraFailed={(issue) => dispatch({ type: "CAMERA_FAILED", issue })}
         />
       );

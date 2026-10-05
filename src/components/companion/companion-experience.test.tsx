@@ -270,6 +270,17 @@ describe("in-call flow", () => {
     expect(screen.getByText(/You can call BrightCare Pharmacy on 6555 0123/)).toBeInTheDocument();
   });
 
+  it("choose from my medicines: lists name and strength only, then still asks to confirm", () => {
+    render(<CompanionExperience />);
+    toGuidance("decline");
+    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
+    const list = screen.getByRole("region", { name: "Which medicine are you holding?" });
+    expect(list.textContent).not.toMatch(/Take 1 tablet|twice daily|blood sugar/);
+    fireEvent.click(within(list).getByRole("button", { name: "Metformin 500 mg" }));
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
+  });
+
   it("typed-label fallback: validates required fields, then a correct label reaches a possible match", async () => {
     render(<CompanionExperience />);
     toGuidance("decline");

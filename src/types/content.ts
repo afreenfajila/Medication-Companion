@@ -228,6 +228,7 @@ export type AuditEvent = {
     | "claude-vision"
     | "claude-understanding"
     | "typed-input"
+    | "record-list" // extension: chosen from "Choose from my medicines"
     | "local-fallback"
     | "gemini-live";
   validationStatus: "passed" | "blocked" | "not-applicable";

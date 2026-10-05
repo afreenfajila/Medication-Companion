@@ -627,3 +627,12 @@ fixed here; H covers choose-from-my-medicines, typed name on failure, real callb
   conflict, wellbeing, help requested) derived from where the person is. Nothing they said is sent.
 - **Fictional contacts.** Phone numbers use the 555-01xx fiction pattern. They are shown as text, never
   as `tel:` links, and need replacing with numbers you are allowed to show before external testing.
+
+## H3. Choose from my medicines
+
+- **In the camera step, not on the safety screen.** H3 calls it the fallback for "Not now" and for label
+  trouble. Both lead to the camera step's other ways ("Not now" directly, label trouble through "Try
+  another photo"). The updated diagram's Failure card lists only "try another photo, or ask someone",
+  so adding a third option to the safety screen would contradict it and bring back button clutter.
+- **A list pick is a possible match, not a shortcut.** It is audited as `record-list` and goes through
+  the same confirm step as a photo, so the confirmation gate is never skipped.

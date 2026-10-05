@@ -617,6 +617,24 @@ describe("family help needs consent every time (Assignment 3, F)", () => {
   });
 });
 
+describe("choose from my medicines (Assignment 3, H3)", () => {
+  const guidance = () => run([startCall, askUnknown, chooseShowMedicine, { type: "CAMERA_CONSENT", granted: false }]);
+  const id = "med_metformin_500_demo";
+
+  it("after 'Not now', picking from the record list is a possible match that still needs confirming", () => {
+    const s = run([{ type: "CHOOSE_MEDICINE", medicineId: id }], guidance());
+    expect(s.state).toBe("confirm-match");
+    expect(s.matchStatus).toBe("possible");
+    expect(resolveExplanation(s, "en")).toBeNull(); // nothing explained before confirmation
+    expect(s.audit.at(-1)).toMatchObject({ eventType: "candidate-presented", route: "record-list" });
+  });
+
+  it("only from the camera step, and only for a medicine on the record", () => {
+    expect(blocked([{ type: "CHOOSE_MEDICINE", medicineId: id }], run([startCall]))).toBe(true);
+    expect(blocked([{ type: "CHOOSE_MEDICINE", medicineId: "med_other" }], guidance())).toBe(true);
+  });
+});
+
 describe("recovery: carry on where they left off", () => {
   it("help from mid-explanation, then carry on, returns to the same step with the record still confirmed", () => {
     const atInstruction = run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain());
