@@ -1,3 +1,4 @@
+import { targetSize } from "./prepare-photo";
 import { describe, expect, it } from "vitest";
 import { claudeLabelExtractionSchema } from "@/lib/ai/schemas";
 import { labelAnalysisSchema } from "@/lib/api/schemas";
@@ -134,5 +135,13 @@ describe("analyzeExtraction (deterministic decision on top of model output)", ()
     );
     expect(JSON.stringify(a)).not.toMatch(/IGNORE|Take 10|double/i);
     expect(JSON.stringify(a)).not.toMatch(/twice daily|with meals/i); // no instructions from this route
+  });
+});
+
+describe("choose a photo: browser-side shrink (H2)", () => {
+  it("never upscales, and caps the long edge at 2048 px keeping the shape", () => {
+    expect(targetSize(1200, 900)).toEqual({ width: 1200, height: 900 });
+    expect(targetSize(4032, 3024)).toEqual({ width: 2048, height: 1536 });
+    expect(targetSize(3024, 4032)).toEqual({ width: 1536, height: 2048 });
   });
 });

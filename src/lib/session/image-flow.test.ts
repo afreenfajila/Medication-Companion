@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { LabelAnalysis } from "@/lib/api/schemas";
 import { resolveExplanation } from "@/lib/content/explanation";
-import { CTX, askUnknown, chooseShowMedicine, grantCamera, run, startCall } from "@/test/helpers";
+import { CTX, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, run, startCall } from "@/test/helpers";
 import { reduceSession, type Session, type SessionEvent } from "./state-machine";
 import type { LabelInput } from "@/types/content";
 
-const image: LabelInput = { mode: "image", source: "sample", mimeType: "image/png", byteSize: 34_000 };
+const image: LabelInput = { mode: "image", source: "upload", mimeType: "image/png", byteSize: 34_000 };
 const submitImage: SessionEvent = { type: "SUBMIT_LABEL", input: image };
 
 const candidateAnalysis: LabelAnalysis = {
@@ -29,12 +29,12 @@ const safetyAnalysis = (outcome: LabelAnalysis["outcome"]): LabelAnalysis => ({
   reasonCode: "low-confidence",
 });
 
-const analyzing = () => run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitImage]);
+const analyzing = () => run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitImage]);
 const blocked = (events: SessionEvent[], from: Session) =>
   events.reduce((s, e) => reduceSession(s, e, CTX), from) === from;
 
 describe("camera failure handling", () => {
-  const atGuidance = () => run([startCall, askUnknown, chooseShowMedicine, grantCamera]);
+  const atGuidance = () => run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera]);
 
   it.each(["denied", "unavailable"] as const)("%s → fallback options, never a dead end", (issue) => {
     const s = run([{ type: "CAMERA_FAILED", issue }], atGuidance());
@@ -120,10 +120,10 @@ describe("image analysis result (server-validated) → state", () => {
   it("results are only accepted while analysing an IMAGE", () => {
     const ev: SessionEvent = { type: "ANALYSIS_RESULT", analysis: candidateAnalysis };
     expect(blocked([ev], run([startCall]))).toBe(true);
-    expect(blocked([ev, { type: "ANALYSIS_FAILED" }], run([startCall, askUnknown, chooseShowMedicine, grantCamera]))).toBe(true);
+    expect(blocked([ev, { type: "ANALYSIS_FAILED" }], run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera]))).toBe(true);
     // A demo-label analysis cannot be hijacked by a server result.
     const demo = run([
-      startCall, askUnknown, chooseShowMedicine, grantCamera,
+      startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera,
       { type: "SUBMIT_LABEL", input: { mode: "demo", demoAssetId: "sample_metformin_label" } },
     ]);
     expect(blocked([ev], demo)).toBe(true);

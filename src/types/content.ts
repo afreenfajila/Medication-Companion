@@ -139,7 +139,7 @@ export type LabelInput =
   | {
       // Metadata only: the pixels live in memory for one request and are never stored in session state.
       mode: "image";
-      source: "sample" | "camera";
+      source: "upload" | "camera"; // "upload": chosen with the system photo picker (gallery/files)
       mimeType: "image/jpeg" | "image/png" | "image/webp";
       byteSize: number;
     }

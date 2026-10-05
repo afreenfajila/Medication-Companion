@@ -27,6 +27,7 @@ export function speakableText(
     | "language"
     | "userText"
     | "helpFlow"
+    | "showMethod"
   >,
   t: (key: CopyKey) => string,
   explanation: ExplanationView | null,
@@ -51,7 +52,10 @@ export function speakableText(
     case "listening":
       return listeningOverride !== undefined ? listeningOverride : t(session.assistantKey);
     case "camera-permission":
-      return join(t("cameraPermissionHeading"), t("cameraPermissionBody"));
+      // The photo note is said first, before any picker opens (H2).
+      return session.showMethod === "choose"
+        ? join(t("showMedicineHeading"), t("photoIntro"))
+        : join(t("cameraPermissionHeading"), t("cameraPermissionBody"));
     case "camera-guidance":
       return session.cameraMode === "preview"
         ? t("cameraGuidanceHeading")

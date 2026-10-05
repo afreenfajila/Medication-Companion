@@ -3,7 +3,7 @@ import { resolveExplanation } from "@/lib/content/explanation";
 import {
   askUnknown,
   chooseShowMedicine,
-  grantCamera,
+  chooseCamera, grantCamera,
   resolve,
   run,
   startCall,
@@ -240,8 +240,25 @@ describe("camera permission gate", () => {
     expect(s.labelRouteSelected).toBe(true);
   });
 
-  it("granting moves to guidance; declining opens the demo-label fallback (no dead end)", () => {
-    const base = run([startCall, askUnknown, chooseShowMedicine]);
+  it("Show medicine first offers camera or photo; consent is only asked after 'Use camera'", () => {
+    const choice = run([startCall, askUnknown, chooseShowMedicine]);
+    expect(choice.showMethod).toBe("choose");
+    expect(blocked([grantCamera], choice)).toBe(true); // no consent before choosing the camera
+    expect(run([chooseCamera], choice).showMethod).toBe("camera");
+  });
+
+  it("a chosen photo or typed name can be checked straight from the choice — never a camera photo", () => {
+    const choice = run([startCall, askUnknown, chooseShowMedicine]);
+    const photo = { type: "SUBMIT_LABEL", input: { mode: "image", source: "upload", mimeType: "image/jpeg", byteSize: 1000 } } as const;
+    expect(run([photo], choice).state).toBe("analyzing");
+    const typed = { type: "SUBMIT_LABEL", input: { mode: "typed", medicineName: "Metformin", strength: "500 mg" } } as const;
+    expect(run([typed], choice).state).toBe("analyzing");
+    const camera = { type: "SUBMIT_LABEL", input: { mode: "image", source: "camera", mimeType: "image/jpeg", byteSize: 1000 } } as const;
+    expect(blocked([camera], choice)).toBe(true);
+  });
+
+  it("granting moves to guidance; declining opens the photo/list/typed fallbacks (no dead end)", () => {
+    const base = run([startCall, askUnknown, chooseShowMedicine, chooseCamera]);
     const granted = run([grantCamera], base);
     expect(granted.state).toBe("camera-guidance");
     expect(granted.cameraMode).toBe("preview");
@@ -351,7 +368,7 @@ describe("safety states block instructions", () => {
     ["sample_unreadable_label", "unreadable", "unreadable-label"],
     ["sample_mismatch_label", "no-match", "record-mismatch"],
   ] as const)("%s → safety with no candidate", (asset, status, reason) => {
-    const s = run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo(asset), resolve]);
+    const s = run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo(asset), resolve]);
     expect(s.state).toBe("safety");
     expect(s.matchStatus).toBe(status);
     expect(s.safetyReason).toBe(reason);
@@ -361,7 +378,7 @@ describe("safety states block instructions", () => {
   });
 
   it("from safety the user can try another label (no second permission) or return to the call", () => {
-    const s = run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo("sample_mismatch_label"), resolve]);
+    const s = run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo("sample_mismatch_label"), resolve]);
     const again = run([{ type: "TRY_ANOTHER_LABEL" }], s);
     expect(again.state).toBe("camera-guidance");
     expect(run([submitDemo(), resolve], again).state).toBe("confirm-match");
@@ -618,7 +635,7 @@ describe("family help needs consent every time (Assignment 3, F)", () => {
 });
 
 describe("choose from my medicines (Assignment 3, H3)", () => {
-  const guidance = () => run([startCall, askUnknown, chooseShowMedicine, { type: "CAMERA_CONSENT", granted: false }]);
+  const guidance = () => run([startCall, askUnknown, chooseShowMedicine, chooseCamera, { type: "CAMERA_CONSENT", granted: false }]);
   const id = "med_metformin_500_demo";
 
   it("after 'Not now', picking from the record list is a possible match that still needs confirming", () => {

@@ -12,7 +12,7 @@ import type { Session } from "@/lib/session/state-machine";
 import {
   askUnknown,
   chooseShowMedicine,
-  grantCamera,
+  chooseCamera, grantCamera,
   resolve,
   run,
   startCall,
@@ -44,16 +44,26 @@ describe("automated accessibility (axe) — every screen state", () => {
     ["01 start", () => run([])],
     ["02 listening (greeting)", () => run([startCall])],
     ["02 listening (both contextual actions)", () => run([startCall, { type: "USER_MESSAGE", text: "hello" }])],
-    ["03 camera permission", () => run([startCall, askUnknown, chooseShowMedicine])],
-    ["04 camera guidance (fallback)", () => run([startCall, askUnknown, chooseShowMedicine, { type: "CAMERA_CONSENT", granted: false }])],
-    ["analyzing", () => run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo()])],
+    ["03 show medicine: camera or photo", () => run([startCall, askUnknown, chooseShowMedicine])],
+    ["03 camera permission", () => run([startCall, askUnknown, chooseShowMedicine, chooseCamera])],
+    ["help flow: callback confirm", () => run([startCall, { type: "GET_HELP" }, { type: "HELP_START", kind: "pharmacist-callback" }])],
+    ["help flow: failed", () =>
+      run([
+        startCall,
+        { type: "GET_HELP" },
+        { type: "HELP_START", kind: "pharmacist-callback" },
+        { type: "HELP_CONFIRM", granted: true },
+        { type: "HELP_RESULT", ok: false },
+      ])],
+    ["04 camera guidance (fallback)", () => run([startCall, askUnknown, chooseShowMedicine, chooseCamera, { type: "CAMERA_CONSENT", granted: false }])],
+    ["analyzing", () => run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo()])],
     ["05 confirm match", toConfirmMatch],
     ["06 explain step 1", toExplain],
     ["06 explain step 2", () => run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain())],
     ["06 explain step 3", () => run([{ type: "EXPLAIN_STEP", direction: "next" }, { type: "EXPLAIN_STEP", direction: "next" }], toExplain())],
     ["06 explain (Chinese)", () => run([{ type: "SET_LANGUAGE", language: "zh-Hans" }], toExplain())],
     ["complete", () => run([{ type: "UNDERSTOOD" }], toExplain())],
-    ["07 safety (mismatch)", () => run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo("sample_mismatch_label"), resolve])],
+    ["07 safety (mismatch)", () => run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo("sample_mismatch_label"), resolve])],
     ["07 safety (medical question)", () => run([startCall, { type: "USER_MESSAGE", text: "Should I stop taking it?" }])],
     ["07 safety (urgent)", () => run([startCall, { type: "USER_MESSAGE", text: "I have chest pain" }])],
   ];
@@ -80,9 +90,9 @@ describe("automated accessibility (axe) — every screen state", () => {
     }
   });
 
-  it("typed-label form and sample picker (camera guidance panels)", async () => {
-    const { container } = show(run([startCall, askUnknown, chooseShowMedicine, { type: "CAMERA_CONSENT", granted: false }]));
-    fireEvent.click(screen.getByRole("button", { name: /upload a photo — demo/i }));
+  it("typed-label form and the record list (camera guidance panels)", async () => {
+    const { container } = show(run([startCall, askUnknown, chooseShowMedicine, chooseCamera, { type: "CAMERA_CONSENT", granted: false }]));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
     fireEvent.click(screen.getByRole("button", { name: /type the label details/i }));
     fireEvent.click(screen.getByRole("button", { name: /check these details/i })); // shows the error state
     expect(await violations(container)).toEqual([]);

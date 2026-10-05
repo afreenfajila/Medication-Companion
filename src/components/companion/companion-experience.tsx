@@ -15,7 +15,7 @@ import { guardRequestedState, pathForState } from "@/lib/session/state-machine";
 import { getGeminiSpeechPlayer } from "@/lib/voice/gemini-speech-player";
 import { speakableText } from "@/lib/voice/speakable";
 import { getVoiceProvider, useVoiceCapabilities } from "@/lib/voice/use-voice";
-import { AnalyzingScreen, CameraGuidanceScreen, CameraPermissionScreen } from "./camera-screens";
+import { AnalyzingScreen, CameraGuidanceScreen, CameraPermissionScreen, ShowMedicineChoice } from "./camera-screens";
 import { CallFeed } from "./call-feed";
 import { CompleteScreen } from "./complete-screen";
 import { ConfirmScreen } from "./confirm-screen";
@@ -349,13 +349,21 @@ export function CompanionExperience() {
       );
       break;
     case "camera-permission":
-      pinnedActions = (
-        <CameraPermissionScreen
-          t={t}
-          onGrant={() => dispatch({ type: "CAMERA_CONSENT", granted: true })}
-          onDecline={() => dispatch({ type: "CAMERA_CONSENT", granted: false })}
-        />
-      );
+      // First camera or photo (or typing); the consent question only after "Use camera".
+      pinnedActions =
+        session.showMethod === "choose" ? (
+          <ShowMedicineChoice
+            t={t}
+            onCamera={() => dispatch({ type: "CHOOSE_CAMERA" })}
+            onSubmit={(input) => dispatch({ type: "SUBMIT_LABEL", input })}
+          />
+        ) : (
+          <CameraPermissionScreen
+            t={t}
+            onGrant={() => dispatch({ type: "CAMERA_CONSENT", granted: true })}
+            onDecline={() => dispatch({ type: "CAMERA_CONSENT", granted: false })}
+          />
+        );
       break;
     case "camera-guidance":
       pinnedActions = (

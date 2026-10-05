@@ -47,6 +47,12 @@ export type Session = {
   contextualActions: ContextualActionId[];
   /** True once `Show medicine` was chosen inside the active call. */
   labelRouteSelected: boolean;
+  /**
+   * On the camera-permission step: "choose" asks camera, photo or typing (H2);
+   * "camera" is the existing camera-consent question. Consent is only ever asked
+   * after the person picked "Use camera".
+   */
+  showMethod: "choose" | "camera";
   cameraMode: CameraMode | null;
   /** Why the live camera is not in use (drives the fallback wording). */
   cameraIssue: CameraIssue | null;
@@ -106,6 +112,8 @@ export type SessionEvent =
   | { type: "CALL_START" }
   | { type: "USER_MESSAGE"; text: string }
   | { type: "SELECT_ROUTE"; route: ContextualActionId }
+  /** "Use camera" on the show-medicine choice: next comes the camera-consent question. */
+  | { type: "CHOOSE_CAMERA" }
   | { type: "CAMERA_CONSENT"; granted: boolean }
   | { type: "CAMERA_FAILED"; issue: CameraIssue }
   | { type: "SUBMIT_LABEL"; input: LabelInput }
@@ -173,6 +181,7 @@ export function createInitialSession(): Session {
     assistantKey: "callGreeting",
     contextualActions: [],
     labelRouteSelected: false,
+    showMethod: "choose",
     cameraMode: null,
     cameraIssue: null,
     pendingLabel: null,
@@ -346,7 +355,7 @@ function applyRoute(
   };
   if (route === "show-medicine") {
     return withAudit(
-      { ...s, state: "camera-permission", labelRouteSelected: true, contextualActions: [] },
+      { ...s, state: "camera-permission", labelRouteSelected: true, showMethod: "choose", contextualActions: [] },
       ctx,
       audit,
     );
@@ -556,9 +565,15 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       return applyRoute(s, ctx, event.route, "button");
     }
 
+    case "CHOOSE_CAMERA": {
+      if (s.state !== "camera-permission" || s.showMethod !== "choose") return s;
+      return { ...s, showMethod: "camera" };
+    }
+
     case "CAMERA_CONSENT": {
-      // CAMERA_PERMISSION is only reachable via SELECT_ROUTE("show-medicine").
-      if (s.state !== "camera-permission" || !s.labelRouteSelected) return s;
+      // CAMERA_PERMISSION is only reachable via SELECT_ROUTE("show-medicine"), and the
+      // consent question only after the person picked "Use camera".
+      if (s.state !== "camera-permission" || !s.labelRouteSelected || s.showMethod !== "camera") return s;
       if (event.granted) {
         return withAudit(
           { ...s, state: "camera-guidance", cameraMode: "preview", cameraIssue: null },
@@ -570,10 +585,10 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           },
         );
       }
-      // Denial is never a dead end: typed/demo-label fallback opens.
+      // Denial is never a dead end: photo, record-list and typed fallbacks open.
       return withAudit({ ...s, state: "camera-guidance", cameraMode: "fallback", cameraIssue: null }, ctx, {
         eventType: "camera-consent-declined",
-        summary: "Camera declined; demo-label fallback offered",
+        summary: "Camera declined; photo, record-list and typed fallbacks offered",
         route: "local-fallback",
       });
     }
@@ -594,8 +609,12 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
     }
 
     case "SUBMIT_LABEL": {
-      if (s.state !== "camera-guidance") return s;
       const input = event.input;
+      // From the camera step, anything. From the show-medicine choice, only what
+      // needs no camera: a chosen photo or typed details (a camera still can't get
+      // here without consent).
+      const noCamera = input.mode === "typed" || (input.mode === "image" && input.source === "upload");
+      if (s.state !== "camera-guidance" && !(s.state === "camera-permission" && noCamera)) return s;
       return withAudit({ ...s, state: "analyzing", pendingLabel: input }, ctx, {
         eventType: "label-submitted",
         summary: "Label submitted for checking",

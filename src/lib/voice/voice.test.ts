@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { resolveExplanation } from "@/lib/content/explanation";
 import { t as translate } from "@/lib/content/translations";
 import { createFakeSpeech } from "@/test/fake-speech";
-import { toConfirmMatch, toExplain, run, startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo, resolve } from "@/test/helpers";
+import { toConfirmMatch, toExplain, run, startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo, resolve } from "@/test/helpers";
 import { BrowserVoiceProvider, pickVoice } from "./browser-voice";
 import { interpretUtterance } from "./commands";
 import { VoiceError } from "./provider";
@@ -280,7 +280,7 @@ describe("speakableText — spoken output is approved wording only, and gated", 
   });
 
   it("safety states speak the limitation and human help, never instructions", () => {
-    const blocked = run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo("sample_mismatch_label"), resolve]);
+    const blocked = run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo("sample_mismatch_label"), resolve]);
     const said = speakableText(blocked, t, resolveExplanation(blocked, "en"))!;
     expect(said).toContain("Let’s check this one together.");
     expect(said).not.toMatch(/Take 1 tablet|twice daily|blood sugar/i);

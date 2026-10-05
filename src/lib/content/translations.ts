@@ -107,7 +107,9 @@ const en = {
   unclearCameraPermission:
     "I didn’t quite catch that. You can say “yes” to open the camera, or “no” to type the label instead.",
   unclearCameraGuidance:
-    "I didn’t quite catch that. You can say “take a photo”, “use the demo label”, or tell me the medicine name and strength.",
+    "I didn’t quite catch that. You can say “take a photo”, or tell me the medicine name and strength.",
+  unclearShowMedicine:
+    "I didn’t quite catch that. You can say “camera”, choose a photo, or tell me the medicine name and strength.",
   unclearSafety:
     "I didn’t quite catch that. You can say “try another label”, or “back to the conversation”. You can also say “get help”.",
   unclearComplete:
@@ -144,7 +146,14 @@ const en = {
   cameraPrivacy: "The camera is only being used to read this medicine label.",
   oneMedicineOnly: "1 medicine only",
   you: "You",
-  useDemoLabel: "Use demo label",
+  // Showing the medicine: camera or photo, equally (CLAUDE.md § H2).
+  showMedicineHeading: "How would you like to show me your medicine?",
+  useCamera: "Use camera",
+  choosePhoto: "Choose a photo",
+  typeName: "Type the name",
+  photoIntro:
+    "You can choose a photo of your medicine label. I’ll only look at the medicine name, and the photo won’t be kept.",
+  photoFormat: "I couldn’t open that photo. Would you like to try another one, or use the camera instead?",
   cameraStarting: "Starting the camera… allow it in your browser if asked.",
   cameraLiveSummary: "Live view from your camera. Hold the medicine label inside the box.",
   captureLabel: "Take photo of label",
@@ -152,14 +161,6 @@ const en = {
   flipToMedicine: "Show the medicine camera",
   captureError: "I couldn’t capture that photo. Please try again.",
   moreWays: "Other ways to show the label",
-  uploadPhoto: "Upload a photo — demo",
-  samplePickerHeading: "Choose a sample photo",
-  samplePickerNote:
-    "Demo upload: these sample photos are sent to the AI reader as if you had uploaded them. Your image is used only for this demo session and is not saved by default.",
-  sampleClear: "Clear label photo",
-  sampleBlurry: "Blurry label photo",
-  sampleDifferent: "Different medicine photo",
-  sampleLoadError: "I couldn’t load that sample photo. Please try again.",
   typeLabelToggle: "Type the label details",
   chooseFromMedicines: "Choose from my medicines",
   medicineListHeading: "Which medicine are you holding?",
@@ -172,13 +173,13 @@ const en = {
   typedRequired: "Please fill in the medicine name and strength.",
   cameraDeniedHeading: "The camera is off.",
   cameraDeniedBody:
-    "That’s okay. You can allow the camera in your browser settings, or continue with a sample photo, typed details, or the demo label.",
+    "That’s okay. You can allow the camera in your browser settings, or choose a photo, pick from your medicines, or type the name instead.",
   cameraUnavailableHeading: "I couldn’t find a camera.",
   cameraUnavailableBody:
-    "You can use a sample photo, type the label details, or use the demo label.",
+    "You can choose a photo, pick from your medicines, or type the name instead.",
   fallbackHeading: "You can still continue.",
   fallbackBody:
-    "That’s okay. Without the camera, you can use the demo label to see how this works.",
+    "That’s okay. You can choose a photo, pick from your medicines, or type the name instead.",
   analyzingLabel: "CHECKING",
   analyzingHeading: "Thank you, let me have a look.",
   analyzingBody: "This will just take a moment.",
@@ -253,7 +254,7 @@ const en = {
     "That is a question for your pharmacist or clinic. I can only explain what your record says.",
   reasonHelp: "Here are some ways to reach a person.",
   reasonService:
-    "I couldn’t read that photo. You can try again, type what the label says, or use the demo label.",
+    "I couldn’t read that photo. You can try again, type what the label says, or choose from your medicines.",
   reasonNoInstructions:
     "I will not show any medicine instructions until we are sure.",
   tryPhoto: "Try another photo",
@@ -378,7 +379,8 @@ const zhHans: Copy = {
   unclearCameraPermission:
     "我没太听清楚。您可以说「是」打开相机，或说「不是」改用输入标签。",
   unclearCameraGuidance:
-    "我没太听清楚。您可以说「拍照」、「示范标签」，或告诉我药物名称和剂量。",
+    "我没太听清楚。您可以说「拍照」，或告诉我药物名称和剂量。",
+  unclearShowMedicine: "我没太听清楚。您可以说「相机」、选择照片，或告诉我药物名称和剂量。",
   unclearSafety:
     "我没太听清楚。您可以说「再试一个标签」，或「回到对话」。也可以说「寻求帮助」。",
   unclearComplete: "我没太听清楚。您可以说「另一种药」，或「结束通话」。",
@@ -409,7 +411,12 @@ const zhHans: Copy = {
   cameraPrivacy: "摄像头只会用于阅读这个药物标签。",
   oneMedicineOnly: "仅限一种药物",
   you: "您",
-  useDemoLabel: "使用示范标签",
+  showMedicineHeading: "您想怎样给我看您的药？",
+  useCamera: "使用相机",
+  choosePhoto: "选择照片",
+  typeName: "输入药名",
+  photoIntro: "您可以选择一张药品标签的照片。我只看药品名称，照片不会被保存。",
+  photoFormat: "这张照片我打不开。您想换一张，还是改用相机？",
   cameraStarting: "正在启动摄像头…如浏览器询问，请选择允许。",
   cameraLiveSummary: "摄像头实时画面。请把药物标签放在方框内。",
   captureLabel: "拍下标签照片",
@@ -417,14 +424,6 @@ const zhHans: Copy = {
   flipToMedicine: "切换回药物摄像头",
   captureError: "我无法拍下这张照片，请再试一次。",
   moreWays: "其他展示标签的方式",
-  uploadPhoto: "上传照片 — 示范",
-  samplePickerHeading: "选择一张示范照片",
-  samplePickerNote:
-    "示范上传：这些示范照片会像您上传的一样，交给 AI 阅读。您的图片仅用于本次示范，默认不会保存。",
-  sampleClear: "清晰的标签照片",
-  sampleBlurry: "模糊的标签照片",
-  sampleDifferent: "不同药物的照片",
-  sampleLoadError: "我无法载入这张示范照片，请再试一次。",
   typeLabelToggle: "输入标签上的信息",
   chooseFromMedicines: "从我的药物中选择",
   medicineListHeading: "您手上拿的是哪一种药？",
@@ -437,11 +436,11 @@ const zhHans: Copy = {
   typedRequired: "请填写药物名称和规格。",
   cameraDeniedHeading: "摄像头未开启。",
   cameraDeniedBody:
-    "没关系。您可以在浏览器设置中允许使用摄像头，也可以改用示范照片、输入文字或示范标签。",
+    "没关系。您可以在浏览器设置中允许使用摄像头，也可以选择照片、从您的药物中选择，或输入药名。",
   cameraUnavailableHeading: "我找不到摄像头。",
-  cameraUnavailableBody: "您可以使用示范照片、输入标签文字，或使用示范标签。",
+  cameraUnavailableBody: "您可以选择照片、从您的药物中选择，或输入药名。",
   fallbackHeading: "您仍然可以继续。",
-  fallbackBody: "没关系。不使用摄像头，您也可以用示范标签体验流程。",
+  fallbackBody: "没关系。您可以选择照片、从您的药物中选择，或输入药名。",
   analyzingLabel: "正在核对",
   analyzingHeading: "谢谢，我来看一看。",
   analyzingBody: "请稍等一下。",
@@ -500,7 +499,7 @@ const zhHans: Copy = {
   reasonMedicalQuestion:
     "这个问题需要请教药剂师或诊所。我只能解释您的记录中显示的内容。",
   reasonHelp: "以下是联系真人的几种方式。",
-  reasonService: "我无法读取这张照片。您可以再试一次、输入标签上的文字，或使用示范标签。",
+  reasonService: "我无法读取这张照片。您可以再试一次、输入标签上的文字，或从您的药物中选择。",
   reasonNoInstructions: "在确定之前，我不会显示任何用药指示。",
   tryPhoto: "再拍一张照片",
   retryUsed: "我们已经再试过一次标签。最安全的做法是请一位真人和您一起核对。",

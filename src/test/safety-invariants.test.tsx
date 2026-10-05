@@ -10,7 +10,7 @@ import {
   askUnknown,
   chooseShowMedicine,
   CTX,
-  grantCamera,
+  chooseCamera, grantCamera,
   resolve,
   run,
   startCall,
@@ -60,11 +60,11 @@ describe("INVARIANT: voice cannot bypass call-start, camera-consent or confirmat
     run([startCall]),
     run([startCall, askUnknown]),
     run([startCall, askUnknown, chooseShowMedicine]),
-    run([startCall, askUnknown, chooseShowMedicine, grantCamera]),
+    run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera]),
     toConfirmMatch(),
     toExplain(),
     run([{ type: "UNDERSTOOD" }], run([{ type: "EXPLAIN_STEP", direction: "next" }, { type: "EXPLAIN_STEP", direction: "next" }], toExplain())),
-    run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo("sample_mismatch_label"), resolve]),
+    run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo("sample_mismatch_label"), resolve]),
   ];
 
   const say = (s: Session, text: string): Session => {
@@ -222,9 +222,11 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     await send("What is this for? When do I take it?");
     expect(screen.getByText(/Would you like to show me the medicine label\?/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
     fireEvent.click(screen.getByRole("button", { name: /yes, switch camera/i }));
     await flush(); // no camera → explained fallback
-    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
+    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     await flush();
     expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(INSTRUCTION);
@@ -237,21 +239,14 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     noRawError();
   });
 
-  it("typed label reaches a possible match; a sample photo that can't load shows a calm message", async () => {
+  it("'Type the name' straight from the show-medicine choice reaches a possible match, with no camera", async () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     await flush();
     await send("What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
 
-    fireEvent.click(screen.getByRole("button", { name: /upload a photo — demo/i }));
-    fireEvent.click(screen.getByRole("button", { name: /clear label photo/i }));
-    await flush();
-    expect(screen.getByText("I couldn’t load that sample photo. Please try again.")).toBeInTheDocument();
-    noRawError();
-
-    fireEvent.click(screen.getByRole("button", { name: /type the label details/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Type the name" }));
     fireEvent.change(screen.getByLabelText(/medicine name/i), { target: { value: "metformin" } });
     fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500 mg" } });
     fireEvent.click(screen.getByRole("button", { name: /check these details/i }));

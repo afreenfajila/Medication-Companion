@@ -678,3 +678,10 @@ See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 
 ### H3. Choose from my medicines
 
 - `CHOOSE_MEDICINE { medicineId }`, valid only in `camera-guidance` and only for an id in `recordMedicines`. It sets a possible candidate and moves to `confirm-match`. Confirmation is still required before any explanation.
+
+### H2. Camera or photo
+
+- Session `showMethod: "choose" | "camera"`. Show medicine sets `camera-permission` with `choose`. `CHOOSE_CAMERA` → `camera`, and only then is `CAMERA_CONSENT` accepted.
+- `SUBMIT_LABEL` is accepted on the choice step for inputs that need no camera: `image` with `source: "upload"`, or `typed`. A camera photo still needs consent.
+- Photos are prepared in the browser (`preparePhoto`): long edge at most 2048 px, JPEG about 0.85, which drops EXIF. Anything undecodable (e.g. HEIC) shows `photoFormat` and nothing is sent. The upload then uses the same `/api/label/analyze` route and the same gates; images are never stored.
+- Voice on the choice step: "camera" → `CHOOSE_CAMERA`; saying the name and strength submits it as typed. A photo needs a tap, because the system picker can't be opened from speech.

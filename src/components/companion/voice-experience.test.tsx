@@ -225,6 +225,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     startCall(fake);
     respond(fake, "What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
     fireEvent.click(screen.getByRole("button", { name: /not now/i }));
     finishSpeaking(fake);
 
@@ -261,7 +262,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
       render(<CompanionExperience />);
       startCall(fake);
       act(() => fake.recognitions[0].say(phrase, true));
-      expect(screen.getByText("I need to see the writing clearly.")).toBeInTheDocument();
+      expect(screen.getByText("How would you like to show me your medicine?")).toBeInTheDocument();
     },
   );
 
@@ -291,6 +292,9 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     respond(fake, "What is this for?");
     expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
     respond(fake, "yes");
+    expect(screen.getByText("How would you like to show me your medicine?")).toBeInTheDocument();
+    // Camera or photo is a choice; saying "camera" leads to the consent question.
+    respond(fake, "the camera please");
     expect(screen.getByText("I need to see the writing clearly.")).toBeInTheDocument();
   });
 
@@ -300,8 +304,10 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     startCall(fake);
     respond(fake, "What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
     fireEvent.click(screen.getByRole("button", { name: /not now/i })); // decline camera → fallback
-    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
+    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -319,8 +325,10 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     startCall(fake);
     respond(fake, "What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
     fireEvent.click(screen.getByRole("button", { name: /not now/i }));
-    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
+    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -338,8 +346,10 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     startCall(fake);
     respond(fake, "What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
     fireEvent.click(screen.getByRole("button", { name: /not now/i }));
-    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
+    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -359,8 +369,10 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     startCall(fake);
     respond(fake, "What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
     fireEvent.click(screen.getByRole("button", { name: /not now/i }));
-    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
+    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -405,6 +417,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     startCall(fake);
     respond(fake, "What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
     fireEvent.click(screen.getByRole("button", { name: /not now/i })); // decline camera → fallback
     finishSpeaking(fake); // let the guidance text finish before answering by voice
 
@@ -420,6 +433,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     startCall(fake);
     respond(fake, "What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
     fireEvent.click(screen.getByRole("button", { name: /not now/i }));
     finishSpeaking(fake);
 
@@ -437,6 +451,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     startCall(fake);
     respond(fake, "What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
     fireEvent.click(screen.getByRole("button", { name: /not now/i }));
     finishSpeaking(fake);
 

@@ -47,9 +47,14 @@ const UNCLEAR_GUIDANCE: Partial<Record<Session["state"], CopyKey>> = {
 };
 
 export function unclearGuidanceKey(
-  session: Pick<Session, "state" | "explainStep"> & { recordConflict?: boolean; helpFlow?: Session["helpFlow"] },
+  session: Pick<Session, "state" | "explainStep"> & {
+    recordConflict?: boolean;
+    helpFlow?: Session["helpFlow"];
+    showMethod?: Session["showMethod"];
+  },
 ): CopyKey {
   if (session.helpFlow?.stage === "confirm") return "unclearHelpConfirm";
+  if (session.state === "camera-permission" && session.showMethod === "choose") return "unclearShowMedicine";
   if (session.state === "explain") {
     if (session.recordConflict) return "unclearRecordConflict";
     if (session.explainStep === 1) return "unclearLabelCheck";
@@ -196,6 +201,7 @@ export function useVoiceConversation(opts: {
       explainStep: s.explainStep,
       recordConflict: s.recordConflict,
       helpStage: s.helpFlow?.stage ?? null,
+      showMethod: s.showMethod,
       cameraLive: latest.current.cameraLive,
       pendingSpokenMedicineName: pendingSpokenName.current,
     });

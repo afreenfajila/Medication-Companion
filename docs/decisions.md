@@ -636,3 +636,16 @@ fixed here; H covers choose-from-my-medicines, typed name on failure, real callb
   so adding a third option to the safety screen would contradict it and bring back button clutter.
 - **A list pick is a possible match, not a shortcut.** It is audited as `record-list` and goes through
   the same confirm step as a photo, so the confirmation gate is never skipped.
+
+## H2. Camera or photo
+
+- **A choice step, then the existing consent.** `showMethod` splits the camera-permission step into
+  "how would you like to show it?" and the unchanged consent question, so consent still always comes
+  before the camera and only after the person chose it.
+- **photoIntro is said first.** It's the choice step's own text, so the companion has said it before
+  any picker can open. The picker opens on the tap, inside the user gesture browsers require.
+- **The shrink happens in the browser.** Canvas re-encoding also drops EXIF metadata such as location.
+  It can't run in jsdom, so the component tests stub `preparePhoto`, and `targetSize` has its own unit
+  test. HEIC handling still needs a check on a real iPhone, as H2 says.
+- **The demo label leaves the UI, not the tests.** Reducer tests keep the deterministic fixtures. The
+  rendered tests now use the real paths: typed details, choose from my medicines, and a picked photo.

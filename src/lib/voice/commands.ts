@@ -33,6 +33,8 @@ export type CommandContext = {
   nameCheckPending?: boolean;
   /** The companion just answered "my doctor said…" and asked: pharmacist, or carry on? */
   recordConflict?: boolean;
+  /** On the camera-permission step: choosing camera or photo, or the consent question. */
+  showMethod?: "choose" | "camera";
   /** Stage of a help request on screen (confirm, sent, failed…), if any. */
   helpStage?: "confirm" | "sending" | "sent" | "failed" | "info" | null;
   /** Set once a spoken name has been heard and we're waiting on its strength. */
@@ -61,7 +63,6 @@ const TO_CHINESE = /\b(chinese|mandarin)\b|中文|华语|普通话/;
 const TO_ENGLISH = /\benglish\b|英文|英语/;
 
 const TAKE_PHOTO = /\b(take (a |the )?(photo|picture|pic)|capture|snap( it)?|scan( it)?)\b|拍照|拍下/;
-const USE_DEMO = /\b(demo( label)?|sample label)\b|示范标签/;
 const NEXT = /\b(next|continue|go on|keep going|carry on|go ahead)\b|下一步|继续/;
 const BACK = /\b(back|previous|go back)\b|上一步|返回/;
 const UNDERSTOOD = /\b(i understand|understood|got it|thank(s| you)|that's all|makes sense|all clear)\b|明白|谢谢|懂了/;
@@ -133,6 +134,15 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
     }
 
     case "camera-permission":
+      // First: camera or photo (H2). A photo needs a tap (the system picker can't
+      // open from speech); the name and strength can simply be said.
+      if (ctx.showMethod === "choose") {
+        if (/\bcamera\b|相机|摄像头/.test(n)) return { kind: "event", event: { type: "CHOOSE_CAMERA" } };
+        const said = parseSpokenLabel(raw);
+        const parsed = said ? parseTypedLabel({ ...said, patientName: "" }) : null;
+        if (parsed?.ok) return { kind: "event", event: { type: "SUBMIT_LABEL", input: parsed.input } };
+        return { kind: "unclear" };
+      }
       if (hedge) return { kind: "unclear" };
       if (negative && !affirm) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: false } };
       if (affirm && !negative && isShort(n)) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: true } };
@@ -140,12 +150,6 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
 
     case "camera-guidance": {
       if (TAKE_PHOTO.test(n) && ctx.cameraLive) return { kind: "ui", action: "capture" };
-      if (USE_DEMO.test(n)) {
-        return {
-          kind: "event",
-          event: { type: "SUBMIT_LABEL", input: { mode: "demo", demoAssetId: "sample_metformin_label" } },
-        };
-      }
       // Saying the name and strength out loud ("It's Metformin, 500 milligrams")
       // is another way to fill the same typed-label form — for anyone who'd
       // rather not use the camera, or whose pronunciation speech recognition

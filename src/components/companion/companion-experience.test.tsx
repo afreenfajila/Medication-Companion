@@ -41,16 +41,23 @@ const candidate = {
   },
 };
 
-/** fetch stub: sample PNGs load; /api/label/analyze answers with the given body/status. */
+// jsdom has no image decoding or canvas: the browser-side shrink is stubbed (it has
+// its own unit test). A HEIC "photo" stands for one the browser can't open.
+const preparePhoto = vi.hoisted(() => vi.fn(async (f: Blob) => (f.type === "image/heic" ? null : f)));
+vi.mock("@/lib/label/prepare-photo", () => ({ preparePhoto }));
+
+const photoInput = () => document.querySelector<HTMLInputElement>("[data-photo-input]")!;
+/** What the system photo picker hands back after the person chooses a photo. */
+function pickPhoto(type = "image/jpeg") {
+  const file = new File([new Uint8Array([0xff, 0xd8, 0xff, 1, 2])], "label.jpg", { type });
+  fireEvent.change(photoInput(), { target: { files: [file] } });
+}
+
+/** fetch stub: /api/label/analyze answers with the given body/status. */
 function stubFetch(analyze: { status?: number; body: unknown } | "network-error") {
   const fn = vi.fn(async (url: string, init?: unknown) => {
+    void url;
     void init;
-    if (String(url).startsWith("/samples/")) {
-      return {
-        ok: true,
-        blob: async () => new Blob([new Uint8Array([137, 80, 78, 71, 1, 2])], { type: "image/png" }),
-      };
-    }
     if (analyze === "network-error") throw new TypeError("network down");
     return { ok: (analyze.status ?? 200) < 400, status: analyze.status ?? 200, json: async () => analyze.body };
   });
@@ -73,6 +80,7 @@ function toGuidance(consent: "grant" | "decline" = "grant") {
   fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
   send("What is this for?");
   fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+  fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
   fireEvent.click(
     screen.getByRole("button", { name: consent === "grant" ? /yes, switch camera/i : /not now/i }),
   );
@@ -128,18 +136,26 @@ describe("in-call flow", () => {
     expect(screen.getByRole("button", { name: /ask about my schedule/i })).toBeInTheDocument();
   });
 
-  it("runs the full happy path with the demo label: possible match → confirm → explanation → Chinese", () => {
+  it("runs the full happy path: camera or photo → consent → label → possible match → confirm → explanation → Chinese", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
 
-    // Permission is explained before anything else; the explanation is not reachable yet.
-    expect(screen.getByText("I need to see the writing clearly.")).toBeInTheDocument();
+    // Camera or photo first, as equal choices; nothing medical is reachable yet.
+    expect(screen.getByText("How would you like to show me your medicine?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use camera" })).toHaveAttribute("data-variant", "primary");
+    expect(screen.getByRole("button", { name: "Choose a photo" })).toHaveAttribute("data-variant", "primary");
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
+    // Permission is explained before the camera is ever touched.
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
+    expect(screen.getByText("I need to see the writing clearly.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /yes, switch camera/i }));
 
-    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    fireEvent.click(screen.getByRole("button", { name: /type the label details/i }));
+    fireEvent.change(screen.getByLabelText(/medicine name/i), { target: { value: "Metformin" } });
+    fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500 mg" } });
+    fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
     expect(screen.getByText("Thank you, let me have a look.")).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(1000);
@@ -301,39 +317,48 @@ describe("in-call flow", () => {
     toGuidance("grant");
     expect(screen.getByText("I couldn’t find a camera.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /take photo of label/i })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
+    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     await flush();
     expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
   });
 
-  it("mock upload: a sample photo is POSTed to the real analyze route and shows a possible match", async () => {
+  it("choose a photo: a plain file input (no capture), shrunk first, then POSTed and still only a possible match", async () => {
     const fetchFn = stubFetch({ body: analysisEnvelope(candidate) });
     render(<CompanionExperience />);
-    toGuidance("decline");
-    fireEvent.click(screen.getByRole("button", { name: /upload a photo — demo/i }));
-    expect(screen.getByText(/not saved by default/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /clear label photo/i }));
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    send("What is this for?");
+    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    expect(screen.getByText(/I’ll only look at the medicine name, and the photo won’t be kept/)).toBeInTheDocument();
+
+    const input = photoInput();
+    expect(input).toHaveAttribute("accept", "image/*");
+    expect(input).not.toHaveAttribute("capture"); // phones offer the library and files, not just the camera
+    pickPhoto();
     await flush();
 
+    expect(preparePhoto).toHaveBeenCalled(); // downscaled and re-encoded before upload
     const call = fetchFn.mock.calls.find(([u]) => u === "/api/label/analyze");
-    expect(call).toBeDefined();
     const init = call![1] as { method: string; body: FormData };
     expect(init.method).toBe("POST");
-    expect(init.body.get("inputMode")).toBe("image");
     expect(init.body.get("image")).toBeInstanceOf(Blob);
     expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
-    // Only the sample list + analyze route were fetched — plus the once-per-call
-    // check for whether the understanding pass is configured. No other network use.
-    expect(
-      fetchFn.mock.calls.every(
-        ([u]) =>
-          String(u).startsWith("/samples/") || u === "/api/label/analyze" || u === "/api/companion/understand",
-      ),
-    ).toBe(true);
+    // Only the analyze route — plus the once-per-call understanding check. No other network use.
+    expect(fetchFn.mock.calls.every(([u]) => u === "/api/label/analyze" || u === "/api/companion/understand")).toBe(true);
   });
 
-  it("mock upload: an unreadable answer blocks instructions", async () => {
+  it("a photo the browser can't open (e.g. HEIC) asks for another or the camera — nothing is sent", async () => {
+    const fetchFn = stubFetch({ body: analysisEnvelope(candidate) });
+    render(<CompanionExperience />);
+    toGuidance("decline");
+    pickPhoto("image/heic");
+    await flush();
+    expect(screen.getByRole("alert")).toHaveTextContent("I couldn’t open that photo. Would you like to try another one");
+    expect(fetchFn.mock.calls.some(([u]) => u === "/api/label/analyze")).toBe(false);
+  });
+
+  it("photo: an unreadable answer blocks instructions", async () => {
     stubFetch({
       body: analysisEnvelope({
         outcome: "unreadable",
@@ -344,8 +369,7 @@ describe("in-call flow", () => {
     });
     render(<CompanionExperience />);
     toGuidance("decline");
-    fireEvent.click(screen.getByRole("button", { name: /upload a photo — demo/i }));
-    fireEvent.click(screen.getByRole("button", { name: /blurry label photo/i }));
+    pickPhoto();
     await flush();
     expect(screen.getByText("Let’s check this one together.")).toBeInTheDocument();
     expect(screen.getByText("I couldn’t read the label clearly.")).toBeInTheDocument();
@@ -367,13 +391,12 @@ describe("in-call flow", () => {
     ["network error", "network-error"],
     ["malformed response", { body: { hello: "world" } }],
   ] as const)(
-    "mock upload: %s → safe fallback, never an explanation, and the demo label still works",
+    "photo: %s → safe fallback, never an explanation, and choosing from the record still works",
     async (_n, analyze) => {
       stubFetch(analyze as Parameters<typeof stubFetch>[0]);
       render(<CompanionExperience />);
       toGuidance("decline");
-      fireEvent.click(screen.getByRole("button", { name: /upload a photo — demo/i }));
-      fireEvent.click(screen.getByRole("button", { name: /clear label photo/i }));
+      pickPhoto();
       await flush();
       // A service failure keeps its original wording (only label outcomes are softened).
       expect(screen.getByText("I’m not sure enough to explain this safely.")).toBeInTheDocument();
@@ -381,7 +404,8 @@ describe("in-call flow", () => {
       expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
 
       fireEvent.click(screen.getByRole("button", { name: "Try another photo" }));
-      fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+      fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
+    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
       await flush();
       expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
     },
@@ -397,6 +421,7 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("What is this for?");
     fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
     expect(screen.getByText("I need to see the writing clearly.")).toBeInTheDocument();
     expect(getUserMedia).not.toHaveBeenCalled(); // explained first, nothing activated
 
@@ -411,7 +436,8 @@ describe("in-call flow", () => {
     expect(stop).not.toHaveBeenCalled();
 
     // Leaving the screen (here: using the demo label) stops the camera.
-    fireEvent.click(screen.getByRole("button", { name: /use demo label/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
+    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     expect(stop).toHaveBeenCalled();
   });
 
@@ -424,8 +450,8 @@ describe("in-call flow", () => {
     toGuidance("grant");
     await flush();
     expect(screen.getByText("The camera is off.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /use demo label/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /upload a photo — demo/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose a photo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose from my medicines" })).toBeInTheDocument();
   });
 
   it("End call returns to the quiet landing state", () => {

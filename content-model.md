@@ -690,3 +690,17 @@ Offered in the camera step's other ways (reached after "Not now" and after anoth
 | `chooseFromMedicines` | Choose from my medicines | 从我的药物中选择 |
 | `medicineListHeading` | Which medicine are you holding? | 您手上拿的是哪一种药？ |
 | `medicineListNote` | These are the medicines on your BrightCare Pharmacy record. You'll still check it on the next step. | 这些是您在BrightCare药房记录中的药物。下一步您仍需要确认。 |
+
+### H2. Showing the medicine: camera or photo
+
+After "Show medicine": `showMedicineHeading` with `photoIntro`, two equal primary actions `Use camera` (→ the existing consent question) and `Choose a photo` (system picker, `accept="image/*"`, no `capture`), and the text action `Type the name`. The camera step's other ways are Choose a photo, Choose from my medicines, and Type the label details. "Use demo label" and the sample-photo picker are removed from the UI; their fixtures remain for reducer tests only. The bundled fictional label photos in `public/samples/` are kept so testers can save one and choose it as a photo.
+
+| Key | English | Simplified Chinese |
+|---|---|---|
+| `showMedicineHeading` | How would you like to show me your medicine? | 您想怎样给我看您的药？ |
+| `useCamera` / `choosePhoto` / `typeName` | Use camera / Choose a photo / Type the name | 使用相机 / 选择照片 / 输入药名 |
+| `photoIntro` | You can choose a photo of your medicine label. I'll only look at the medicine name, and the photo won't be kept. | 您可以选择一张药品标签的照片。我只看药品名称，照片不会被保存。 |
+| `photoFormat` | I couldn't open that photo. Would you like to try another one, or use the camera instead? | 这张照片我打不开。您想换一张，还是改用相机？ |
+| `unclearShowMedicine` | I didn't quite catch that. You can say "camera", choose a photo, or tell me the medicine name and strength. | 我没太听清楚。您可以说「相机」、选择照片，或告诉我药物名称和剂量。 |
+
+Removed: `useDemoLabel`, `uploadPhoto`, `samplePicker*`, `sample*`, `sampleLoadError`. Rewritten without demo-label wording: `cameraDeniedBody`, `cameraUnavailableBody`, `fallbackBody`, `reasonService`, `unclearCameraGuidance`.

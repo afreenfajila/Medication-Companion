@@ -8,7 +8,7 @@ import { classifySafety } from "@/lib/safety/classify";
 import { sessionStore } from "@/lib/session/session-store";
 import { guardRequestedState, type Session } from "@/lib/session/state-machine";
 import { speakableText } from "@/lib/voice/speakable";
-import { askUnknown, chooseShowMedicine, grantCamera, resolve, run, startCall, submitDemo, toConfirmMatch, toExplain } from "./helpers";
+import { askUnknown, chooseShowMedicine, chooseCamera, grantCamera, resolve, run, startCall, submitDemo, toConfirmMatch, toExplain } from "./helpers";
 
 // One test per claim in the Assignment 02 concept deck, in deck order.
 
@@ -55,8 +55,10 @@ describe("primary journey (deck): question → Show medicine → camera → poss
     send("What is this for? When do I take it?");
     expect(screen.getByText("Let’s check this together. Would you like to show me the medicine label?")).toBeInTheDocument();
     click(/show medicine/i);
+    click("Use camera");
     click(/yes, switch camera/i); // consent before the camera
-    click(/use demo label/i); // jsdom has no camera → demo/sample/typed fallback
+    click("Choose from my medicines");
+    click("Metformin 500 mg"); // jsdom has no camera → demo/sample/typed fallback
     act(() => void vi.advanceTimersByTime(1000));
 
     expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument(); // possible match, not certain
@@ -93,7 +95,7 @@ describe("3. explanation cannot appear before confirmation", () => {
 });
 
 describe("4. no-match / unreadable blocks instructions — one retry, then human help only", () => {
-  const toGuidance = () => run([startCall, askUnknown, chooseShowMedicine, grantCamera]);
+  const toGuidance = () => run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera]);
 
   it.each(["sample_unreadable_label", "sample_mismatch_label"] as const)("%s → safety with no instruction", (asset) => {
     const s = run([submitDemo(asset), resolve], toGuidance());
@@ -107,13 +109,16 @@ describe("4. no-match / unreadable blocks instructions — one retry, then human
     click(/call with companion/i);
     send("What is this for?");
     click(/show medicine/i);
+    click("Use camera");
     click(/yes, switch camera/i);
-    click(/use demo label/i);
+    click("Choose from my medicines");
+    click("Metformin 500 mg");
     act(() => void vi.advanceTimersByTime(1000));
     click("No, try again");
 
     click("Try another photo"); // the one retry
-    click(/use demo label/i);
+    click("Choose from my medicines");
+    click("Metformin 500 mg");
     act(() => void vi.advanceTimersByTime(1000));
     click("No, try again");
 
@@ -177,13 +182,13 @@ describe("voice layer speaks approved text only", () => {
       run([startCall]),
       run([startCall, askUnknown]),
       run([startCall, askUnknown, chooseShowMedicine]),
-      run([startCall, askUnknown, chooseShowMedicine, grantCamera]),
+      run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera]),
       toConfirmMatch(),
       explain,
       run([{ type: "EXPLAIN_STEP", direction: "next" }], explain),
       run([{ type: "EXPLAIN_STEP", direction: "next" }, { type: "EXPLAIN_STEP", direction: "next" }], explain),
       run([{ type: "UNDERSTOOD" }], explain),
-      run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo("sample_unreadable_label"), resolve]),
+      run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo("sample_unreadable_label"), resolve]),
       run([startCall, { type: "USER_MESSAGE", text: "I have chest pain" }]),
     ];
     for (const lang of ["en", "zh-Hans"] as const) {
