@@ -45,6 +45,9 @@ const en = {
     "Let’s check this together. Would you like to show me the medicine label?",
   clarificationPrompt:
     "Would you like to show me a medicine label, or ask about your medicine schedule?",
+  // Unclear or unrelated input: what the companion can do, then the two doors.
+  capabilityGuide:
+    "I’m here to help with your medicines. I can check a medicine label with you, then explain what your pharmacy record says about it, in English or 中文. Would you like to show me a medicine label, or ask about your medicine schedule?",
   scheduleNeedsRecord:
     "To talk about your schedule, I first need to check a medicine against your record. Would you like to show me the medicine label?",
   prescriptionsListed:
@@ -335,6 +338,8 @@ const zhHans: Copy = {
   callGreeting: "您好，我是AI向导。今天想了解什么呢？",
   showLabelQuestion: "让我们一起查看。您想给我看药物标签吗？",
   clarificationPrompt: "您想给我看药物标签，还是询问您的服药时间？",
+  capabilityGuide:
+    "我可以帮您了解您的药物。我可以和您一起核对药品标签，再用中文或英文解释您药房记录上的内容。您想给我看药物标签，还是询问您的服药时间？",
   scheduleNeedsRecord:
     "要谈服药时间，我需要先对照您的记录核对药物。您想给我看药物标签吗？",
   prescriptionsListed:

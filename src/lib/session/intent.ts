@@ -240,9 +240,11 @@ export function routeMessage(
       contextualActions: ["show-medicine", "ask-schedule"],
     };
   }
+  // Unclear or random ("I don't know what to do", "banana"): say what the companion
+  // can help with, then offer the same two doors — guidance, not a bare question.
   return {
     intent: "general",
-    assistantKey: "clarificationPrompt",
+    assistantKey: "capabilityGuide",
     contextualActions: ["show-medicine", "ask-schedule"],
   };
 }

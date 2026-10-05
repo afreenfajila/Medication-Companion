@@ -12,6 +12,7 @@ import type { ContextualActionId, UiLanguage } from "@/types/content";
  */
 export const UNDERSTAND_KEYS = [
   "clarificationPrompt",
+  "capabilityGuide",
   "showLabelQuestion",
   "prescriptionsListed",
   "medicineMentioned",

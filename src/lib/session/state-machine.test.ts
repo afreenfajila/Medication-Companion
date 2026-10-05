@@ -116,7 +116,7 @@ describe("conversation routing and contextual actions", () => {
     // Saying the name again instead of yes/no.
     expect(routeMessage("metformin", afterCheck).assistantKey).toBe("medicineMentioned");
     // A bare "yes" means nothing special when the name check wasn't the last question.
-    expect(routeMessage("yes", none).assistantKey).toBe("clarificationPrompt");
+    expect(routeMessage("yes", none).assistantKey).toBe("capabilityGuide");
     // Safety still comes first, even as an answer to the check.
     expect(routeMessage("yes, I can't breathe", afterCheck).intent).toBe("urgent-risk");
   });
@@ -183,12 +183,15 @@ describe("conversation routing and contextual actions", () => {
     expect(r.contextualActions).toEqual([]);
   });
 
-  it("broad/unclear request → the same clarification with both actions", () => {
-    const r = routeMessage("I need something", none);
-    expect(r.intent).toBe("general");
-    expect(r.assistantKey).toBe("clarificationPrompt");
-    expect(r.contextualActions).toEqual(["show-medicine", "ask-schedule"]);
-  });
+  it.each(["I need something", "i dont know what to do", "banana", "我不知道该怎么办"])(
+    "unclear or random %j → says what the companion can do, then offers both actions",
+    (text) => {
+      const r = routeMessage(text, none);
+      expect(r.intent).toBe("general");
+      expect(r.assistantKey).toBe("capabilityGuide");
+      expect(r.contextualActions).toEqual(["show-medicine", "ask-schedule"]);
+    },
+  );
 
   it("human-help request → safety; unsafe/urgent → safety with no actions", () => {
     expect(routeMessage("I want to speak to a pharmacist", none).safetyReason).toBe("help-requested");

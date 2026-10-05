@@ -128,6 +128,15 @@ describe("in-call flow", () => {
     expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull();
   });
 
+  it("when the person is unsure what to do, the companion explains what it can help with", () => {
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    send("i dont know what to do");
+    expect(screen.getByText(/I can check a medicine label with you, then explain what your pharmacy record says/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ask about my schedule/i })).toBeInTheDocument();
+  });
+
   it("shows both temporary actions for a broad schedule question", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));

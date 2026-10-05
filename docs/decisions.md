@@ -660,3 +660,14 @@ fixed here; H covers choose-from-my-medicines, typed name on failure, real callb
   none of them is shown. The audit route was renamed because the caregiver view displays it, and the
   understanding prompt dropped "demo" so Claude doesn't repeat it.
 - **H1 went last** so that its "no demo anywhere" test could pass from the commit that adds it.
+
+## Unclear or random input gets guidance, not a bare question
+
+- Reported: "i dont know what to do" got only "Would you like to show me a medicine label, or ask about
+  your medicine schedule?", which doesn't tell the person what the companion is for.
+- The router's last-resort reply (intent `general`) is now `capabilityGuide`: what the companion can do
+  (check a label, then explain the pharmacy record, in English or 中文), then the same two doors.
+  `clarificationPrompt` stays, unchanged, for broad schedule questions, as CLAUDE.md requires.
+- `capabilityGuide` is an understanding key, so when Claude is configured it can say the same thing in
+  its own words. The prompt now says to explain what it can help with when she seems unsure or says
+  something unrelated.
