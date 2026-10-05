@@ -257,6 +257,7 @@ const en = {
   checkPharmacy: "Check with pharmacy — demo",
   contactClinic: "Contact clinic — demo",
   askHelper: "Ask a trusted helper — demo",
+  moreHelpOptions: "More ways to get help",
   // Family help needs consent every time: the button only asks the question.
   askFamily: "Ask family to help — demo",
   familyConsent: "Shall I let your family know you’d like some help? I’ll only do this if you say yes.",
@@ -487,6 +488,7 @@ const zhHans: Copy = {
   checkPharmacy: "向药房确认 — 示范",
   contactClinic: "联系诊所 — 示范",
   askHelper: "询问可信任的人 — 示范",
+  moreHelpOptions: "更多求助方式",
   askFamily: "请家人帮忙 — 示范",
   familyConsent: "需要我告诉您的家人您想请他们帮忙吗？只有您同意，我才会联系。",
   familyConsentYes: "好，请告诉他们 — 示范",

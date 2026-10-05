@@ -210,6 +210,7 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("I want to die");
     expect(screen.getByRole("alert")).toHaveTextContent("This may need urgent help.");
+    expect(screen.getByRole("alert")).toHaveClass("bg-danger-100"); // urgent is the one red card
     expect(screen.getByText("Samaritans of Singapore (24 hours): 1767 · Emergency: 995")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /1767|995/ })).toBeNull();
   });
@@ -223,13 +224,22 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
     await flush();
 
-    // A label that doesn't match gets the gentler, no-fault wording — not an alarm.
+    // A label that doesn't match gets the gentler, no-fault wording — not an alarm —
+    // on a calm surface: only urgent risk is ever red.
     expect(screen.getByText("Let’s check this one together.")).toBeInTheDocument();
+    expect(screen.getByText("Let’s check this one together.").closest("section")).not.toHaveClass("bg-danger-100");
     expect(screen.queryByText("I’m not sure enough to explain this safely.")).toBeNull();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
     expect(screen.getByRole("button", { name: "Check with pharmacy — demo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ask a trusted helper — demo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try another photo" })).toBeInTheDocument();
+    // Only two filled/outlined buttons in view; the other help options are one tap away.
+    expect(screen.getByRole("button", { name: "Ask a trusted helper — demo" }).closest("details")).not.toBeNull();
+    const pinned = document.querySelector("[data-pinned]")!;
+    const inView = [...pinned.querySelectorAll('[data-variant="primary"], [data-variant="secondary"]')].filter(
+      (b) => !b.closest("details"),
+    );
+    expect(inView).toHaveLength(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Check with pharmacy — demo" }));
     expect(screen.getByText(/no call or message was sent/i)).toBeInTheDocument();

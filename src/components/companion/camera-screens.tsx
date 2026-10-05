@@ -159,6 +159,66 @@ export function CameraGuidanceScreen({
     </Btn>
   );
 
+  // Every way to show the label without the camera. Always open when the camera
+  // is off; behind one "Other ways" link when the live camera is the main action.
+  const otherWays = (
+    <div className="flex flex-col gap-4">
+      <p className="mx-auto max-w-[21rem] text-center text-[15px] text-navy-700">{t("spokenLabelHint")}</p>
+
+      <div role="group" aria-label={t("moreWays")} className="flex flex-col gap-3">
+        {demoButton(preview ? SecondaryButton : PrimaryButton)}
+        <SecondaryButton
+          aria-expanded={panel === "samples"}
+          onClick={() => setPanel(panel === "samples" ? null : "samples")}
+          icon={<FileImage className="h-5 w-5" aria-hidden="true" />}
+        >
+          {t("uploadPhoto")}
+        </SecondaryButton>
+
+        {panel === "samples" && (
+          <section
+            aria-label={t("samplePickerHeading")}
+            className="fade-in flex flex-col gap-3 rounded-lg border border-line bg-surface p-4"
+          >
+            <h3 className="text-[18px] font-bold leading-tight">{t("samplePickerHeading")}</h3>
+            <p className="text-sm leading-snug text-navy-700">{t("samplePickerNote")}</p>
+            <ul className="flex flex-col gap-2">
+              {samplePhotos.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => chooseSample(p.src)}
+                    className="flex min-h-14 w-full items-center gap-3 rounded-md border border-line bg-canvas p-2 text-left text-lg font-medium hover:border-teal-600 disabled:opacity-60"
+                  >
+                    <Image
+                      src={p.src}
+                      alt=""
+                      width={72}
+                      height={51}
+                      unoptimized
+                      className="h-[51px] w-[72px] shrink-0 rounded-sm object-cover"
+                    />
+                    <span>{t(p.labelKey)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <TextAction
+          className="self-center"
+          aria-expanded={panel === "typed"}
+          onClick={() => setPanel(panel === "typed" ? null : "typed")}
+        >
+          {t("typeLabelToggle")}
+        </TextAction>
+        {panel === "typed" && <TypedLabelForm t={t} onSubmit={onSubmit} />}
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-4">
       {preview ? (
@@ -221,60 +281,17 @@ export function CameraGuidanceScreen({
         </p>
       )}
 
-      <p className="mx-auto max-w-[21rem] text-center text-[15px] text-navy-700">{t("spokenLabelHint")}</p>
-
-      <div role="group" aria-label={t("moreWays")} className="flex flex-col gap-3">
-        {!preview && demoButton(PrimaryButton)}
-        {preview && demoButton(SecondaryButton)}
-        <SecondaryButton
-          aria-expanded={panel === "samples"}
-          onClick={() => setPanel(panel === "samples" ? null : "samples")}
-          icon={<FileImage className="h-5 w-5" aria-hidden="true" />}
-        >
-          {t("uploadPhoto")}
-        </SecondaryButton>
-
-        {panel === "samples" && (
-          <section
-            aria-label={t("samplePickerHeading")}
-            className="fade-in flex flex-col gap-3 rounded-lg border border-line bg-surface p-4"
-          >
-            <h3 className="text-[18px] font-bold leading-tight">{t("samplePickerHeading")}</h3>
-            <p className="text-sm leading-snug text-navy-700">{t("samplePickerNote")}</p>
-            <ul className="flex flex-col gap-2">
-              {samplePhotos.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => chooseSample(p.src)}
-                    className="flex min-h-14 w-full items-center gap-3 rounded-md border border-line bg-canvas p-2 text-left text-lg font-medium hover:border-teal-600 disabled:opacity-60"
-                  >
-                    <Image
-                      src={p.src}
-                      alt=""
-                      width={72}
-                      height={51}
-                      unoptimized
-                      className="h-[51px] w-[72px] shrink-0 rounded-sm object-cover"
-                    />
-                    <span>{t(p.labelKey)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <TextAction
-          className="self-center"
-          aria-expanded={panel === "typed"}
-          onClick={() => setPanel(panel === "typed" ? null : "typed")}
-        >
-          {t("typeLabelToggle")}
-        </TextAction>
-        {panel === "typed" && <TypedLabelForm t={t} onSubmit={onSubmit} />}
-      </div>
+      {preview ? (
+        // With the camera on, capture is THE action: the fallbacks wait one tap away.
+        <details className="text-center">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 text-base font-medium text-teal-800 underline underline-offset-4">
+            {t("moreWays")}
+          </summary>
+          <div className="mt-2 text-left">{otherWays}</div>
+        </details>
+      ) : (
+        otherWays
+      )}
     </div>
   );
 }
@@ -289,3 +306,4 @@ export function AnalyzingScreen({ t }: { t: T }) {
     </div>
   );
 }
+

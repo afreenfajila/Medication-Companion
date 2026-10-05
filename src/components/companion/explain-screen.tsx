@@ -65,6 +65,13 @@ export function ExplainScreen({
           </div>
         </div>
       )}
+      <TypedInput
+        t={t}
+        label={step < 2 ? t("explainHintNext") : t("explainHintDone")}
+        placeholder={step < 2 ? t("next") : t("iUnderstand")}
+        onSend={onSend}
+      />
+      {/* Secondary, so it sits last: the step's question and the way to answer it come first. */}
       <LanguageControl
         language={language}
         onChange={onLanguageChange}
@@ -78,12 +85,6 @@ export function ExplainScreen({
           malay: t("malay"),
           tamil: t("tamil"),
         }}
-      />
-      <TypedInput
-        t={t}
-        label={step < 2 ? t("explainHintNext") : t("explainHintDone")}
-        placeholder={step < 2 ? t("next") : t("iUnderstand")}
-        onSend={onSend}
       />
     </div>
   );

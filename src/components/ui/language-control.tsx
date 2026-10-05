@@ -1,4 +1,4 @@
-import { Globe } from "lucide-react";
+import { Check, Globe } from "lucide-react";
 import type { UiLanguage } from "@/types/content";
 import { cn } from "@/lib/utils/cn";
 
@@ -36,10 +36,14 @@ export function LanguageControl({
       aria-pressed={language === value}
       onClick={() => onChange(value)}
       className={cn(
-        "min-h-11 min-w-[5.5rem] flex-1 rounded-pill px-4 text-base font-bold transition-colors",
-        language === value ? "bg-navy-900 text-white" : "text-navy-900 hover:bg-teal-100",
+        "inline-flex min-h-11 min-w-[5.5rem] flex-1 items-center justify-center gap-1.5 rounded-pill px-4 text-base font-bold text-navy-900 transition-colors",
+        // A quiet tint + check, not a navy fill: this is a secondary control and
+        // must not out-shout the step's own question. The check means the
+        // selection isn't shown by colour alone.
+        language === value ? "bg-teal-100 ring-2 ring-inset ring-teal-600" : "hover:bg-canvas",
       )}
     >
+      {language === value && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
       {text}
     </button>
   );

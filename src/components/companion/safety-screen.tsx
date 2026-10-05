@@ -65,7 +65,9 @@ export function SafetyScreen({
     canRetryLabel(session),
     mentionsSelfHarm(session.userText),
   );
-  const [main, ...rest] = view.actions;
+  // At most two buttons in view; the other human-help options wait one tap
+  // away behind "More ways to get help" (native <details>, no state).
+  const [main, second, ...more] = view.actions;
 
   const run = (id: HelpActionId) =>
     id === "try-again" ? onTryAnother() : id === "ask-family" ? onAskFamily() : onDemoAction(id);
@@ -94,16 +96,25 @@ export function SafetyScreen({
             {label(main.labelKey)}
           </PrimaryButton>
         )}
-        {rest.slice(0, 2).map((a) => (
-          <SecondaryButton key={a.id} icon={ACTION_ICONS[a.id]} onClick={() => run(a.id)}>
-            {label(a.labelKey)}
+        {second && (
+          <SecondaryButton icon={ACTION_ICONS[second.id]} onClick={() => run(second.id)}>
+            {label(second.labelKey)}
           </SecondaryButton>
-        ))}
-        {rest.slice(2).map((a) => (
-          <TextAction key={a.id} className="self-center" onClick={() => run(a.id)}>
-            {label(a.labelKey)}
-          </TextAction>
-        ))}
+        )}
+        {more.length > 0 && (
+          <details className="self-center text-center">
+            <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 text-base font-medium text-teal-800 underline underline-offset-4">
+              {t("moreHelpOptions")}
+            </summary>
+            <div className="flex flex-col items-center">
+              {more.map((a) => (
+                <TextAction key={a.id} icon={ACTION_ICONS[a.id]} onClick={() => run(a.id)}>
+                  {label(a.labelKey)}
+                </TextAction>
+              ))}
+            </div>
+          </details>
+        )}
 
         {session.helpAction && (
           <DemoNotice role="status">{t("demoActionNotice")}</DemoNotice>
