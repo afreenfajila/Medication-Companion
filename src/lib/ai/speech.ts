@@ -21,18 +21,45 @@ export class SpeechUnavailableError extends Error {
   }
 }
 
+// Finished lines are cached, so repeats and the fixed copy lines every call
+// shares (greeting, label question) are instant and cost no Gemini quota.
+// ponytail: per-instance Map with oldest-first eviction; a shared store if it ever runs on many instances.
+const cache = new Map<string, Buffer>();
+const CACHE_MAX = 200;
+// A style line sets the warm tone and stops the model treating short or mixed-language text as a prompt.
+const STYLE = "Read aloud in a warm, calm, unhurried voice, like a kind friend:";
+
+export function clearSpeechCache(): void {
+  cache.clear();
+}
+
 /** Returns a ready-to-serve WAV buffer for the given text, or throws SpeechUnavailableError. */
 export async function synthesizeSpeechWav(text: string): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new SpeechUnavailableError("GEMINI_API_KEY is not set", "not-configured");
 
-  const ai = new GoogleGenAI({ apiKey });
+  const model = process.env.GEMINI_TTS_MODEL || DEFAULT_TTS_MODEL;
+  const key = `${model}|${text}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
 
+  const { pcm, sampleRate, channels } = await synthesizePcm(new GoogleGenAI({ apiKey }), model, text);
+  const wav = pcmToWav(pcm, sampleRate, channels);
+  if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
+  cache.set(key, wav);
+  return wav;
+}
+
+async function synthesizePcm(
+  ai: GoogleGenAI,
+  model: string,
+  text: string,
+): Promise<{ pcm: Buffer; sampleRate: number; channels: number }> {
   let response: Awaited<ReturnType<typeof ai.models.generateContent>>;
   try {
     response = await ai.models.generateContent({
-      model: process.env.GEMINI_TTS_MODEL || DEFAULT_TTS_MODEL,
-      contents: text,
+      model,
+      contents: `${STYLE} ${text}`,
       config: {
         responseModalities: ["AUDIO"],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: DEFAULT_VOICE } } },
@@ -55,5 +82,5 @@ export async function synthesizeSpeechWav(text: string): Promise<Buffer> {
   const { sampleRate, channels } = parsePcmMimeType(part.inlineData.mimeType);
   const pcm = Buffer.from(part.inlineData.data, "base64");
   if (pcm.length === 0) throw new SpeechUnavailableError("Gemini returned empty audio", "invalid-output");
-  return pcmToWav(pcm, sampleRate, channels);
+  return { pcm, sampleRate, channels };
 }

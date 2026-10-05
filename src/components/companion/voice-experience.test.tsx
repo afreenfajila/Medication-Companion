@@ -571,7 +571,7 @@ describe("words and voice arrive together", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     expect(fake.utterances).toHaveLength(0);
 
-    await act(async () => vi.advanceTimersByTime(3500));
+    await act(async () => vi.advanceTimersByTime(6000));
     expect(fake.utterances.at(-1)?.text).toBe(GREETING);
     expect(screen.getByText(GREETING)).toBeInTheDocument();
   });

@@ -8,7 +8,7 @@ vi.mock("@google/genai", () => ({
   },
 }));
 
-import { SpeechUnavailableError, synthesizeSpeechWav } from "./speech";
+import { clearSpeechCache, SpeechUnavailableError, synthesizeSpeechWav } from "./speech";
 
 const audioResponse = (base64: string, mimeType = "audio/l16; rate=24000; channels=1") => ({
   candidates: [{ content: { parts: [{ inlineData: { data: base64, mimeType } }] } }],
@@ -17,6 +17,7 @@ const shortPcmBase64 = Buffer.from([1, 2, 3, 4]).toString("base64");
 
 beforeEach(() => {
   generateContent.mockReset();
+  clearSpeechCache();
   vi.stubEnv("GEMINI_API_KEY", "test-key");
   vi.stubEnv("GEMINI_TTS_MODEL", "");
 });
@@ -39,7 +40,7 @@ describe("synthesizeSpeechWav", () => {
 
     const req = generateContent.mock.calls[0][0];
     expect(req.model).toBe("gemini-3.1-flash-tts-preview");
-    expect(req.contents).toBe("Here is what your record says.");
+    expect(req.contents).toMatch(/warm.*: Here is what your record says.$/);
     expect(req.config.responseModalities).toEqual(["AUDIO"]);
     expect(req.config.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBeTruthy();
   });
@@ -75,5 +76,12 @@ describe("synthesizeSpeechWav", () => {
     expect(err).toBeInstanceOf(SpeechUnavailableError);
     expect((err as SpeechUnavailableError).reason).toBe("service-error");
     expect((err as Error).message).not.toMatch(/AIzaSecretKey123/);
+  });
+
+  it("caches a finished line, so a repeat costs no Gemini call", async () => {
+    generateContent.mockResolvedValue(audioResponse(shortPcmBase64));
+    const first = await synthesizeSpeechWav("Shall we check the label?");
+    expect(await synthesizeSpeechWav("Shall we check the label?")).toBe(first);
+    expect(generateContent).toHaveBeenCalledTimes(1);
   });
 });

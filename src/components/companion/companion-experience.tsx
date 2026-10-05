@@ -37,7 +37,7 @@ const UNDERSTAND_BUDGET_MS = 4000;
 const UNDERSTAND_HISTORY_TURNS = 6;
 // Longest the words are held back waiting for Gemini's voice to start before
 // switching to the browser voice instead.
-const VOICE_WAIT_MS = 3500;
+const VOICE_WAIT_MS = 6000; // Gemini renders sentences in parallel: ~3–5 s fresh, instant when cached
 
 /**
  * The whole call — from "Call with companion" to "End call" — happens on this
