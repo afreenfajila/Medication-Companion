@@ -13,3 +13,11 @@ describe("A4 confidence scoring", () => {
     expect(determineEscalation(calculateConfidence({ ...best, severity: "C" }), "C").action).toBe("alert_family");
   });
 });
+
+describe("A4 pause condition", () => {
+  it("Tier C alerts family even with weak data and evidence", () => {
+    const weak = { dataQuality: "Level3", evidenceStrength: "C", severity: "C" } as const;
+    expect(calculateConfidence(weak)).toBe(60);
+    expect(determineEscalation(calculateConfidence(weak), "C").action).toBe("alert_family");
+  });
+});

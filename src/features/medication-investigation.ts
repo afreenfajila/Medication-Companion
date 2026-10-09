@@ -100,7 +100,12 @@ export function determineEscalation(
   let action: "alert_family" | "user_decides" | "mention_only";
   let reasoning: string;
 
-  if (confidence >= 80) {
+  if (severity === "C") {
+    // Pause condition: red-flag symptoms bypass the score — weak data must never silence an emergency.
+    action = "alert_family";
+    reasoning =
+      "Red-flag symptom: questions stop and family is alerted now, whatever the score. Family decides whether to call 995.";
+  } else if (confidence >= 80) {
     action = "alert_family";
     reasoning =
       "High confidence: potential serious interaction detected. Family contacted for immediate attention.";
