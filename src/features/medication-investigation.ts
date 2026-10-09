@@ -77,33 +77,19 @@ export function assessSeverity(responses: {
 }
 
 // Calculate confidence score from three factors
+// Additive points model (max 90). Severity carries the most weight, so only
+// Tier C harm can reach the ≥80% family-alert threshold (Guardrail 5: no cry-wolf).
+// ponytail: fixed point table; calibrate against pharmacist review before real use.
+const SEVERITY_POINTS = { A: 10, B: 25, C: 40 } as const; // mild / medium / emergency
+const DATA_QUALITY_POINTS = { Level1: 30, Level2: 20, Level3: 10 } as const; // pharmacy / user / unverified
+const EVIDENCE_POINTS = { A: 20, B: 15, C: 10 } as const; // documented / database / theoretical
+
 export function calculateConfidence(factors: ConfidenceFactors): number {
-  // ponytail: simple weighted average for demo
-  // In production, multiply factors: (DataQuality × EvidenceStrength × Severity)
-  const dataQualityScore =
-    {
-      Level1: 1.0, // pharmacy record highest confidence
-      Level2: 0.6, // user reported
-      Level3: 0.3, // unverified
-    }[factors.dataQuality] || 0.3;
-
-  const evidenceScore =
-    {
-      A: 1.0, // documented
-      B: 0.7, // database
-      C: 0.4, // theoretical
-    }[factors.evidenceStrength] || 0.4;
-
-  const severityScore =
-    {
-      A: 0.6, // mild: lower escalation pressure
-      B: 0.9, // medium: moderate escalation
-      C: 1.0, // emergency: immediate escalation
-    }[factors.severity] || 0.5;
-
-  // Combined confidence
-  const combined = dataQualityScore * evidenceScore * severityScore;
-  return Math.round(combined * 100);
+  return (
+    SEVERITY_POINTS[factors.severity] +
+    DATA_QUALITY_POINTS[factors.dataQuality] +
+    EVIDENCE_POINTS[factors.evidenceStrength]
+  );
 }
 
 // Determine escalation action based on confidence and severity
@@ -125,7 +111,7 @@ export function determineEscalation(
   } else {
     action = "mention_only";
     reasoning =
-      "Low confidence: insufficient data. Mentioning to family for awareness only, no urgent alert.";
+      "Low confidence: mention to the user only, no family alert. Watch the symptom and call if it gets worse.";
   }
 
   return { confidence, action, reasoning };
@@ -141,7 +127,7 @@ export const DEMO_SCENARIOS = {
       evidenceStrength: "A",
       severity: "B",
     },
-    expectedConfidence: 90,
+    expectedConfidence: 75,
   },
   scenario2: {
     // "My dose changed?"
@@ -151,16 +137,16 @@ export const DEMO_SCENARIOS = {
       evidenceStrength: "A",
       severity: "B",
     },
-    expectedConfidence: 90,
+    expectedConfidence: 75,
   },
   scenario5: {
     // "I forgot if I took it today?"
-    description: "Adherence recall with escalation",
+    description: "Adherence recall",
     factors: {
       dataQuality: "Level2",
       evidenceStrength: "B",
       severity: "A",
     },
-    expectedConfidence: 35,
+    expectedConfidence: 45,
   },
-};
+} satisfies Record<string, { description: string; factors: ConfidenceFactors; expectedConfidence: number }>;

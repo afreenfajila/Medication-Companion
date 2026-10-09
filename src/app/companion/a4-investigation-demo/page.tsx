@@ -190,7 +190,7 @@ export default function A4InvestigationDemoPage() {
         <div className="rounded-lg border border-navy-200 bg-navy-50 p-6">
           <MedicationInvestigationFeed
             steps={steps}
-            confidenceFactors={scenario.factors as any}
+            confidenceFactors={scenario.factors}
           />
         </div>
 

@@ -15,11 +15,9 @@ export interface InvestigationStep {
 
 export function MedicationInvestigationFeed({
   steps,
-  currentQuestion?: number,
-  confidenceFactors?: ConfidenceFactors,
+  confidenceFactors,
 }: {
   steps: InvestigationStep[];
-  currentQuestion?: number;
   confidenceFactors?: ConfidenceFactors;
 }) {
   // Calculate confidence and escalation if factors provided
@@ -130,9 +128,9 @@ export function MedicationInvestigationFeed({
 
               {escalation.action === "mention_only" && (
                 <div className="rounded-lg border-l-4 border-blue-600 bg-blue-50 p-3">
-                  <p className="font-semibold text-blue-900">Mentioned to Family</p>
+                  <p className="font-semibold text-blue-900">Noted for You</p>
                   <p className="text-sm text-blue-800">
-                    I'll let your family know about this for awareness. Call if you feel worse.
+                    Keep an eye on how you feel. If it gets worse, call your pharmacist.
                   </p>
                 </div>
               )}
