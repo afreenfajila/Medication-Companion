@@ -96,8 +96,8 @@ export function calculateConfidence(factors: ConfidenceFactors): number {
 
   const severityScore =
     {
-      A: 0.5, // mild: lower escalation pressure
-      B: 0.8, // medium: moderate escalation
+      A: 0.6, // mild: lower escalation pressure
+      B: 0.9, // medium: moderate escalation
       C: 1.0, // emergency: immediate escalation
     }[factors.severity] || 0.5;
 
