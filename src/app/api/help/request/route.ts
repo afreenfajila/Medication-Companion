@@ -43,7 +43,7 @@ export async function POST(request: Request): Promise<Response> {
   if (kind === "pharmacist-callback") {
     const result = await services.pharmacy.requestCallback(patientId, reason);
     if (!result.ok) return unavailable(requestId);
-    return ok(helpResultSchema.parse({ kind, reference: result.reference, expectedWindow: result.expectedWindow }), requestId);
+    return ok(helpResultSchema.parse({ kind, reference: result.reference }), requestId);
   }
 
   // Care circle: the person has just said "Yes" on the consent step — that is what this request means.

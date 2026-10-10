@@ -76,7 +76,6 @@ export const helpRequestSchema = z.object({
 export const helpResultSchema = z.object({
   kind: z.enum(HELP_KINDS),
   reference: z.string().optional(),
-  expectedWindow: z.string().optional(),
   contactName: z.string().optional(),
 });
 export type HelpResult = z.infer<typeof helpResultSchema>;

@@ -689,3 +689,82 @@ fixed here; H covers choose-from-my-medicines, typed name on failure, real callb
   medicine when nobody else has; that check is deterministic.
 - **Limit:** pattern rules can't catch every vague phrasing. Anything they miss still lands on the
   capability guide, which is itself a clarifying question.
+
+## A4. Dose-change check: show the difference, never resolve it
+
+- **Scenario:** Mei Ling says "My doctor changed my medicine, but this box still says the old amount.
+  How many should I take now?" The companion helps confirm the medicine, compares the box with the
+  current fictional record, and prepares a simulated pharmacist callback. Success is that the
+  difference is seen, the limit is said, and a reviewed request is sent. The dose question stays
+  explicitly unresolved.
+- **One state system:** `session.doseCheck` is a sub-flow on the existing reducer, like `helpFlow`.
+  Every step after identification lives inside `explain`, so the existing confirmation gate still
+  guards it. The deterministic safety classifier still runs first, so "should I stop it?" escalates
+  as before, and a symptom mid-check pauses it and "Carry on" returns with context intact.
+- **Comparison:** structured fields (amount, times a day, timing), not strings. A field present on
+  both sides that differs is a conflict. A field missing on either side is "insufficient", never a
+  guess. The newer record is never treated as correct. The additive investigation score
+  (`src/features/medication-investigation.ts`) is not used.
+- **Readings stay unconfirmed:** a camera reading (simulated by reviewer scenarios only) or words
+  said in the call are shown back for confirmation. Only a confirmed label is compared. Real
+  photos are not read for instructions: Claude extraction stays identity-only.
+- **Callback:** the review panel is the draft, and the payload is built from the same draft
+  (`buildCallbackPayload`). It has no photo, transcript or audio. Any edit bumps the revision and
+  clears approval. A label edit that removes the conflict sets the draft aside. The request ID is
+  call plus revision, so retries and double taps are one logical request, and late answers for an
+  ended call or an edited draft are dropped.
+- **Simulated:** `SimulatedDoseCallbackService` runs in the browser and makes no network call. There
+  is no reference to a real pharmacy and no claim that anyone will call. Deduplication is an
+  in-memory map per browser tab, lost on reload.
+- **Copy rules:** the A4 specs (content-model §3, §17, §18) supersede A3's H1 and tone rule 6.
+  - Simulated outcomes must say "Demo"; the framing test now checks that, instead of banning the
+    word.
+  - The tone test still exempts `doseConflict`'s mandated "…which instruction you should follow."
+    It should be rewritten to the content-model §18 rules in the docs pass.
+
+## A4 review fixes, first group (10 October 2026)
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| A callback answer is accepted even while the help screen is open | Probe test: Get help during "Sending…" dropped the answer and stuck the request on "Sending…" (site-contract §20, SR-08) | The outcome is recorded off-screen and shown on return | `dose-check.test.ts`: "getting help while a request is sending…" |
+| The dose check always uses the real fixture, never study mode's wrong explanation | Probe test: with `wrong-explanation`, a matching label showed as a conflict (content-model §22) | Study mode still affects the ordinary explanation only | `dose-check.test.ts`: "study mode's wrong explanation never reaches the dose check" |
+| New "unknown" outcome: a timeout or error claims neither delivery nor non-delivery | site-contract §17, §19; design-standard §17 | 15 s timeout. Edit and "Don't send" are blocked while the outcome is unknown, because it may already have been sent | Reducer, adapter and UI tests; scenario 6 |
+| Same request ID with different content is refused | site-contract §17 | Simulated only, per tab | Adapter test |
+| Help-flow copy: no callback-time promise; sent and family outcomes say "Demo" | SR-09, site-contract §16, content-model §17 | `expectedWindow` removed from the service, route and schema | Route, service and framing tests |
+| `recordConflict` no longer guesses why the record differs | content-model §18, design-standard §3 | It now says it can't tell which applies and offers a pharmacist | Full suite |
+- **Needs review:** the zh-Hans dose-check lines need native-speaker review. The parser covers this
+  record's wording only; a real product needs a reviewed label grammar. No clinical validation is
+  implied.
+
+## A4 review fixes, second group (10 October 2026)
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| Label wording has revisions; confirmation binds to one revision; new wording clears the old confirmation and comparison | CLAUDE.md §5.4, site-contract §8–9, content-model §9 | Typed wording is shown back once more for confirmation: one extra tap, by design (design-standard §14) | `dose-check.test.ts`, "label wording: revisions and confirmation" |
+| A label edit inside the review panel goes back through the label check before the summary can be sent | design-standard §14: "require confirmation of the new revision" | The summary waits, unapproved, until confirmed | "a label edit in the summary must be reconfirmed…" |
+| "I can't confirm it" yields insufficient information | design-standard §14; content-model §2.5 | No callback offer from this state (the incomplete-reason callback is still open) | "'I can't confirm it' is insufficient…" |
+| Record version `brightcare-metformin-v1`, stamped on comparisons, audit events and the summary | content-model §6, §11; site-contract §9.4 | A single fixture version; no version-change scenario | "audit events carry versions…" |
+| Callback summary uses the content-model §13 shape, built from an allowlist with `simulated: true` | content-model §13 | Recipient fixed; reason is always `instruction-discrepancy` for now | Payload allowlist test (an injected extra field is dropped) |
+| Panel: full-size confirmation buttons, text of 16 px or more, neutral identical styling for both sources, no checkmark on a match | design-standard §6, §12, §15 | The record source line elsewhere was also raised to 16 px | UI tests |
+
+## A4 review fixes, third group (10 October 2026)
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| Text and panels no longer wait for the voice to start | PRD EN-05, site-contract §21, design-standard §3 | Words can appear a moment before the voice. This reverses the A3 "words and voice together" hold | `voice-experience.test.tsx`: "shows the companion's words at once…" |
+| Callbacks also for an incomplete comparison and an unreachable record, with truthful reasons and nothing invented | content-model §12–13, DEMO-05 | A summary only follows a correction that keeps the same reason; otherwise it is set aside | "callback reasons, return to call…" tests |
+| "Return to call" after an outcome says the question is still unresolved | DC-09, site-contract §9.13 | The dose check is closed; a new one starts fresh | Reducer and UI tests |
+| Log events renamed to content-model §21; "approved" is separate from "submitted"; retries and interruptions logged | content-model §21, site-contract §23 | `simulated` and revisions live in `details`; requirement IDs aren't logged yet | "logs each step under its content-model name…" |
+| Focus moves to the new panel only when the pressed button disappeared | PRD §12, design-standard §21 | Never moves focus that's elsewhere | UI focus test |
+| Reload notice on the start screen | site-contract §10 | Based on the saved activity log (a call started but never ended) | UI test |
+| Copy aligned to content-model §3, §12, §15, §17 | Approved wording | zh-Hans pending review | UI tests |
+| Caregiver chips name their object ("Medicine identity confirmed"); callback events show "Needs help"; 16 px | design-standard §6, §22 | Chip set unchanged otherwise | Full suite |
+| All fictional numbers are `0000 …` (never dialable in Singapore) | content-model §5 | — | Full suite |
+
+## A4 presentation changes (10 October 2026)
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| The call shows only the person's latest response and the companion's current message; earlier turns sit behind "Earlier in this call" | design-standard §10; instructor feedback ("simplify the mobile journey") | History is one tap away rather than always on screen; it is still announced line by line as it happens | UI test: "the call shows the latest exchange…" |
+| Confirm screen: "Is this the medicine you mean?", "Yes, this is the medicine", "I'm not sure" as a full button, and the fictional record source shown | design-standard §12–13 | The found-match sentence stays as a line above the question, and is still spoken | Existing journey tests, updated wording |
+| About page: dose-change callbacks run in the browser only; examples aren't for real use; validation pending; it doesn't pick between differing instructions | content-model §3 | — | Framing tests |

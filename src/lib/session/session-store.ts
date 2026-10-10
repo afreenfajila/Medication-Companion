@@ -52,12 +52,17 @@ function hydrate(): void {
         typeof p.callCount === "number" &&
         (p.persona === "mei-ling" || p.persona === "caregiver")
       ) {
+        // A call that started and never ended was cut off by a reload. It isn't rebuilt
+        // (no approval or request is restored), but the start screen says so.
+        const types = p.audit.map((e) => e.eventType);
+        const interrupted = types.lastIndexOf("call-started") > types.lastIndexOf("call-ended");
         current = {
           ...current,
           persona: p.persona,
           callCount: p.callCount,
           auditSeq: p.auditSeq,
           audit: p.audit,
+          previousCallInterrupted: interrupted,
         };
       }
     }

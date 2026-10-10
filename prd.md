@@ -2,343 +2,701 @@
 
 ## 1. Document status
 
-- **Product:** Medication Companion
-- **Repository:** `medication-companion-prototype`
-- **Deployment:** `medication-companion-demo` on Vercel
-- **Version:** 0.2 — assignment prototype MVP
-- **Primary platform:** Mobile-first web app, usable on desktop as a phone-shaped demo
-- **Audience:** ELVTR AI Product Design Assignment 02 reviewers and moderated prototype-test participants
+| Field | Value |
+|---|---|
+| Product | Medication Companion |
+| Repository | afreenfajila/Medication-Companion |
+| Target branch | assignment-4 |
+| Document version | 0.4 — proposed Assignment 4 scope |
+| Last updated | 10 October 2026 |
+| Primary platform | Mobile-first web prototype |
+| Assignment 4 submission | 14 October 2026 |
+| Assignment 5 submission | 15 October 2026 |
+| Primary audience | Design reviewers and designer-led evaluators |
+| Data | Fictional only |
+| Pharmacy and communication services | Simulated only |
+| Implementation verification | Pending code review and test results |
+
+This document defines intended behaviour. It does not establish that
+the implementation satisfies every requirement.
+
+The Assignment 5 brief must be checked separately before finalising
+the case-study deliverables.
+
+### Status language
+
+Use these labels in documentation and presentation:
+
+- Implemented: behaviour verified against a named build.
+- Simulated: interactive behaviour representing an external service.
+- Proposed: specified but not yet implemented.
+- Unvalidated: requires further user, language, clinical, or regulatory review.
+
+Do not present proposed behaviour as implemented or prototype tests
+as evidence of clinical safety.
+
 
 ## 2. Product proposition
 
-Medication Companion helps older adults in Singapore understand a **verified current pharmacy record** in plain language, including Simplified Chinese, through a calm voice-led interaction.
+Medication Companion is a voice-first guide that helps older adults
+in Singapore understand information from their current medication
+record through a calm, accessible conversation.
 
-It does **not** diagnose, prescribe, change a dose, decide whether to take a medicine, or infer medication instructions from an uncertain label. It explains record-backed information, asks users to confirm possible label matches, and routes uncertainty to a pharmacist, clinic, trusted helper, or emergency help as appropriate.
+When the user's medicine label and record show different instructions,
+the companion makes the discrepancy visible and helps prepare a
+pharmacist callback request. It does not decide which conflicting
+instruction the user should follow.
+
+All records and services in this prototype are fictional or simulated.
 
 ### One-sentence promise
 
-> “Call your companion, and it will help you understand the information in your current pharmacy record — or help you reach a person when it is not sure.”
+“Call your companion to understand your medication record—or prepare
+a request for human help when the information cannot be resolved.”
 
-## 3. Problem and opportunity
+### Product boundary
 
-Older adults may manage prescription medicines at home after appointments or hospital discharge. English-heavy labels, small text, changing regimens, abbreviations, and lack of immediate support can make it difficult to answer: “Is this the right medicine, and how should I take it today?”
+The companion may:
 
-The product opportunity is not a generic medical chatbot. It is an AI-supported interpretation layer between a verified medication record and the person who needs to understand it. The person remains in control at every high-stakes step.
+- Explain approved record-backed information.
+- Suggest a possible medicine match.
+- Ask the user to confirm identity and label wording.
+- Compare confirmed instructions using defined rules.
+- Explain missing information and unresolved discrepancies.
+- Prepare a user-reviewed support request.
 
-The interaction begins with one familiar action—a call—not a menu of clinical categories. The companion listens, asks one focused follow-up where needed, requests camera permission before using the camera, and surfaces human help rather than guessing.
+The companion must not:
 
-## 4. Target users
+- Diagnose or establish the cause of a symptom.
+- Prescribe or recommend treatment.
+- Decide whether a person should take, stop, skip, or change a medicine.
+- Resolve conflicting instructions by selecting a dose.
+- Infer missing medication information.
+- Treat an image or user confirmation as clinical verification.
+- Claim that a real pharmacist has received or reviewed a demo request.
+
+This is a fictional prototype for design evaluation, not for medical use.
+Regulatory qualification of any future deployment has not been determined.
+
+
+## 3. Problem and design opportunity
+
+The project focuses on an older adult who is more comfortable
+understanding medication information in a mother tongue than English
+and needs help checking instructions at home.
+
+The selected situation is a medication change after a clinic visit:
+the current record and the label on a medicine box appear to disagree.
+
+The design opportunity is not an open-ended medical chatbot.
+It is a bounded conversation that makes information understandable,
+preserves the user's ability to correct it, and carries unresolved
+questions into a clear human handoff.
+
+Research supporting the original problem belongs in the case-study
+evidence. This PRD does not claim representative-user validation.
+
+
+## 4. Continuity and response to feedback
+
+### Assignment progression
+
+| Stage | Focus |
+|---|---|
+| A1 | Define the medication-understanding problem and explanation boundary |
+| A2 | Make the idea tangible through a voice-led, camera-assisted call |
+| A3 | Define confirmation, uncertainty, correction, recovery, and human help |
+| A4 | Develop the dose-change discrepancy and reviewed callback handoff |
+| A5 | Explain the design journey, evidence, trade-offs, and remaining limitations |
+
+### Instructor feedback translated into requirements
+
+- Specific medication situations:
+  Use dose-change confusion as the primary demonstration.
+
+- Simpler mobile journey:
+  Use one continuous call and one contextual panel at a time.
+
+- Clear user roles:
+  Distinguish the older adult, trusted caregiver, and pharmacist.
+
+- Accurate medication information:
+  Separate record facts, extracted text, user corrections, and uncertainty.
+
+- Clear presentation:
+  Demonstrate one coherent journey rather than adding unrelated features.
+
+
+## 5. Target users and roles
 
 ### Primary user — Mei Ling
 
-- Older adult in Singapore.
-- May prefer Simplified Chinese for understanding medicine information.
-- Uses a phone independently but benefits from large text, simple choices, spoken guidance, and reassurance.
-- Wants to understand a medicine without waiting for a family member.
+A fictional older adult in Singapore who:
 
-### Secondary user — authorised caregiver
+- Manages medication at home.
+- May prefer Simplified Chinese.
+- Can use a phone but benefits from clear wording and large controls.
+- Wants to check a changed instruction without guessing.
+- Needs an easy way to correct what the companion heard or read.
 
-- Adult child, trusted helper, or care coordinator.
-- Reviews the demo pharmacy record and a limited activity/audit timeline.
-- Reviews the single-user demo record in the caregiver view.
-- Is not a clinician and cannot change clinical instructions through the app.
+These are design assumptions, not findings from participant research.
 
-## 5. MVP outcome
+### Secondary user — trusted caregiver
 
-A reviewer can complete this journey successfully:
+May help the user complete the task or contact a healthcare professional.
 
-1. Enter as Mei Ling from the persona picker.
-2. Open the quiet home state and tap the only prominent action: **Call with companion**.
-3. Ask: “What is this for? When do I take it?” by typing or voice.
-4. The companion identifies that it needs the medicine label and asks: “Would you like to show me the medicine label?”
-5. Choose `Show medicine`, then receive a clear camera-permission explanation.
-6. Switch the local camera preview to show a medicine label, or use the deterministic demo label / image upload / typed fallback.
-7. Receive a **possible match** only.
-8. Confirm that the medicine is being held.
-9. Receive a record-grounded plain-English explanation with a Chinese language option.
-10. Choose an understanding confirmation, repeat, language change, or human-help escalation.
-11. Enter the caregiver view and inspect the demo record and activity/audit timeline.
+The caregiver:
 
-A second journey must demonstrate safe failure:
+- Is not a substitute for clinical review.
+- Receives information only through a defined sharing flow.
+- Cannot change medication instructions.
+- Uses a fictional, read-only view in the prototype.
 
-1. Start the companion call and submit an unreadable label, a non-matching label, or indicate uncertainty.
-2. The app refuses to give medication instructions.
-3. The app explains the limitation in plain language.
-4. The app offers pharmacist, clinic, and trusted-helper escalation actions.
+### Tertiary role — pharmacist
 
-## 6. Scope
+The intended recipient of an unresolved medication question.
 
-### In scope
+The handoff should communicate:
 
-- Mobile-first responsive application.
-- Persona picker: Mei Ling and caregiver.
-- Quiet landing state with exactly one prominent entry CTA: `Call with companion`.
-- Voice-led companion UI with animated non-human orb.
-- Typed interaction fallback.
-- Browser speech-to-text and speech synthesis fallback.
-- Gemini Live integration architecture for real-time audio only; application remains usable without it.
-- Intent-led conversation: companion introduces label and schedule routes only after the call begins.
-- Local front/back camera preview and capture flow.
-- Camera switch affordance and a picture-in-picture visual treatment.
-- Deterministic sample label pathway.
-- Image upload and optional capture pathway.
-- Claude image interpretation pathway, constrained and validated against local mock record data.
-- A required user confirmation before any medicine explanation.
-- English and Simplified Chinese content; language selector supports future languages.
-- Safe, structured explanation from the verified mock record.
-- Safety escalation for unreadable, missing, conflicting, uncertain, adverse-effect, emergency, or out-of-record questions.
-- Caregiver demo dashboard for one patient, read-only record/audit review.
-- Vercel-ready deployment with secure server-side secrets.
+- Confirmed medicine identity.
+- Current record instruction and provenance.
+- User-confirmed label wording.
+- The unresolved question.
+- Callback details.
 
-### Explicitly out of scope
+No real pharmacist service, acceptance, or review is implemented
+by this prototype.
 
-- Landing-page shortcuts/cards for `Show medicine` or `My schedule`.
-- Real pharmacy, clinic, EHR, insurer, or prescription-system integration.
-- Real diagnosis, triage, prescription, treatment recommendation, or dose adjustment.
-- Autonomous medication reminders or adherence claims.
-- Multiple-patient clinical workflow.
-- Real caregiver invitation and production permission system.
-- Storage of real health data.
-- Full two-way video calling or continuous video streamed to an AI.
-- Emergency dispatch or claims that human support is immediately available.
 
-## 7. Primary flow
+## 6. Primary scenario
 
-### Home-to-call rule
+### Starting situation
 
-The landing page has exactly one prominent primary CTA:
+Mei Ling returns from a clinic visit remembering that a medication
+instruction changed.
 
-```text
-Call with companion
-```
+Her current fictional pharmacy record differs from the instruction
+on the medicine box she is holding.
 
-The home screen must not show `Show medicine`, `My schedule`, `Repeat`, `Get help`, or `End call` as landing-page navigation. It may show small utilities only: `Help`, `Language`, and `Settings`.
+She says:
 
-Label and schedule routes are introduced only during an active call, after the companion understands a typed/spoken need or asks a focused clarification question. This avoids forcing the user to categorise a medication question before receiving help.
+“My doctor changed my medicine, but this box still says the old amount.
+How many should I take now?”
 
-### Screen and state sequence
+### Intended outcome
 
-1. `01-start-call` — quiet landing state; one primary CTA
-2. `02-companion-listening` — voice-led prompt, transcript, and contextual route selection
-3. `03-label-camera-permission` — informed permission for camera use
-4. `04-label-camera-guidance` — local camera preview, label frame, optional self-view visual
-5. `05-confirm-medicine` — possible record match and user confirmation
-6. `06-explain-and-confirm` — bilingual, record-grounded explanation
-7. `07-safety-escalation` — uncertainty and human-help path
-8. `08-caregiver-dashboard` — record provenance and activity review
+Mei Ling can:
 
-### Conversation routing
+1. Confirm the medicine.
+2. Confirm or correct the label wording.
+3. See the discrepancy and its sources.
+4. Understand that the companion cannot resolve it.
+5. Review a callback summary.
+6. Approve or cancel simulated sharing.
+7. Understand the submission outcome.
 
-| User need | Companion response | Contextual next action |
+### What success does not mean
+
+Success does not mean:
+
+- The companion establishes the correct dose.
+- The conflict is clinically resolved.
+- A pharmacist has reviewed the case.
+- A real callback has been arranged.
+- The medication is safe to take.
+
+
+## 7. Scope
+
+### Required for Assignment 4
+
+- Quiet home state with one prominent “Call with companion” action.
+- Voice/text interaction using existing supported capabilities.
+- Medicine identification and explicit confirmation.
+- Label-instruction entry or bounded extraction with confirmation.
+- Structured comparison with the current fictional record.
+- Match, conflict, and insufficient-information outcomes.
+- Correction without restarting the call.
+- Pharmacist callback offer.
+- Exact sharing preview with editing and cancellation.
+- Simulated submission, failure, and retry.
+- Clear distinction between request status and medication status.
+- Persistent help and end-call controls.
+- English and supported Simplified Chinese content.
+- Deterministic reviewer scenarios.
+- Automated checks and designer-led manual evaluation.
+- Visible prototype and simulation disclosures.
+
+### Retained secondary capabilities
+
+Preserve working existing functionality where compatible:
+
+- Record-backed medicine explanation.
+- Camera/photo/name-selection fallbacks.
+- Repeat and language change.
+- Existing bounded safety/help behaviour.
+- Read-only caregiver demo view.
+
+Do not expand these features simply to increase prototype breadth.
+
+### Outside the current build scope
+
+- Real pharmacy, clinic, EHR, or prescription integration.
+- Real callback booking or messaging.
+- Real patient data.
+- Clinical diagnosis, triage, or medication-interaction assessment.
+- Confidence scores presented as clinical probabilities.
+- Dose-change, missed-dose, or treatment recommendations.
+- Production authentication and caregiver authorisation.
+- New emergency dispatch or calling integration.
+- Multiple-patient clinical workflows.
+- Automatic learning or modification of safety rules.
+
+
+## 8. End-to-end journey
+
+### Main path
+
+1. Start the call.
+2. Receive AI disclosure and invitation to speak or type.
+3. Express a dose-change question.
+4. Identify the medicine only if needed.
+5. Confirm the possible medicine match.
+6. Retrieve the current fictional record.
+7. Enter, extract, and confirm the label instruction.
+8. Compare the confirmed label with the record.
+9. Explain the unresolved discrepancy.
+10. Offer a pharmacist callback.
+11. Prepare and display the sharing preview.
+12. Allow correction, approval, or cancellation.
+13. Simulate submission.
+14. Display submitted or failed status.
+15. Preserve the unresolved medication question.
+
+### Important branches
+
+- Medicine rejected:
+  Return to identification without unlocking guidance.
+
+- Medicine uncertain:
+  Offer support without assuming confirmation.
+
+- Label misread:
+  Correct, reconfirm, and recompute comparison.
+
+- Record unavailable:
+  Explain the limitation and offer support.
+
+- Instructions match:
+  Do not generate a conflict-specific callback automatically.
+
+- Information incomplete:
+  Do not classify missing data as agreement.
+
+- Sharing cancelled:
+  Nothing is submitted; context is retained.
+
+- Submission failed:
+  No one is notified; summary is retained for recovery.
+
+- Symptom reported:
+  Pause the dose-change flow and preserve confirmed context.
+  Use existing bounded support behaviour; do not infer a medication cause.
+
+
+## 9. Information and provenance requirements
+
+The following must remain distinct:
+
+| Information | Meaning |
+|---|---|
+| Record fact | Supplied by the fictional pharmacy fixture |
+| Extracted label text | Machine-read candidate text, not yet confirmed |
+| User-confirmed label text | The user's confirmation of what the label says |
+| User recollection | Reported context, not verified instruction |
+| Comparison result | Defined comparison of confirmed fields |
+| Callback status | Outcome of the simulated request |
+| Medication resolution | Remains unresolved after request submission |
+
+A newer record date alone does not resolve a clinical conflict.
+
+User confirmation does not prove that the label is current,
+belongs to the correct patient, or is clinically authoritative.
+
+Detailed schemas and approved wording belong in content-model.md.
+
+
+## 10. Functional requirements
+
+### EN — Entry and conversation
+
+EN-01:
+The primary home state has one prominent action:
+“Call with companion.”
+
+EN-02:
+Label and schedule routes emerge from the active conversation,
+not permanent home-screen task cards.
+
+EN-03:
+Typed input remains available when voice is unavailable.
+
+EN-04:
+Repeat, help, and end-call controls remain reachable during the call.
+
+EN-05:
+Each conversational turn has a visible textual equivalent.
+Text must not be artificially delayed solely to wait for audio.
+
+
+### ID — Medicine identification
+
+ID-01:
+A medicine candidate is labelled “Possible match.”
+
+ID-02:
+Identity confirmation is required before record instruction display.
+
+ID-03:
+Rejection or uncertainty does not unlock instruction guidance.
+
+ID-04:
+Camera permission is explained before activation.
+
+ID-05:
+Declining camera access provides a usable alternative.
+
+
+### DC — Dose-change comparison
+
+DC-01:
+The system confirms label wording before establishing a discrepancy.
+
+DC-02:
+The system compares defined structured instruction fields.
+
+DC-03:
+Formatting differences alone must not create a conflict.
+
+DC-04:
+Missing or ambiguous fields produce insufficient information.
+
+DC-05:
+Corrections recompute the comparison without restarting the call.
+
+DC-06:
+Current record and confirmed label are visibly distinguished by source.
+
+DC-07:
+An unresolved conflict produces no recommendation about which dose to take.
+
+DC-08:
+Source instructions may be displayed for comparison after identity
+confirmation, but neither is endorsed as the instruction to follow.
+
+DC-09:
+Continuing another task does not silently mark the conflict resolved.
+
+DC-10:
+A previous record, if available, is optional context—not necessary
+for comparing the current record with the confirmed physical label.
+
+
+### CB — Callback review and approval
+
+CB-01:
+The user explicitly chooses to prepare a callback request.
+
+CB-02:
+The review shows the recipient, reason, medicine, comparison,
+and callback number.
+
+CB-03:
+The user can inspect, correct, approve, or cancel the summary.
+
+CB-04:
+User corrections cannot overwrite pharmacy-record facts.
+
+CB-05:
+The exact approved preview determines the submitted payload.
+
+CB-06:
+Any payload or recipient edit invalidates previous approval.
+
+CB-07:
+If a correction removes the discrepancy, invalidate the stale
+conflict draft and reassess the request.
+
+CB-08:
+Raw label images and the full transcript are excluded from the payload.
+
+CB-09:
+Cancellation makes no submission call and preserves context.
+
+CB-10:
+The interface clearly states that no real request is sent.
+
+
+### SR — Submission and recovery
+
+SR-01:
+Show a submitting state and prevent repeated submission.
+
+SR-02:
+One logical request must not generate duplicate submissions.
+
+SR-03:
+Submitted status appears only after simulated service success.
+
+SR-04:
+Submission success does not imply recipient acknowledgement,
+callback scheduling, clinical review, or medication resolution.
+
+SR-05:
+Failure explicitly states that no request was delivered.
+
+SR-06:
+Failure preserves confirmed information and the reviewed summary.
+
+SR-07:
+Retry does not restart medicine identification.
+
+SR-08:
+Ending or resetting the call prevents stale asynchronous results
+from updating the new or ended session.
+
+SR-09:
+No callback time or response commitment is promised.
+
+
+## 11. AI and deterministic responsibilities
+
+### AI may contribute
+
+- Bounded extraction of visible text.
+- Understanding ordinary conversational input.
+- Approved non-clinical phrasing.
+- Speech output of approved content.
+
+### AI must not decide
+
+- Clinical correctness of either conflicting instruction.
+- Whether a medicine should be taken.
+- Whether a callback request is approved.
+- Whether a request was delivered.
+- Whether a symptom was caused by medication.
+
+### Deterministic application responsibilities
+
+- State transitions and confirmation gates.
+- Record retrieval.
+- Defined instruction comparison.
+- Draft versioning and approval binding.
+- Submission status and duplicate prevention.
+- Fallback and recovery.
+- Minimal audit events.
+
+Do not build a second competing conversation-state system.
+
+Provider details and current runtime architecture belong in
+site-contract.md and must be verified against the implementation.
+
+
+## 12. UX and accessibility requirements
+
+- One conversational decision at a time.
+- One contextual panel visible at a time.
+- Core medication content at least 18 px in supported languages.
+- Important source, sharing, and outcome text remains readable.
+- Product touch-target minimum: 44 × 44 CSS px.
+- Major confirmation and consent actions use larger controls.
+- Status is communicated through words, not colour alone.
+- Keyboard operation and visible focus.
+- Logical focus handling after panel changes.
+- Responsive layout at 320–430 px widths.
+- No fixed-height clipping of critical content.
+- Sticky controls do not obscure content or focused controls.
+- Text zoom and mobile-keyboard layouts are checked.
+- Reduced-motion support.
+- Audio has visible text and stop/mute control.
+- Avoid competing audio and screen-reader announcements.
+
+Using these design rules does not establish full accessibility compliance.
+Actual checks and remaining limitations must be recorded.
+
+
+## 13. Safety, privacy, and consent
+
+### Safety
+
+- No invented medication facts.
+- No instruction guidance before required confirmation.
+- No clinical resolution of conflicting instructions.
+- No reassurance inferred from incomplete information.
+- No symptom-cause claim.
+- Existing urgent/help behaviour is not silently removed or weakened.
+- New symptom-routing rules require separate research and review.
+
+### Privacy
+
+- Fictional data only.
+- Server credentials remain server-side.
+- No raw image/audio retention by default.
+- Callback payload uses explicitly allowlisted fields.
+- Conversation logs are not automatically included in sharing.
+- Data retention and provider processing claims must match actual behaviour.
+- No real communications integration in this prototype.
+
+### Consent
+
+- Named recipient and purpose are visible.
+- Exact shared content is inspectable.
+- Approval applies to the displayed draft revision.
+- Edits require renewed review.
+- Cancellation sends nothing.
+- Caregiver sharing is separate from pharmacist callback sharing.
+
+Regulatory claims, provider retention, and emergency exceptions
+require separate assessment before any real-world deployment.
+
+
+## 14. Reliability and fallback
+
+The primary deterministic demo must work without external AI success.
+
+Provide clear alternatives for:
+
+- Microphone unavailable or denied.
+- Camera unavailable or denied.
+- Image unreadable.
+- Record unavailable.
+- Model timeout or invalid output.
+- Callback submission failure.
+
+Do not claim that a fallback is clinically safer merely because
+it is deterministic.
+
+Preserve the user's confirmed work across recoverable failures.
+
+
+## 15. Reviewer scenarios
+
+| ID | Scenario | Expected outcome |
 |---|---|---|
-| “What is this for?” / unknown medicine | “Let’s check this together. Would you like to show me the medicine label?” | `Show medicine` |
-| “What do I take now?” / schedule question | If no medicine is already confirmed: “Would you like to show me a medicine label, or ask about your medicine schedule?” | `Show medicine` and `Ask about my schedule` |
-| Broad or unclear request | Same clarification question | `Show medicine` and `Ask about my schedule` |
-| Request for human help | Explain help options | `Get help` |
-| Unsafe or unsupported medical question | Explain safety limit | Safety actions only |
+| DEMO-01 | Record and label conflict | Reviewed callback; simulated success |
+| DEMO-02 | Conflict with submission failure | Summary retained; retry or contact alternative |
+| DEMO-03 | Misread label corrected | Updated comparison without restart |
+| DEMO-04 | Label matches record | No false conflict |
+| DEMO-05 | Record unavailable | Limitation and human-help route |
 
-The contextual `Show medicine` and `Ask about my schedule` actions are temporary decision controls inside the call, not permanent app navigation.
+Reviewer controls must be separated from the patient-facing experience.
 
-### Required decision gates
+Scenario fixtures must remain explicitly fictional.
+Their medication content is not presented as clinically validated.
 
-- User must intentionally start the call before the companion offers label or schedule routing.
-- User must intentionally choose `Show medicine` before any camera-consent screen appears.
-- User must choose `Yes, switch camera` before camera activation.
-- User must confirm `Yes, this is my medicine` before the record explanation appears.
-- If user chooses `No`, `I’m not sure`, or label confidence is insufficient, the app enters safety escalation.
 
-## 8. Demo record
+## 16. Evaluation and learning plan
 
-All medication data is fictional and clearly labeled as demo data.
+### Current evaluation
 
-- **Patient:** Mei Ling Tan
-- **Source:** BrightCare Pharmacy — demo record
-- **Medicine:** Metformin 500 mg
-- **Purpose:** Helps manage blood sugar
-- **Verified instruction:** Take 1 tablet twice daily with meals
-- **Chinese explanation:** 用于帮助控制血糖。请按照药房记录：随餐每日服用一片，每日两次。
-- **Match fields:** patient name, medicine name, strength, dosage form
+- Automated functional checks.
+- Designer-led manual scenario testing.
+- Cognitive walkthrough of the interaction.
 
-The user-facing experience must say `possible match` until confirmed. It must never say that an image is a verified clinical record.
+Record expected and actual behaviour separately.
 
-## 9. AI roles
+### Questions to evaluate
 
-### Gemini Live — conversational layer
+1. Is the discrepancy understandable?
+2. Can the user correct a label reading?
+3. Is the companion's limit explicit?
+4. Is sharing understandable before approval?
+5. Is submission distinguishable from medication resolution?
+6. Can the user recover without repeating the conversation?
 
-Use Gemini Live only for optional real-time voice interaction. It may transcribe user speech and provide a natural spoken companion experience. It is not the medication authority.
+### Future validation
 
-If the Live session fails, is unavailable, or permission is denied, the experience falls back to typed input and browser speech synthesis.
+- Representative older-adult usability sessions.
+- Supported-language review.
+- Pharmacist review of medication content and handoff information.
+- Clinical review before any expanded symptom-routing function.
+- Regulatory assessment before real-world deployment.
 
-### Claude — constrained reasoning and visual interpretation
+### Iteration rules
 
-Claude may receive an image or typed label text and return structured extraction candidates. It may generate an explanation only from server-provided, verified mock-record fields.
+- Record the observed issue and source of evidence.
+- Describe the change and why it addresses the issue.
+- Retest the affected requirement.
+- Run core regression checks.
+- Do not automatically change safety rules from conversation logs.
 
-Claude must not provide instructions from its general medical knowledge. The server must validate the structured result before displaying medication information.
+Prototype results do not establish clinical safety or real-world
+user comprehension.
 
-## 10. Safety requirements
 
-### Non-negotiable rules
+## 17. Acceptance criteria
 
-1. Never diagnose, prescribe, adjust, stop, start, or substitute a medicine.
-2. Never infer dose, timing, purpose, or safety instructions from an unreadable or unmatched label.
-3. Never show an explanation before user confirmation of a possible match.
-4. Never describe demo data as a live pharmacy record.
-5. Never claim to contact a pharmacist, clinic, caregiver, or emergency service unless that action is actually implemented.
-6. Always identify the source of displayed medicine information as the current demo pharmacy record.
-7. Always offer human help for uncertainty, conflict, symptoms, adverse effects, or urgent situations.
-8. Keep language plain, short, respectful, and non-alarming.
+The Assignment 4 prototype is ready for design review when:
 
-### Mandatory escalation triggers
+- [ ] The main conflict journey is complete.
+- [ ] Medicine and label confirmation gates work.
+- [ ] Comparison distinguishes conflict, agreement, and insufficient information.
+- [ ] Corrections update comparison and callback drafts.
+- [ ] No conflicting dose is recommended.
+- [ ] Sharing preview matches the simulated payload.
+- [ ] Editing invalidates approval.
+- [ ] Cancellation submits nothing.
+- [ ] Repeated Send does not create duplicate requests.
+- [ ] Failed submission preserves the summary.
+- [ ] Submitted request and unresolved medication status are distinct.
+- [ ] Simulation is visibly communicated.
+- [ ] Core flow works without external AI success.
+- [ ] Relevant automated and manual checks are recorded.
+- [ ] No open critical or high-severity issue remains in the demonstrated path.
+- [ ] Accessibility checks and limitations are documented.
+- [ ] Evaluation claims accurately describe the work completed.
 
-- No readable label information.
-- Confidence below the product threshold.
-- Extracted details conflict with the demo record.
-- More than one possible medicine match.
-- User selects `No, try again` or `I’m not sure`.
-- User asks for diagnosis, dose changes, missed-dose advice, medication combination advice, symptoms, side effects, pregnancy advice, or emergency advice.
-- User uses urgent-risk language such as severe chest pain, trouble breathing, fainting, suicidal intent, severe allergic reaction, overdose, or poisoning.
+These are prototype acceptance criteria, not deployment clearance.
 
-### Escalation response
 
-The app should state:
+## 18. Assignment evidence and AI disclosure
 
-> “I’m not sure enough to explain this medicine safely. Please check the label with your pharmacist, clinic, or a trusted helper.”
+Capture:
 
-For urgent-risk language:
+- End-to-end flow.
+- Medicine and label confirmation.
+- Correction.
+- Source comparison.
+- Sharing review.
+- Submitted and failed outcomes.
+- Actual test results.
+- Before/after changes and reasons.
 
-> “This may need urgent help. Please contact local emergency services or urgent medical care now. If you can, ask someone near you to help.”
+Generative AI disclosure must describe actual material uses, such as:
 
-The prototype should display localised placeholder actions, not fake functional emergency calling:
+- Brainstorming.
+- Drafting specifications or copy.
+- Code implementation assistance.
+- Test scaffolding.
 
-- `Call pharmacy — demo`
-- `Contact clinic — demo`
-- `Ask trusted helper — demo`
+Separate generated assumptions from external evidence and observed results.
+State which decisions were reviewed and made by the designer.
 
-## 11. Functional requirements
 
-### FR-1: Persona entry
+## 19. Document ownership
 
-- A user can choose Mei Ling or caregiver.
-- The active persona is visible in app settings or header context.
-- No production authentication is required for the assignment MVP.
+| Document | Responsibility |
+|---|---|
+| README.md | Setup, reviewer instructions, current capability status |
+| prd.md | User problem, scope, outcomes, requirement IDs |
+| design-standard.md | Visual and interaction-presentation rules |
+| content-model.md | Data schemas, provenance, approved copy |
+| site-contract.md | State transitions, APIs, runtime and recovery |
+| CLAUDE.md | Agent workflow, invariants, validation instructions |
+| docs/decisions.md | Decision history, evidence, trade-offs |
 
-### FR-2: Home and conversation
+Historical amendments belong in an archive or decision log.
+Active documents should describe one current version of the product.
 
-- Mei Ling can start a voice-led session with one landing-page CTA: `Call with companion`.
-- The landing page has no shortcut cards for label or schedule tasks.
-- The UI shows an animated orb, concise spoken/text transcript, and large action buttons once the call is active.
-- Typed fallback remains visible.
-- The companion reveals label/schedule choices contextually after user intent or an approved clarification prompt.
-- `Repeat`, `Get help`, and `End call` appear only while a call is active.
-
-### FR-3: Camera consent and guidance
-
-- Camera activation requires explicit user consent.
-- The UI explains why camera access is requested.
-- The user can decline without losing access to typed, schedule, or human-help pathways.
-- Local preview supports front/back switching when device/browser permits it.
-- Camera guidance never claims recognition before analysis and confirmation.
-
-### FR-4: Label input
-
-- A user can use a seeded deterministic demo label.
-- A user can upload a label image.
-- A user can type visible label details as fallback.
-- Image and text inputs are handled as temporary session data by default.
-
-### FR-5: Possible match and confirmation
-
-- The system returns zero, one, or multiple candidate matches.
-- Only one high-confidence candidate can be presented as a `possible match`.
-- User confirmation is required before record explanation.
-- User denial or uncertainty routes to escalation.
-
-### FR-6: Explanation
-
-- Explanation content is assembled only from fields in the verified mock record.
-- English is default.
-- Simplified Chinese is accessible through a language control.
-- Future language options may be displayed as unavailable or `coming soon`.
-- Content is chunked: medicine name, what the record says it is for, how the record says to take it, and a clear `what would you like to do?` prompt.
-
-### FR-7: Human-help state
-
-- The product provides a clear explanation of why it cannot safely proceed.
-- It offers non-deceptive demo actions.
-- It logs a safety event for caregiver review.
-
-### FR-8: Caregiver dashboard
-
-- Shows Mei Ling’s single mock pharmacy record.
-- Shows recent activity events: call started, camera consent, candidate result, confirmation/denial, explanation viewed, help requested.
-- Shows an AI/process audit summary: model route, result status, validation decision, and timestamp.
-- Uses labels such as `demo record` and `prototype activity`.
-- Is read-only for the MVP.
-
-## 12. Non-functional requirements
-
-### Accessibility
-
-- Minimum 16 px body text; 18 px preferred for core medicine content.
-- Minimum 44 × 44 px interactive targets.
-- Keyboard-accessible on desktop.
-- Visible focus styles.
-- Semantic headings, buttons, labels, status messages, and live regions.
-- Reduced-motion support for the orb and scanning animation.
-- Do not rely on colour alone for safety states.
-
-### Reliability
-
-- Every AI-dependent interaction has a deterministic local fallback.
-- API errors show plain-language retry or alternate-path actions.
-- Camera and microphone permission failures show instructions and a non-device fallback.
-- The demo sample route must work without camera, microphone, Claude, Gemini, or Supabase availability.
-
-### Privacy and security
-
-- API keys are server-side only.
-- No real medical data is used.
-- Uploaded images are not persisted by default.
-- Session logs are redacted/minimised.
-- Supabase uses least-privilege rules if persistence is enabled.
-
-## 13. Success criteria
-
-### Product test criteria
-
-A participant should be able to:
-
-- Identify `Call with companion` as the single starting action without being coached.
-- Understand why the camera is requested after the conversation makes label help relevant.
-- Recognise that a possible match needs confirmation.
-- Understand the English explanation and locate the language control.
-- Identify what happens if the system is not sure.
-- State that the app is explaining record-backed information, not giving a medical diagnosis.
-
-### Assignment evidence criteria
-
-The deployed prototype demonstrates:
-
-- A clear AI product proposition.
-- Visible input → AI/system processing → output flow.
-- A concrete and bounded role for AI.
-- Explicit uncertainty handling.
-- Human control and safety boundaries.
-- A focused, coherent primary flow rather than an unbounded health app.
-- Testable design decisions and a credible caregiver/provenance view.
-
-## 14. Acceptance checklist
-
-- [ ] Home screen has exactly one prominent CTA: `Call with companion`.
-- [ ] Home screen contains no Show medicine or My schedule card/button.
-- [ ] Label and schedule choices appear only after the companion call begins.
-- [ ] User can run happy path with seeded demo label without external API success.
-- [ ] User sees consent before camera use.
-- [ ] App does not show medicine instructions before match confirmation.
-- [ ] App explains only the supplied Metformin demo record.
-- [ ] User can switch to Simplified Chinese.
-- [ ] Unclear/no-match path blocks advice and opens help state.
-- [ ] Caregiver view displays record provenance and activity/audit events.
-- [ ] Camera/mic/API failures provide usable fallbacks.
-- [ ] No secret is exposed to browser bundles or committed to source control.
-- [ ] App deploys successfully to Vercel.
+When current documents conflict, report and resolve the conflict
+before implementation. Do not silently choose a rule.

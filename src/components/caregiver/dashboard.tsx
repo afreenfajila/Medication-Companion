@@ -30,18 +30,25 @@ const CHIP_STYLE: Record<StatusChip, { icon: React.ReactNode; className: string 
   },
 };
 
+/** Chips name what they're about (design-standard §22): never a bare "Confirmed". */
+const CHIP_TEXT: Record<StatusChip, string> = {
+  Confirmed: "Medicine identity confirmed",
+  "Needs help": "Needs help",
+  Pending: "Pending",
+};
+
 /** Status is always icon + word, never colour alone. */
 function StatusChipView({ chip }: { chip: StatusChip }) {
   const s = CHIP_STYLE[chip];
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-[13px] font-bold",
+        "inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-base font-bold",
         s.className,
       )}
     >
       {s.icon}
-      {chip}
+      {CHIP_TEXT[chip]}
     </span>
   );
 }

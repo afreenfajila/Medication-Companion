@@ -15,10 +15,17 @@ const DEMO = /\bdemo\b|示范/i;
 beforeEach(() => sessionStore.reset());
 
 describe("prototype framing (H1)", () => {
-  it("no user-facing copy or record wording says 'demo', in either language", () => {
-    for (const lang of ["en", "zh-Hans"] as const) {
-      for (const [key, line] of Object.entries(copy[lang])) expect(line, `${lang}.${key}`).not.toMatch(DEMO);
+  // content-model §3 / §17 (supersedes A3 H1's blanket "no demo" rule): every simulated
+  // request outcome must say so, so nobody mistakes it for a real message or callback.
+  it("every simulated request outcome is labelled as a demo, in both languages", () => {
+    const outcomes = ["callbackSent", "familySent", "doseSubmitted", "doseFailed", "doseUnknown"] as const;
+    for (const key of outcomes) {
+      expect(copy.en[key], `en.${key}`).toMatch(/^Demo\b/);
+      expect(copy["zh-Hans"][key], `zh-Hans.${key}`).toMatch(/^演示/);
     }
+  });
+
+  it("record wording never says 'demo'", () => {
     for (const field of Object.values(metforminRecord.explanation)) {
       for (const line of Object.values(field)) expect(line).not.toMatch(DEMO);
     }
@@ -35,7 +42,7 @@ describe("prototype framing (H1)", () => {
 
   it("one small Prototype badge, in the person's language", () => {
     const { unmount } = render(<PrototypeBadge />);
-    expect(screen.getByText("Prototype · fictional data")).toBeInTheDocument();
+    expect(screen.getByText("Prototype · Fictional data")).toBeInTheDocument();
     unmount();
     sessionStore.setForTest({ ...run([startCall]), language: "zh-Hans" });
     render(<PrototypeBadge />);

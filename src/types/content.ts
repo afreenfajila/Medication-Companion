@@ -56,6 +56,7 @@ export type UserIntent =
   | "off-topic" // recognised as off-spine: acknowledged, then redirected (never answered)
   | "record-conflict" // extension: "my doctor said…" while the record is explained — answered from the record
   | "wellbeing" // extension: loneliness / low mood — warm fixed reply, family help with consent
+  | "dose-change" // extension (A4): "my doctor changed it but the box says the old amount" — compare, never resolve
   | "unsupported-medical-question"
   | "urgent-risk";
 
@@ -210,6 +211,21 @@ export type AuditEventType =
   | "label-check-answered" // extension: "Does this match your label?" → matches / differs
   | "caregiver-help-requested" // extension: family/trusted helper told, ONLY after consent and service success
   | "pharmacist-callback-requested" // extension: callback request accepted by the (simulated) pharmacy
+  | "dose-check-started" // extension (A4): dose-change check begun
+  // Dose-change check and callback (content-model §21). Versions and outcomes only — never wording or numbers.
+  | "label-confirmed"
+  | "label-corrected"
+  | "comparison-completed"
+  | "callback-draft-created"
+  | "callback-draft-edited"
+  | "callback-approved" // Send pressed for one exact revision — not yet "submitted"
+  | "callback-cancelled"
+  | "callback-submitted" // simulated service said yes; the medication question stays unresolved
+  | "callback-failed"
+  | "callback-retried"
+  | "callback-outcome-unknown" // extension: no definite answer — neither delivery nor non-delivery claimed
+  | "support-interruption"
+  | "dose-check-left-unresolved" // extension: back to the call with the difference still unresolved
   | "language-changed"
   | "help-requested"
   | "urgent-safety-triggered"

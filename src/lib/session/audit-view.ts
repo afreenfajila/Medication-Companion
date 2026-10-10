@@ -22,6 +22,11 @@ const CHIP_BY_EVENT: Partial<Record<AuditEventType, StatusChip>> = {
   "urgent-safety-triggered": "Needs help",
   "caregiver-help-requested": "Needs help",
   "pharmacist-callback-requested": "Needs help",
+  // Dose-change callback: a (simulated) request leaves the medication question open.
+  "callback-submitted": "Needs help",
+  "callback-failed": "Needs help",
+  "callback-outcome-unknown": "Needs help",
+  "dose-check-left-unresolved": "Needs help",
   "label-submitted": "Pending",
   "candidate-presented": "Pending",
 };

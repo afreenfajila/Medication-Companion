@@ -233,7 +233,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     expect(screen.getByText(/what strength does the label say/i)).toBeInTheDocument();
     respond(fake, "500 milligrams");
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
   });
 
   it("an off-topic question (the weather) is acknowledged, then redirected to the two supported actions", () => {
@@ -311,7 +311,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
     finishSpeaking(fake); // let the "possible match" heading finish before answering
 
     respond(fake, "yes, that's right");
@@ -360,7 +360,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     // so the re-prompt never nudges toward confirming.
     expect(screen.getByText(/didn’t quite catch that/i)).toBeInTheDocument();
     expect(screen.getByText(/say “yes”, “no”, or “I’m not sure”/i)).toBeInTheDocument();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument(); // unchanged
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument(); // unchanged
   });
 
   it("after a confirmed match, an unrecognised question names the next step instead of stalling", () => {
@@ -424,7 +424,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     respond(fake, "It's Metformin, 500 milligrams");
     act(() => vi.advanceTimersByTime(1000)); // the brief "checking" beat before a result
 
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
   });
 
   it("a medicine name with no strength yet is asked for the strength, then completes on the next turn", () => {
@@ -442,7 +442,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
 
     respond(fake, "500 milligrams");
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
   });
 
   it("a wrong name and strength said together is a safe no-match, not a guess", () => {
@@ -551,17 +551,18 @@ describe("words and voice arrive together", () => {
   }
   afterEach(() => setGeminiSpeechPlayer(null));
 
-  it("holds the companion's words behind a connecting indicator until its voice starts", async () => {
+  // PRD EN-05: text must not be artificially delayed to wait for audio.
+  it("shows the companion's words at once, without waiting for its voice to start", async () => {
     install();
     const gemini = installSlowGemini();
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
 
-    expect(screen.queryByText(GREETING)).not.toBeInTheDocument();
-    expect(screen.getByText(translate("en", "companionThinking"))).toBeInTheDocument();
+    expect(screen.getByText(GREETING)).toBeInTheDocument();
+    expect(screen.queryByText(translate("en", "companionThinking"))).not.toBeInTheDocument();
 
     await act(async () => gemini.start(true));
-    expect(screen.getByText(GREETING)).toBeInTheDocument();
+    expect(screen.getAllByText(GREETING)).toHaveLength(1); // said once, not added again when the voice starts
   });
 
   it("if the voice is slow, switches to the browser voice and shows the words together", async () => {

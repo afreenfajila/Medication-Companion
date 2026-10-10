@@ -31,7 +31,7 @@ export function MedicationInvestigationFeed({
     <div className="flex flex-col gap-3">
       {/* Investigation questions */}
       <TranscriptCard speaker="companion" label="Companion">
-        <p>I'm going to ask you a few questions to check for possible medication interactions.</p>
+        <p>I&apos;m going to ask you a few questions to check for possible medication interactions.</p>
       </TranscriptCard>
 
       {/* Question 1: Medications today */}
@@ -76,7 +76,7 @@ export function MedicationInvestigationFeed({
       {steps.find((s) => s.id === "q3") && (
         <>
           <TranscriptCard speaker="companion" label="Companion">
-            <p>Now I need to understand how you're feeling. I'll ask about the symptom.</p>
+            <p>Now I need to understand how you&apos;re feeling. I&apos;ll ask about the symptom.</p>
           </TranscriptCard>
 
           {SEVERITY_QUESTIONS.map((question, idx) => {

@@ -7,6 +7,9 @@ import { PhoneShell, ScreenBody } from "@/components/ui/shell";
 import { helpResponseSchema, understandCapabilityResponseSchema, understandResponseSchema } from "@/lib/api/schemas";
 import { fillRecordFacts, resolveExplanation } from "@/lib/content/explanation";
 import { isUnderstandKey } from "@/lib/content/understand-guard";
+import { recordSource } from "@/lib/content/seed-record";
+import { DOSE_SCENARIOS, buildCallbackPayload, callbackRequestId } from "@/lib/dose-check/dose-check";
+import { getDoseCallbackService, type CallbackResult } from "@/lib/services/dose-callback";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { requestLabelAnalysis } from "@/lib/label/analyze-client";
 import { clearPendingImage, peekPendingImage } from "@/lib/label/pending-image";
@@ -18,6 +21,7 @@ import { getVoiceProvider, useVoiceCapabilities } from "@/lib/voice/use-voice";
 import { AnalyzingScreen, CameraGuidanceScreen, CameraPermissionScreen, ShowMedicineChoice } from "./camera-screens";
 import { CallFeed } from "./call-feed";
 import { CompleteScreen } from "./complete-screen";
+import { DoseCheckPanel } from "./dose-check-panel";
 import { ConfirmScreen } from "./confirm-screen";
 import { ExplainScreen } from "./explain-screen";
 import { ListeningActions } from "./listening-screen";
@@ -29,6 +33,8 @@ import { useVoiceConversation } from "./use-conversation";
 import { VoiceBar } from "./voice-bar";
 
 const ANALYSIS_DELAY_MS = 900;
+// Longest the (simulated) callback request is awaited before its outcome counts as unknown.
+const SUBMIT_TIMEOUT_MS = 15000;
 // How long the understanding pass gets to answer something the person said.
 // A short "thinking" pause is natural in a conversation, but it is bounded:
 // after this, the approved reply is used, so the call never stalls.
@@ -57,6 +63,7 @@ export function CompanionExperience() {
   const language = session.language;
   const t = useCallback((key: CopyKey) => translate(language, key), [language]);
   const mainRef = useRef<HTMLElement>(null);
+  const pinnedRef = useRef<HTMLDivElement>(null);
   const wasCallActive = useRef(session.callActive);
 
   // Keep the URL a reflection of the session, never the other way round.
@@ -122,6 +129,56 @@ export function CompanionExperience() {
     return () => controller.abort();
   }, [helpSending, sessionId]);
 
+  // Dose check: the reviewed callback request, through the simulated adapter only
+  // (no network, no pharmacy). The answer carries its request ID, so the reducer
+  // drops it if the call ended or the draft changed meanwhile.
+  const doseSubmitting = session.doseCheck?.callback?.status === "submitting" ? session.doseCheck.callback : null;
+  const doseScenario = session.doseScenario;
+  useEffect(() => {
+    if (!doseSubmitting) return;
+    let live = true;
+    const requestId = callbackRequestId(sessionId, doseSubmitting.revision);
+    const outcome = doseScenario ? DOSE_SCENARIOS[doseScenario].callbackOutcome : "success";
+    // No answer in time, or an error, is NOT proof that nothing was delivered: it's "unknown".
+    let timer = 0;
+    const timeout = new Promise<CallbackResult>((r) => {
+      timer = window.setTimeout(() => r({ status: "unknown" }), SUBMIT_TIMEOUT_MS);
+    });
+    Promise.race([getDoseCallbackService().submit(buildCallbackPayload(doseSubmitting.draft, requestId), { outcome }), timeout])
+      .catch((): CallbackResult => ({ status: "unknown" }))
+      .then((r) => {
+        if (!live) return;
+        dispatch({
+          type: "DOSE",
+          action: { kind: "result", requestId, outcome: r.status, reference: r.status === "submitted" ? r.reference : undefined },
+        });
+      });
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [doseSubmitting, sessionId, doseScenario]);
+
+  // When the panel changes under the button that was just pressed (Send, Yes,
+  // Don't send…), that button disappears and keyboard focus would drop to the page.
+  // Only then is focus moved to the new panel; focus that's somewhere else stays put,
+  // and transcript updates never move it (PRD §12, design-standard §21).
+  const dose = session.doseCheck;
+  const panelKey = [
+    session.state,
+    session.helpFlow?.stage,
+    dose?.step,
+    dose?.labelRevision,
+    dose?.offer,
+    dose?.callback?.status,
+    dose?.callback?.revision,
+  ].join("|");
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    pinnedRef.current?.focus({ preventScroll: true });
+  }, [panelKey]);
+
   // Move focus once at the big transitions (into/out of a call) — not on every
   // step within it, since that would fight the continuous "one call" feeling.
   useEffect(() => {
@@ -130,7 +187,8 @@ export function CompanionExperience() {
     mainRef.current?.focus({ preventScroll: true });
   }, [session.callActive]);
 
-  const explanation = resolveExplanation(session, language, session.studyCondition);
+  // Study mode's deliberately wrong explanation never reaches the dose-change check.
+  const explanation = resolveExplanation(session, language, session.doseCheck ? null : session.studyCondition);
 
   // A reply to something the person SAID (CLAUDE.md § Claude, task 3):
   // Claude reads the message in the context of the conversation and
@@ -290,12 +348,10 @@ export function CompanionExperience() {
     getVoiceProvider()?.speak(text, lang, slow);
   }, []);
 
-  // Words and voice arrive together: while this turn's audio is still being
-  // fetched, its text (and the choices that go with it) stay hidden behind a
-  // "connecting" indicator. No Gemini player → browser speech is instant, no hold.
-  const voiceKey = spoken ? `${session.repeatCount}:${language}:${spoken}` : null;
-  const [voicedKey, setVoicedKey] = useState<string | null>(null);
-  const voiceHeld = canSpeak && voiceKey !== null && voicedKey !== voiceKey && getGeminiSpeechPlayer() !== null;
+  // Text never waits for audio (PRD EN-05): the words and the step's controls
+  // show at once, and the voice follows when it is ready. `voiceHeld` stays as a
+  // named constant so the old hold can't creep back in without a decision.
+  const voiceHeld = false;
 
   // "Repeat slowly" re-says exactly the current approved line (never new text), slower.
   const lastRepeat = useRef(session.repeatCount);
@@ -308,15 +364,13 @@ export function CompanionExperience() {
       return;
     }
     const controller = new AbortController();
-    speakNow(spoken, language, controller.signal, slow).then(() => {
-      if (!controller.signal.aborted) setVoicedKey(voiceKey);
-    });
+    void speakNow(spoken, language, controller.signal, slow);
     return () => {
       controller.abort();
       getGeminiSpeechPlayer()?.stop();
       getVoiceProvider()?.stopSpeaking();
     };
-  }, [canSpeak, spoken, language, session.repeatCount, speakNow, voiceKey]);
+  }, [canSpeak, spoken, language, session.repeatCount, speakNow]);
 
   const conversation = useVoiceConversation({
     session,
@@ -399,7 +453,26 @@ export function CompanionExperience() {
       break;
     case "explain":
       // Defensive: the reducer cannot enter explain without a confirmed match.
-      pinnedActions = explanation ? (
+      pinnedActions = explanation && session.doseCheck ? (
+        <DoseCheckPanel
+          t={t}
+          language={language}
+          dose={session.doseCheck}
+          record={
+            session.doseCheck.step === "record-unavailable"
+              ? null
+              : {
+                  instruction: explanation.explanation.instruction,
+                  sourceName: recordSource.name,
+                  recordedAt: recordSource.verifiedAt,
+                }
+          }
+          onAction={(action) => dispatch({ type: "DOSE", action })}
+          onGetHelp={() => dispatch({ type: "GET_HELP" })}
+          onRepeat={() => dispatch({ type: "REPEAT" })}
+          onEnd={() => dispatch({ type: "END_CALL" })}
+        />
+      ) : explanation ? (
         <ExplainScreen
           t={t}
           language={language}
@@ -466,6 +539,7 @@ export function CompanionExperience() {
               <StartScreen
                 t={t}
                 language={language}
+                interrupted={session.previousCallInterrupted}
                 onCall={() => dispatch({ type: "CALL_START" })}
                 onLanguageChange={(l) => dispatch({ type: "SET_LANGUAGE", language: l })}
               />
@@ -489,7 +563,12 @@ export function CompanionExperience() {
         {pinnedActions && (session.state === "listening" || !voiceHeld) && (
           // Capped and scrollable: a tall step (safety options, an open sample picker)
           // must never be clipped or push the call controls off the screen.
-          <div data-pinned className="max-h-[60%] shrink-0 overflow-y-auto border-t border-line bg-canvas px-4 pb-2 pt-3">
+          <div
+            ref={pinnedRef}
+            tabIndex={-1}
+            data-pinned
+            className="max-h-[60%] shrink-0 overflow-y-auto border-t border-line bg-canvas px-4 pb-2 pt-3 outline-none"
+          >
             {pinnedActions}
           </div>
         )}

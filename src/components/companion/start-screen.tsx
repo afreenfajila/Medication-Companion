@@ -23,9 +23,12 @@ export function StartScreen({
   language,
   onCall,
   onLanguageChange,
+  interrupted = false,
 }: {
   t: T;
   language: UiLanguage;
+  /** The page reloaded mid-call: say so once, without guessing what happened to a request. */
+  interrupted?: boolean;
   onCall: () => void;
   onLanguageChange: (language: UiLanguage) => void;
 }) {
@@ -45,6 +48,7 @@ export function StartScreen({
       </div>
 
       <div className="flex w-full flex-col items-center gap-3">
+        {interrupted && <p className="rounded-md bg-teal-100 px-3 py-2 text-base leading-snug">{t("callInterrupted")}</p>}
         <PrimaryButton
           onClick={onCall}
           icon={<Phone className="h-5 w-5" aria-hidden="true" />}

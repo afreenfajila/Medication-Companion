@@ -5,8 +5,8 @@ import {
 } from "@/lib/label/spoken-label";
 import { parseTypedLabel } from "@/lib/label/typed-label";
 import { classifySafety } from "@/lib/safety/classify";
-import { isRecordConflict } from "@/lib/session/intent";
-import type { SessionEvent } from "@/lib/session/state-machine";
+import { isDoseChange, isRecordConflict } from "@/lib/session/intent";
+import type { DoseCheck, SessionEvent } from "@/lib/session/state-machine";
 import type { CompanionState, ContextualActionId } from "@/types/content";
 
 /**
@@ -37,6 +37,8 @@ export type CommandContext = {
   showMethod?: "choose" | "camera";
   /** Stage of a help request on screen (confirm, sent, failed…), if any. */
   helpStage?: "confirm" | "sending" | "sent" | "failed" | "info" | null;
+  /** The dose-change check, when one is running (Assignment 4). */
+  doseCheck?: DoseCheck | null;
   /** Set once a spoken name has been heard and we're waiting on its strength. */
   pendingSpokenMedicineName: string | null;
 };
@@ -200,6 +202,32 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
     }
 
     case "explain": {
+      // Dose check: only the plain decisions can be spoken. Sending a callback
+      // request always needs a tap, because Send authorises exactly what is on screen.
+      if (ctx.doseCheck) {
+        const d = ctx.doseCheck;
+        const question = QUESTION.test(n) || raw.includes("?") || raw.includes("？");
+        const yes = affirm && !negative && !hedge && isShort(n) && !question;
+        const no = (negative || hedge) && !affirm && isShort(n);
+        if (d.callback && d.callback.status !== "cancelled") return { kind: "unclear" };
+        if (d.offer) {
+          if (no) return { kind: "event", event: { type: "DOSE", action: { kind: "decline-offer" } } };
+          if (yes) return { kind: "event", event: { type: "DOSE", action: { kind: "accept-offer" } } };
+          return { kind: "unclear" };
+        }
+        if (d.step === "label") {
+          if (d.reading && no) return { kind: "event", event: { type: "DOSE", action: { kind: "reject-reading" } } };
+          if (d.reading && yes) {
+            return { kind: "event", event: { type: "DOSE", action: { kind: "confirm-label", revision: d.labelRevision } } };
+          }
+          // Anything longer is the person reading their box: shown back to confirm, never trusted as-is.
+          return yes || no ? { kind: "unclear" } : { kind: "message", text: raw };
+        }
+        if (d.step === "compared" && d.comparison?.outcome === "conflict" && (PHARMACIST.test(n) || yes)) {
+          return { kind: "event", event: { type: "DOSE", action: { kind: "offer-callback" } } };
+        }
+        return { kind: "unclear" };
+      }
       // Answering "help checking with the pharmacist, or carry on?". A bare "yes"
       // doesn't say which, so it re-asks rather than guessing.
       if (ctx.recordConflict) {
@@ -208,7 +236,7 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
         return { kind: "unclear" };
       }
       // "My doctor said…" goes to the reducer, which answers from the record.
-      if (isRecordConflict(raw)) return { kind: "message", text: raw };
+      if (isRecordConflict(raw) || isDoseChange(raw)) return { kind: "message", text: raw };
       // Beside the instruction: "Does this match what's printed on your label?"
       if (ctx.explainStep === 1) {
         if (DIFFERENT.test(n) || (negative && !affirm && isShort(n))) {

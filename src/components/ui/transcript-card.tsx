@@ -21,15 +21,15 @@ export function TranscriptCard({
 }) {
   if (speaker === "user") {
     return (
-      <div className={cn("fade-in rounded-md bg-teal-100 px-4 py-3", className)}>
-        <p className="text-[13px] font-bold leading-tight text-navy-700">{label}</p>
+      <div data-speaker="user" className={cn("fade-in rounded-md bg-teal-100 px-4 py-3", className)}>
+        <p className="text-sm font-bold leading-tight text-navy-700">{label}</p>
         <div className="mt-1 flex flex-col gap-1 text-lg leading-snug break-words">{children}</div>
       </div>
     );
   }
   return (
-    <div className={cn("px-1", className)}>
-      <p className="text-[13px] font-bold leading-tight text-navy-700">{label}</p>
+    <div data-speaker="companion" className={cn("px-1", className)}>
+      <p className="text-sm font-bold leading-tight text-navy-700">{label}</p>
       <div className="fade-in mt-1 flex flex-col gap-1 text-[20px] font-medium leading-snug">{children}</div>
     </div>
   );

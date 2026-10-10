@@ -45,7 +45,17 @@ export default function AboutPage() {
             <strong>Sign-in.</strong> The real product would sign you in with Singpass. The prototype
             simply continues as Mei Ling.
           </li>
-          <li>The clinic and pharmacy phone numbers are fictional.</li>
+          <li>
+            <strong>Dose-change callback summaries.</strong> “Check before sharing” and “Send callback
+            request” run in your browser only. Nothing is sent, no pharmacist is contacted, and the
+            medicine question stays unresolved.
+          </li>
+          <li>The clinic, pharmacy and callback phone numbers are fictional and cannot be dialled.</li>
+          <li>
+            The medicine examples, including the instructions on the record and on the labels, are
+            fictional. They are not instructions for real use.
+          </li>
+          <li>Clinical review and testing with representative older adults have not been done yet.</li>
         </ul>
       </Section>
 
@@ -54,6 +64,7 @@ export default function AboutPage() {
           <li>It does not diagnose, prescribe, or recommend treatment.</li>
           <li>It does not change doses or give missed-dose advice.</li>
           <li>It does not decide whether you should take a medicine.</li>
+          <li>When a label and the record differ, it does not decide which one to follow.</li>
           <li>It never places a real call or sends a real message.</li>
           <li>
             It does not route anyone to emergency services. Urgent wording shows a fixed safety

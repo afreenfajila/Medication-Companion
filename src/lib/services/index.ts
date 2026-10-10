@@ -21,7 +21,7 @@ export interface PharmacyService {
   requestCallback(
     patientId: string,
     reason: HelpReason,
-  ): Promise<{ ok: true; reference: string; expectedWindow: string } | { ok: false }>;
+  ): Promise<{ ok: true; reference: string } | { ok: false }>;
 }
 
 export interface CareCircleService {

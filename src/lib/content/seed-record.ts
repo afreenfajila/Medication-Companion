@@ -86,20 +86,23 @@ export const metforminRecord: MedicationRecord = {
   },
 };
 
+/** Version of the fictional record above. A comparison is tied to the version it used. */
+export const metforminRecordVersion = "brightcare-metformin-v1";
+
 /** Every medicine on her record — what "Choose from my medicines" lists (name and strength only). */
 export const recordMedicines: readonly MedicationRecord[] = [metforminRecord];
 
 /**
  * Mei Ling's fictional care circle and contacts — the simulated services'
- * data source (CLAUDE.md § H4). The numbers use the 555-01xx pattern that is
- * reserved for fiction elsewhere; replace them with numbers you are allowed to
- * show before any external testing.
+ * data source. Every number starts with 0000: Singapore numbers never begin
+ * with 0, so none of these can be dialled (content-model §5: non-routable).
  */
 export const careContacts = {
-  pharmacy: { name: "BrightCare Pharmacy", phone: "6555 0123" },
-  clinic: { name: "Greenhill Family Clinic", phone: "6555 0100" },
+  pharmacy: { name: "BrightCare Pharmacy", phone: "0000 0123" },
+  clinic: { name: "Greenhill Family Clinic", phone: "0000 0100" },
   family: { name: "Daniel" }, // her son
   trustedHelper: { name: "Mrs Lim" }, // her neighbour
+  patientPhone: "0000 0188", // Mei Ling's own (fictional) callback number
 } as const;
 
 /** Purpose line for the caregiver record view (from the verified record brief). */

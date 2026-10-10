@@ -229,9 +229,9 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
     fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     await flush();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(INSTRUCTION);
-    fireEvent.click(screen.getByRole("button", { name: /yes, this is my medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: /yes, this is the medicine/i }));
     await flush();
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "next" } });
     fireEvent.submit(screen.getByRole("textbox").closest("form")!);
@@ -252,7 +252,7 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500 mg" } });
     fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
     await flush();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
     noRawError();
   });
 });

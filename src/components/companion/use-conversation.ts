@@ -51,11 +51,13 @@ export function unclearGuidanceKey(
     recordConflict?: boolean;
     helpFlow?: Session["helpFlow"];
     showMethod?: Session["showMethod"];
+    doseCheck?: Session["doseCheck"];
   },
 ): CopyKey {
   if (session.helpFlow?.stage === "confirm") return "unclearHelpConfirm";
   if (session.state === "camera-permission" && session.showMethod === "choose") return "unclearShowMedicine";
   if (session.state === "explain") {
+    if (session.doseCheck) return "doseUnclear";
     if (session.recordConflict) return "unclearRecordConflict";
     if (session.explainStep === 1) return "unclearLabelCheck";
     return session.explainStep === 2 ? "unclearExplainLast" : "unclearExplain";
@@ -202,6 +204,7 @@ export function useVoiceConversation(opts: {
       recordConflict: s.recordConflict,
       helpStage: s.helpFlow?.stage ?? null,
       showMethod: s.showMethod,
+      doseCheck: s.doseCheck,
       cameraLive: latest.current.cameraLive,
       pendingSpokenMedicineName: pendingSpokenName.current,
     });

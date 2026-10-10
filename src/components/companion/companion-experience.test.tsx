@@ -180,12 +180,12 @@ describe("in-call flow", () => {
     });
 
     // Possible match only — no instruction visible.
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
     expect(screen.getAllByText("Metformin 500 mg").length).toBeGreaterThan(0);
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
     expect(screen.queryByText(/blood sugar/)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /yes, this is my medicine/i }));
+    fireEvent.click(screen.getByRole("button", { name: /yes, this is the medicine/i }));
     expect(screen.getByText("Here is what your record says.")).toBeInTheDocument();
     expect(screen.getByText("Metformin helps manage blood sugar.")).toBeInTheDocument();
 
@@ -249,7 +249,7 @@ describe("in-call flow", () => {
     await flush();
     // "Sent" only after the (simulated) service said so, naming who was told.
     expect(fetchFn.mock.calls.some(([u]) => u === "/api/help/request")).toBe(true);
-    expect(screen.getByText(/I’ve let Daniel know you’d like some help/)).toBeInTheDocument();
+    expect(screen.getByText(/a message to Daniel saying you’d like some help was simulated/)).toBeInTheDocument();
     expect(sessionStore.getSnapshot().audit.some((e) => e.eventType === "caregiver-help-requested")).toBe(true);
   });
 
@@ -301,7 +301,7 @@ describe("in-call flow", () => {
     expect(screen.getByText(/I couldn’t send that just now/)).toBeInTheDocument();
     expect(screen.queryByText(/I’ve sent your request/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "See the pharmacy’s number" }));
-    expect(screen.getByText(/You can call BrightCare Pharmacy on 6555 0123/)).toBeInTheDocument();
+    expect(screen.getByText(/You can call BrightCare Pharmacy on 0000 0123/)).toBeInTheDocument();
   });
 
   it("choose from my medicines: lists name and strength only, then still asks to confirm", () => {
@@ -311,7 +311,7 @@ describe("in-call flow", () => {
     const list = screen.getByRole("region", { name: "Which medicine are you holding?" });
     expect(list.textContent).not.toMatch(/Take 1 tablet|twice daily|blood sugar/);
     fireEvent.click(within(list).getByRole("button", { name: "Metformin 500 mg" }));
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
 
@@ -326,7 +326,7 @@ describe("in-call flow", () => {
     fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500mg" } });
     fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
     await flush();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
 
@@ -338,7 +338,7 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
     fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     await flush();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
   });
 
   it("choose a photo: a plain file input (no capture), shrunk first, then POSTed and still only a possible match", async () => {
@@ -360,7 +360,7 @@ describe("in-call flow", () => {
     const init = call![1] as { method: string; body: FormData };
     expect(init.method).toBe("POST");
     expect(init.body.get("image")).toBeInstanceOf(Blob);
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
     // Only the analyze route — plus the once-per-call understanding check. No other network use.
     expect(fetchFn.mock.calls.every(([u]) => u === "/api/label/analyze" || u === "/api/companion/understand")).toBe(true);
@@ -425,7 +425,7 @@ describe("in-call flow", () => {
       fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
     fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
       await flush();
-      expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+      expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
     },
   );
 

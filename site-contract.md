@@ -1,196 +1,416 @@
 # Site Contract — Medication Companion
 
-## 1. Purpose
+## 1. Document status
 
-This contract defines the implementation boundary for the Medication Companion prototype. It tells contributors what routes, APIs, client/server responsibilities, data flows, fallbacks, and safety checks are required.
+| Field | Value |
+|---|---|
+| Version | 0.4 — proposed Assignment 4 implementation contract |
+| Last updated | 10 October 2026 |
+| Repository | afreenfajila/Medication-Companion |
+| Target branch | assignment-4 |
+| Primary journey | Dose-change discrepancy → reviewed pharmacist callback |
+| Data | Fictional only |
+| External communications | Simulated only |
+| Implementation verification | Pending code review and tests |
 
-The application is a **prototype with fictional demo data**. It must be reliable in presentation mode even when third-party AI, camera, microphone, or Supabase services are unavailable.
+This document defines intended runtime behaviour.
 
-## 2. Recommended architecture
+It does not establish:
+- That every route already exists.
+- That the application satisfies every requirement.
+- Clinical safety or regulatory qualification.
+- Real pharmacy integration or callback availability.
+
+Inspect the existing implementation before applying this contract.
+Reuse compatible routes, reducers, services, and components.
+Do not create duplicate APIs or a competing conversation state machine.
+
+
+## 2. Document ownership
+
+| Document | Owns |
+|---|---|
+| prd.md | Scope, user outcomes, requirement IDs |
+| content-model.md | Data structures, provenance, approved copy |
+| design-standard.md | Visual and interaction-presentation rules |
+| site-contract.md | Runtime ownership, states, APIs, recovery |
+| CLAUDE.md | Agent workflow and validation instructions |
+| README.md | Setup and reviewer instructions |
+| docs/decisions.md | Decisions, evidence, and trade-offs |
+
+When current documents conflict:
+1. Identify the conflict.
+2. Preserve existing safety behaviour.
+3. Resolve the specification before implementation.
+4. Update affected documents together.
+
+Historical amendments belong in the decision log or archive,
+not as competing active requirements.
+
+
+## 3. Architecture
+
+Use the existing:
+- Next.js App Router.
+- TypeScript.
+- Tailwind/design tokens.
+- Reusable UI primitives.
+- Zod validation.
+- Test framework.
+- Server-side AI integrations where available.
+
+### Runtime responsibilities
+
+Client:
+- Render the continuous call.
+- Capture user input and device consent.
+- Manage presentation, focus, and audio playback.
+- Dispatch typed events.
+- Display validated results.
+- Preserve recoverable work within the current session.
+
+Deterministic application logic:
+- Enforce confirmation gates.
+- Compare supported instruction fields.
+- Version callback drafts.
+- Bind approval to the reviewed draft.
+- Manage submission and recovery states.
+
+Server or server-side simulation service:
+- Protect credentials.
+- Validate API payloads.
+- Return fictional records.
+- Validate bounded AI output.
+- Validate draft revisions and approval before submission.
+- Construct allowlisted communication payloads.
+- Deduplicate simulated submissions.
+
+AI:
+- Optional bounded extraction and conversational enhancement.
+- Never clinical authority.
+- Never the owner of approval, delivery, or resolution status.
+
+Do not assume client state is a production authorisation boundary.
+The prototype must use fictional data only.
+
+
+## 4. Current voice architecture
+
+Preferred current prototype architecture:
 
 ```text
-Next.js (App Router) + TypeScript
-├── Tailwind CSS
-├── shadcn/ui primitives where useful
-├── Lucide icons
-├── Framer Motion or CSS animations, with reduced-motion support
-├── Anthropic TypeScript SDK (server only)
-├── Google Gen AI SDK / Gemini Live integration (server-assisted session setup)
-├── Supabase (optional persistence and seeded demo data)
-├── Zod validation for all API input/output contracts
-└── Vercel deployment
+User speech
+  → supported browser speech recognition
+  → transcript confirmation where required
+  → deterministic conversation/state logic
+  → approved response text
+  → optional server-side Gemini TTS
+  → browser speech synthesis fallback
 ```
 
-### Architectural rule
+Typed input remains available.
 
-The client renders interaction state and captures user input. The server owns all secrets, validates all AI responses, selects the safe route, and constructs any medicine explanation from trusted local data.
+Before implementation, verify this against the code.
 
-The LLM is never the source of truth for medicine data.
+Gemini Live is not a required feature for this assignment.
+Do not reintroduce streaming voice solely because historical
+documentation specified it.
 
-## 3. Routes
+If an existing streaming integration is retained:
+- Document its actual role.
+- Keep credentials secure.
+- Preserve the same state and confirmation gates.
+- Do not allow it to independently generate medication guidance.
 
-### Primary user routes
+Browser speech recognition must not be described as necessarily
+on-device or private without verifying provider behaviour.
+
+Document actual provider processing and retention separately.
+
+
+## 5. Routes and entry behaviour
+
+### User-facing routes
 
 | Route | Purpose |
 |---|---|
-| `/` | Persona picker and prototype introduction |
-| `/companion` | Main mobile companion shell; starts in the quiet single-CTA home state |
-| `/companion?state=start` | Landing state; one prominent `Call with companion` CTA only |
-| `/companion?state=listening` | Active conversation/listening state; contextual decisions appear here |
-| `/companion?state=camera-permission` | Camera consent state |
-| `/companion?state=camera-guidance` | Local camera / upload guidance state |
-| `/companion?state=confirm-match` | Candidate confirmation state |
-| `/companion?state=explain` | Record-backed explanation state |
-| `/companion?state=safety` | Escalation state |
+| `/` | Prototype introduction or existing persona entry |
+| `/companion` | Continuous companion call |
+| `/caregiver` | Existing fictional read-only caregiver view |
+| `/about` | Scope, simulation, privacy, and AI disclosure |
 
-### Secondary routes
+### Reviewer demo
 
-| Route | Purpose |
-|---|---|
-| `/caregiver` | Caregiver demo dashboard for Mei Ling |
-| `/caregiver/record` | Mock record detail page, if enabled |
-| `/about` | Prototype limitations, privacy, AI-use and assignment disclosure |
+Provide a dedicated dose-change demo entry.
 
-### Routing rule
+Proposed route:
 
-Routes may reflect state for demo navigation, but the active session state machine is authoritative.
+```text
+/companion/a4-dose-change-demo
+```
 
-A user cannot:
+Reuse a suitable existing route if preferable.
+Document the final implemented route in README.md.
 
-- Access `/companion?state=explain` unless a valid confirmed candidate exists in the session.
-- Access `/companion?state=camera-permission` or `/companion?state=camera-guidance` until an active call has produced the contextual `show-medicine` decision.
-- Access schedule explanation unless a confirmed record authorises record-backed schedule content.
+Reviewer controls:
+- Select deterministic scenario.
+- Reset the demo.
+- Select simulated submission success/failure.
+- Inspect non-sensitive scenario status.
 
-Otherwise redirect/render the safe start or safety state.
+Keep these outside the patient-facing conversation.
 
-## 4. Home and call interaction contract
+### Entry guards
 
-### Home state
+- Loading a route does not imply that a call started.
+- Query parameters do not bypass confirmation.
+- Direct links do not unlock instruction display.
+- Reviewer scenario selection sets fictional fixtures only.
+- Scenario reset cancels or invalidates pending interaction updates.
 
-The `start` state exposes only these primary-user controls:
+Keep the existing investigation demo if present.
+Do not remove it without explicit approval.
+It must not control the dose-change journey through an
+unvalidated escalation score.
+
+
+## 6. Continuous call contract
+
+### Home
+
+One prominent action:
+
+```text
+Call with companion
+```
+
+Small utilities may include:
+- Help.
+- Language.
+- Settings.
+
+Do not show permanent label/schedule task cards.
+
+### Active call
+
+Provide:
+- Voice/text input.
+- Repeat.
+- Get help.
+- End call.
+- A current companion message.
+- Latest user response with correction.
+- One contextual panel at a time.
+
+The call is not a sequence of mandatory Next-button pages.
+
+Explicit user decisions remain necessary for:
+- Medicine confirmation.
+- Label-wording confirmation.
+- Device permission.
+- Sharing approval.
+
+
+## 7. State ownership
+
+Extend the existing session reducer or equivalent state authority.
+
+Do not maintain independent booleans that can contradict the
+authoritative flow.
+
+A nested dose-change state is acceptable if owned by the same session.
+
+### Conceptual state model
 
 ```ts
-{
-  primaryAction: "call-with-companion";
-  utilities: ["help", "language", "settings"];
-}
+type CallLifecycle = "not-started" | "active" | "ended";
+
+type DoseChangeStage =
+  | "idle"
+  | "identifying-medicine"
+  | "confirming-medicine"
+  | "checking-record"
+  | "confirming-label"
+  | "comparing"
+  | "comparison-match"
+  | "comparison-incomplete"
+  | "conflict-unresolved"
+  | "callback-offered"
+  | "reviewing-callback"
+  | "submitting-callback"
+  | "callback-submitted"
+  | "callback-failed"
+  | "callback-cancelled"
+  | "support-interruption";
 ```
 
-The start state must not render `show-medicine`, `ask-schedule`, `repeat`, `get-help`, or `end-call` as primary navigation actions. It contains no shortcut cards.
+Names may be adapted to existing code.
+The behaviours and invariants must remain equivalent.
 
-### Active call state
+Audio status is separate from journey status.
+Finishing speech does not automatically confirm a decision.
 
-After `call-with-companion`, transition to `listening`. Only then show:
+
+## 8. Main transitions
 
 ```text
-Repeat · Get help · End call
+CALL_STARTED
+  → active call
+
+DOSE_CHANGE_REQUEST
+  → identify medicine if needed
+
+MEDICINE_CANDIDATE_FOUND
+  → confirming medicine
+
+MEDICINE_CONFIRMED
+  → checking record
+
+RECORD_AVAILABLE
+  → confirming label
+
+LABEL_CONFIRMED
+  → comparing
+
+COMPARISON_MATCH
+  → comparison match
+  → bounded explanation or further help
+
+COMPARISON_INCOMPLETE
+  → limitation
+  → support option
+
+COMPARISON_CONFLICT
+  → conflict unresolved
+  → callback offer
+
+CALLBACK_ACCEPTED
+  → create draft
+  → reviewing callback
+
+DRAFT_EDITED
+  → increment revision
+  → clear approval
+  → review updated content
+
+CALLBACK_APPROVED
+  → bind approval to exact revision
+  → submitting callback
+
+SUBMISSION_SUCCEEDED
+  → callback submitted
+  → medication remains unresolved
+
+SUBMISSION_FAILED
+  → callback failed
+  → preserve draft
+
+RETRY_SELECTED
+  → submit same logical approved request,
+    subject to retry rules
+
+CANCEL_SELECTED
+  → nothing submitted
+  → preserve comparison
+
+END_CALL / RESET
+  → terminate current interaction generation
+  → invalidate pending callbacks
 ```
 
-The call state accepts spoken or typed input and can reveal temporary contextual action buttons.
-
-### Conversation routing
-
-| Classified intent | Assistant response | Temporary action / state |
-|---|---|---|
-| Unknown medicine question | “Let’s check this together. Would you like to show me the medicine label?” | `Show medicine`; remain `listening` |
-| Schedule question with confirmed record | Use approved record-backed schedule content only | `explain` or approved schedule substate |
-| Schedule question without confirmed record | “Would you like to show me a medicine label, or ask about your medicine schedule?” | `Show medicine`, `Ask about my schedule`; remain `listening` |
-| Broad / unclear need | Same approved clarification question | `Show medicine`, `Ask about my schedule`; remain `listening` |
-| Human-help request | Explain help options | `safety` |
-| Unsafe / unsupported medical question | Explain limitation, no medical advice | `safety` |
-
-`Show medicine` and `Ask about my schedule` are contextual actions. They must disappear or be replaced after a selection and must never appear as permanent landing navigation.
-
-## 5. Client responsibilities
-
-The browser may:
-
-- Render the mobile phone shell and static screen states.
-- Render the single-CTA landing state and contextual in-call action choices.
-- Collect typed input.
-- Start/stop browser speech recognition if available.
-- Play speech synthesis if enabled.
-- Request camera/microphone permission only after user action.
-- Render local camera preview.
-- Switch between available device cameras when browser support permits.
-- Capture a still image after explicit user action.
-- Upload a label image through a controlled form.
-- Display candidate, explanation, errors, and safety state returned by the server.
-- Persist non-sensitive demo UI preferences locally, such as language and reduced-motion choice.
-
-The browser must not:
-
-- Contain Anthropic, Gemini, Supabase service-role, or any permanent server key.
-- Decide whether a label matches a record.
-- Generate or alter medication advice.
-- Bypass confirmation to show a record explanation.
-- Store raw uploaded label images in local storage.
-- Render contextual medicine/schedule route choices on the home state.
-
-## 6. Server responsibilities
-
-The server must:
-
-- Keep secret credentials private.
-- Validate every request with Zod.
-- Rate-limit or constrain AI routes as practical for a prototype.
-- Retrieve only the seeded/authorised demo record.
-- Classify incoming active-call messages into safe UI intents.
-- Call Claude for structured extraction or conversational content only under a strict schema.
-- Validate Claude output against local data before UI rendering.
-- Route unknown, ambiguous, unsafe, or AI-error states to the safety response.
-- Write redacted audit events if persistence is enabled.
-- Return plain-language, structured errors.
-
-## 7. State machine
+### Correction branch
 
 ```text
-START
-  → CALL_STARTED
-  → LISTENING
-  → UNKNOWN_MEDICINE_QUESTION → OFFER_SHOW_MEDICINE
-  → BROAD_OR_UNCONFIRMED_SCHEDULE_QUESTION → OFFER_ROUTE_CLARIFICATION
-
-OFFER_SHOW_MEDICINE
-  → SHOW_MEDICINE_SELECTED
-  → CAMERA_PERMISSION
-  → CAMERA_GUIDANCE
-  → LABEL_SUBMITTED
-  → CANDIDATE_MATCH | NO_MATCH | AMBIGUOUS | INPUT_ERROR
-
-OFFER_ROUTE_CLARIFICATION
-  → SHOW_MEDICINE_SELECTED → CAMERA_PERMISSION
-  → ASK_SCHEDULE_SELECTED → CONFIRMED_RECORD_CHECK | SAFETY
-
-CANDIDATE_MATCH
-  → USER_CONFIRMED → EXPLAIN
-  → USER_DENIED → SAFETY
-  → USER_UNSURE → SAFETY
-
-EXPLAIN
-  → UNDERSTOOD → COMPLETE
-  → ASK_HELP → SAFETY
-  → NEW_MEDICINE → LISTENING
-
-Any active-call state
-  → URGENT_RISK → URGENT_SAFETY
-  → API_FAILURE → LOCAL_FALLBACK
-  → PERMISSION_DENIED → TYPED_OR_DEMO_LABEL_FALLBACK
-  → END_CALL → START
+LABEL_CORRECTED
+  → increment label revision
+  → clear label confirmation
+  → reconfirm wording
+  → invalidate comparison
+  → recompute
+  → invalidate callback approval/draft when affected
 ```
 
-### State invariants
+If the conflict disappears:
+- Do not send an obsolete discrepancy request.
+- Explain the changed comparison.
+- Allow a new, appropriately described support request if wanted.
 
-- `LISTENING` requires a call-start event.
-- `CAMERA_PERMISSION` requires contextual `show-medicine` selection during an active call.
-- `EXPLAIN` requires `match.status === "confirmed"`.
-- A candidate must have a `source === "demo-record"` and a server-side validation result.
-- No match or ambiguity must never create an explanation payload.
-- Urgent-risk classification overrides the normal conversation path.
 
-## 8. API contract
+## 9. State invariants
 
-All API routes return JSON with this envelope:
+1. Active conversation requires an explicit call-start event.
+
+2. Record instruction display requires confirmed medicine identity.
+
+3. Label comparison requires confirmation of the current label revision.
+
+4. Comparison uses the current record version and confirmed label revision.
+
+5. Missing information never produces automatic agreement.
+
+6. Unresolved conflict never produces a dose recommendation.
+
+7. Source instructions may be displayed for comparison, but neither
+   is selected as clinically correct.
+
+8. Draft edits invalidate previous approval.
+
+9. Submission requires approval of the exact current draft.
+
+10. Cancel before submission produces no service call.
+
+11. Submission success does not establish recipient acknowledgement,
+    callback scheduling, clinical review, or resolution.
+
+12. End/reset prevents stale results from changing current UI state.
+
+13. Continuing another task does not silently clear an unresolved conflict.
+
+14. AI output cannot bypass any invariant.
+
+
+## 10. Session and storage
+
+### Prototype scope
+
+- Fictional records only.
+- No production authentication or patient authorisation.
+- No real messaging.
+- No persistent health-data storage.
+- No raw media in browser storage.
+
+Document where each session object actually lives:
+- Client memory.
+- Server-side temporary store.
+- Browser session storage, if used.
+
+Do not claim durable session persistence if it does not exist.
+
+### Serverless limitations
+
+If temporary server memory is used:
+- Do not rely on requests always reaching the same instance.
+- Treat store loss as a recoverable session-expiry condition.
+- Return an explicit error rather than accepting an unknown draft.
+- Do not claim production-grade idempotency across deployments.
+
+If reliable demo continuity requires a shared temporary store,
+add it only after assessing scope and complexity.
+
+### Reload
+
+If refresh loses the session:
+- Return to a safe entry.
+- Explain that the previous call is no longer available.
+- Do not reconstruct approval from a URL.
+- Do not imply that an in-flight request definitely failed.
+
+The client must distinguish known failure from unknown outcome.
+
+
+## 11. API conventions
+
+All external API input and output must be validated.
 
 ```ts
 type ApiSuccess<T> = {
@@ -204,489 +424,529 @@ type ApiFailure = {
   error: {
     code: string;
     message: string;
-    safeNextAction: "retry" | "use_demo_label" | "type_label" | "get_help" | "return_home";
+    retryable: boolean;
+    safeNextAction:
+      | "retry"
+      | "correct"
+      | "review"
+      | "get-help"
+      | "restart";
   };
   requestId: string;
 };
 ```
 
-### `POST /api/session`
+These endpoint shapes are proposed.
+Map them onto existing compatible routes rather than adding
+parallel implementations.
 
-Creates or restores an anonymous prototype session.
+Errors must not expose:
+- Credentials.
+- Provider prompts.
+- Raw uploaded content.
+- Internal stack traces.
+- Unnecessary personal information.
 
-Request:
 
-```ts
-{
-  persona: "mei-ling" | "caregiver";
-  language: "en" | "zh-Hans";
-}
-```
+## 12. Record retrieval
 
-Response data:
+Reuse the existing simulated PharmacyService.
 
-```ts
-{
-  sessionId: string;
-  persona: "mei-ling" | "caregiver";
-  language: "en" | "zh-Hans";
-  activeState: "start";
-  demoMode: true;
-}
-```
-
-### `POST /api/call/start`
-
-Starts an active companion call and creates an audit event.
-
-Request:
+Conceptual request:
 
 ```ts
 {
   sessionId: string;
-}
-```
-
-Response data:
-
-```ts
-{
-  assistantText: string;
-  speakableText: string;
-  nextState: "listening";
-  callControls: ["repeat", "get-help", "end-call"];
-}
-```
-
-### `POST /api/companion/message`
-
-Accepts typed transcript input from an active call. It does not return free-form medical advice. It returns a UI-safe intent/state response.
-
-Request:
-
-```ts
-{
-  sessionId: string;
-  text: string;
-  language: "en" | "zh-Hans";
-}
-```
-
-Response data:
-
-```ts
-{
-  intent:
-    | "unknown_medicine_question"
-    | "schedule_question"
-    | "show_medicine"
-    | "ask_schedule"
-    | "get_help"
-    | "unsupported_medical_question"
-    | "urgent_risk"
-    | "general";
-  assistantText: string;
-  speakableText: string;
-  nextState: "listening" | "camera-permission" | "safety" | "explain";
-  contextualActions?: Array<{
-    id: "show-medicine" | "ask-schedule";
-    label: string;
-  }>;
-}
-```
-
-Rules:
-
-- Do not include `contextualActions` on the start/home screen.
-- For an unknown-medicine question, return only `show-medicine`.
-- For an unconfirmed schedule/broad question, return both contextual actions with the approved clarification prompt.
-- For confirmed record content, use the record-backed response route only.
-
-### `POST /api/label/analyze`
-
-Accepts a captured/uploaded image or typed label fallback. Server sends image to Claude only if enabled. The route never returns medication instructions.
-
-Request multipart or JSON metadata:
-
-```ts
-{
-  sessionId: string;
-  inputMode: "demo" | "image" | "typed";
-  typedLabel?: {
-    patientName?: string;
-    medicineName?: string;
-    strength?: string;
-  };
-  image?: File;
-}
-```
-
-Response data:
-
-```ts
-type LabelAnalysis = {
-  outcome: "candidate" | "no-match" | "ambiguous" | "unreadable" | "blocked";
-  userMessage: string;
-  nextState: "confirm-match" | "safety";
-  candidate?: {
-    candidateId: string;
-    patientName: string;
-    medicineName: string;
-    strength: string;
-    dosageForm: string;
-    sourceLabel: "BrightCare Pharmacy — demo record";
-    matchStatus: "possible";
-  };
-  reasonCode?: "low-confidence" | "conflict" | "missing-fields" | "multiple-candidates" | "unsafe-request";
-};
-```
-
-Server rule: a candidate is returned only if required identity fields match the local record under deterministic matching rules. Claude-reported confidence is supporting metadata, never sufficient proof.
-
-### `POST /api/match/confirm`
-
-Request:
-
-```ts
-{
-  sessionId: string;
-  candidateId: string;
-  decision: "confirmed" | "denied" | "unsure";
+  medicineId: string;
 }
 ```
 
 Response:
+- Fictional medicine identity.
+- Structured instruction.
+- Record provenance and version.
+- Explicit fictional status.
 
-```ts
-{
-  nextState: "explain" | "safety";
-  message: string;
-}
-```
+Rules:
+- Retrieve only known fixture records.
+- Validate medicine/session association.
+- Return unavailable when required data cannot be retrieved.
+- Do not use a later date to resolve an instruction conflict.
 
-### `GET /api/record/explanation`
 
-Returns data only when session match is confirmed.
+## 13. Label input and extraction
 
-Query:
+Reuse the existing label route where compatible.
+
+Separate:
+- Identity extraction.
+- Instruction-text extraction.
+
+Do not silently expand identity extraction into dose interpretation.
+
+### Identity route behaviour
+
+- Extract only permitted identity fields.
+- Validate output.
+- Run deterministic matching.
+- Return possible candidate or limitation.
+
+### Instruction-text behaviour
+
+- Extract verbatim visible wording only.
+- Never infer missing instruction text.
+- Never calculate or recommend a dose.
+- Require user confirmation.
+- Use approved deterministic parsing for supported fixtures.
+- If parsing is uncertain, return insufficient information.
+
+### Media handling
+
+- Explicit action before capture/upload.
+- Validate file type, size, and decoding.
+- Apply existing supported-image limits.
+- Re-encode/strip metadata where implemented.
+- Do not claim images are never retained by external providers
+  without verifying the provider configuration.
+- No image inclusion in callback payloads.
+- Provide typed entry or a fixture fallback.
+
+
+## 14. Comparison service
+
+Comparison may be implemented as a shared pure function.
+
+Inputs:
+- Confirmed medicine.
+- Current record and version.
+- Confirmed label and revision.
+- Supported structured instruction fields.
+
+Outputs:
+- Match.
+- Conflict.
+- Insufficient information.
+- Compared, differing, and missing fields.
+
+Rules:
+- Ignore only harmless formatting differences.
+- Preserve units, decimals, negations, and conditional wording.
+- Do not infer equivalence using general LLM reasoning.
+- Recompute after relevant edits.
+- Validate versions before callback draft creation.
+
+The server must validate or recompute relevant comparison facts
+before accepting a callback submission.
+
+
+## 15. Callback draft lifecycle
+
+Reuse or extend the existing help-service contract.
+
+Conceptual draft creation:
 
 ```text
-?sessionId=...&language=en|zh-Hans
+POST /api/help/draft
 ```
-
-Response data:
-
-```ts
-{
-  recordSource: "BrightCare Pharmacy — demo record";
-  medicine: {
-    name: string;
-    strength: string;
-    whatItIsFor: string;
-    instructions: string;
-  };
-  explanation: {
-    title: string;
-    purpose: string;
-    instruction: string;
-    caution: string;
-  };
-  allowedActions: ["repeat", "switch-language", "get-help", "i-understand"];
-}
-```
-
-The response is built from the local content model, not an unconstrained LLM answer.
-
-### `POST /api/help/request`
-
-> **Superseded by §16 H4** (help flows through simulated services). Kept for history.
-
-Creates a demo audit event and returns non-deceptive help options.
 
 Request:
 
 ```ts
 {
   sessionId: string;
-  reason: "unreadable" | "mismatch" | "unsure" | "medical-question" | "urgent-risk";
+  reason:
+    | "instruction-discrepancy"
+    | "comparison-incomplete"
+    | "record-unavailable";
+  medicineId: string;
+  confirmedLabelRevision?: number;
 }
 ```
+
+The application constructs the draft from allowed session facts.
 
 Response:
+- Draft ID.
+- Revision.
+- Recipient.
+- Exact reviewable payload.
+- Simulated status.
+
+### Editing
+
+Conceptual operation:
+
+```text
+PATCH /api/help/draft
+```
+
+Allowlisted editable values:
+- Callback contact.
+- User concern.
+- Confirmed label wording through the correction flow.
+- Valid recipient selection, if implemented.
+
+Record facts are not user-editable.
+
+Any payload change:
+- Increments draft revision.
+- Clears approval.
+- Updates the preview.
+- Revalidates the comparison when applicable.
+
+
+## 16. Approval and submission
+
+Reuse the existing:
+
+```text
+POST /api/help/request
+```
+
+Extend its contract rather than keeping both old and new submission APIs.
+
+Conceptual request:
 
 ```ts
 {
-  title: string;
-  message: string;
-  actions: Array<{
-    id: "try-again" | "pharmacy-demo" | "clinic-demo" | "trusted-helper-demo" | "urgent-care";
-    label: string;
-    implemented: boolean;
-  }>;
+  sessionId: string;
+  draftId: string;
+  approvedRevision: number;
+  idempotencyKey: string;
 }
 ```
 
-### `POST /api/live/session`
+### Server checks
 
-Creates a limited session configuration for Gemini Live or returns fallback capability.
+- Session is valid.
+- Draft exists and belongs to the session.
+- Draft revision matches the approved revision.
+- Required confirmed data is still current.
+- Recipient is a permitted fictional recipient.
+- Payload is constructed from an allowlist.
+- Request is not already submitted.
+- Request is simulated.
 
-Rules:
+The explicit Send action authorises this exact reviewed revision.
+Do not describe this prototype mechanism as production proof
+of identity or consent.
 
-- Never return a permanent Gemini server key.
-- Prefer short-lived/ephemeral credentials or a server-assisted session establishment pattern supported by the selected SDK.
-- Return `fallback: true` if not configured or unavailable.
-
-Response data:
+### Result
 
 ```ts
-{
-  mode: "gemini-live" | "browser-fallback";
-  ephemeralToken?: string;
-  expiresAt?: string;
-  systemContextVersion: string;
-}
+type SubmissionResult =
+  | {
+      ok: true;
+      simulated: true;
+      status: "submitted";
+      requestId: string;
+    }
+  | {
+      ok: false;
+      simulated: true;
+      status: "failed";
+      requestId: string;
+      reasonCode: string;
+      retryable: boolean;
+    };
 ```
 
-### `GET /api/caregiver/overview`
+Do not return:
+- A promised callback time.
+- Pharmacist acknowledgement.
+- Clinical resolution.
+- A claim that a real message was sent.
 
-Returns only seeded demo record and redacted audit events for the selected prototype session/patient.
 
-## 9. AI boundaries
+## 17. Idempotency and retry
 
-### Claude call pattern
+- Use one logical key per approved draft submission.
+- Repeated taps while submitting do not create additional calls.
+- Retry of the same logical request reuses the key.
+- Same key with different content is rejected.
+- Editing creates a new review revision and new submission identity.
+- Successful submission cannot be resent as a duplicate.
+- Document the storage scope and expiry of deduplication records.
 
-Claude can be called for two bounded tasks:
+### Unknown outcome
 
-1. **Visual extraction:** return structured possible identity fields from the image. No medical instructions.
-2. **Plain-language phrasing:** only rewrite server-supplied verified fields into approved language schema.
+A transport timeout is not proof that no request was processed.
 
-Claude requests must include:
+Only display “No one has been notified” when the simulation
+definitively reports failure before delivery.
 
-- Demo/prototype declaration.
-- Prohibition on medical diagnosis/prescribing.
-- Requirement to emit JSON matching Zod schema.
-- Requirement to output `unreadable`, `ambiguous`, or `no-match` rather than guess.
-- No permission to add facts beyond the supplied record.
+For an unknown result:
+- Explain that submission could not be confirmed.
+- Retry with the same logical key.
+- Do not claim definite success or definite non-delivery.
 
-### Gemini Live role
+The required failure demo should use a deterministic known failure.
 
-Gemini Live may provide a natural spoken interaction wrapper. It must receive the same safety system context and it must not be trusted as the medication source.
 
-For the MVP selected scope:
+## 18. Asynchronous lifecycle
 
-- Use live **audio** where configured.
-- Use local user camera preview only.
-- Send captured still image to the label analysis route after explicit user action.
-- Do not continuously stream user camera frames to the model.
-- Start the live interaction only after `Call with companion` is selected.
-- Do not ask users to choose label/schedule pathways before the active conversation starts.
+Use session/turn identifiers or equivalent guards.
 
-### Post-model validation
+For record retrieval, extraction, speech, and submission:
+- Associate results with the initiating session and revision.
+- Ignore stale results.
+- Cancel work where supported.
+- Stop recognition/playback on end/reset.
+- Release camera media tracks when no longer needed.
+- Avoid duplicate speech or auto-advancing required decisions.
 
-After any model response:
+Ending the UI does not guarantee that server-side work stopped.
+Do not equate an aborted client request with cancelled delivery.
 
-1. Parse with Zod.
-2. Verify status is permitted.
-3. Compare candidate identity fields to local mock record.
-4. Reject extra medical claims.
-5. Store only redacted audit result.
-6. Return a safe fallback if validation fails.
 
-## 10. Failure and fallback contract
+## 19. Submission UI states
 
-| Failure | Required UI response |
-|---|---|
-| No microphone | Show typed input and optional browser text-to-speech |
-| Speech recognition unavailable | Continue with typed input |
-| Gemini unavailable | Show “Voice connection is unavailable. You can continue by typing.” |
-| Camera permission denied | Offer demo label, upload, and typed-label fallback after in-call label route is selected |
-| No rear camera | Use available camera and explain user can upload a photo |
-| Claude unavailable | Demo label still returns deterministic seeded candidate; image flow offers try again/help |
-| Supabase unavailable | Use in-memory/local demo session and show that activity will not persist |
-| Invalid AI JSON | Log failure and route to safe fallback |
-| Network error | Preserve local UI state and offer retry or deterministic demo path |
+### Reviewing
+- Nothing submitted.
+- Recipient and content inspectable.
 
-## 11. Data persistence contract
+### Editing
+- Approval cleared.
+- Context retained.
 
-### Default
+### Submitting
+- Progress visible.
+- Send disabled against duplicates.
+- Do not offer “cancel delivery” unless that capability exists.
 
-- Session state is in memory/client state plus a short-lived anonymous session ID.
-- Raw images are not stored.
-- Demo label image may be served from static assets.
+### Submitted
+- Explicit simulated submission.
+- Medication issue unresolved.
+- No response-time promise.
 
-### Optional Supabase persistence
+### Failed
+- Definitive failed result.
+- Summary preserved.
+- Retry and alternative support available.
 
-Persist only:
+### Unknown
+- Outcome not confirmed.
+- No false delivery/non-delivery claim.
+- Idempotent retry available.
 
-- Anonymous session metadata.
-- Selected language and persona.
-- Call-start state and contextual route selected.
-- Candidate result status, never raw image.
-- Confirmation/denial state.
-- Redacted audit event.
-- Help-request event.
+### Cancelled before submission
+- Nothing shared.
+- Return to comparison/call.
 
-Never persist:
 
-- API keys.
-- Raw microphone audio.
-- Camera video.
-- Production health information.
-- Full model prompt/response containing unnecessary user input.
+## 20. Symptom and urgent-language interruption
 
-## 12. Environment variables
+The dose-change flow must not infer that a symptom is caused
+by a medication change.
 
-Server-only variables:
+When a symptom is reported:
+- Pause routine explanation.
+- Preserve confirmed context.
+- Use the existing bounded support behaviour.
+- Do not apply the historical additive interaction score.
+- Do not add new clinical tiers or rules in this implementation.
 
-```bash
-ANTHROPIC_API_KEY=
-GEMINI_API_KEY=
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-APP_BASE_URL=
-```
+Keep these separate:
+1. Existing language detection.
+2. Existing static safety guidance.
+3. Future emergency calling or dispatch integration.
 
-Public variables allowed only when non-secret:
+Preserve existing safety information.
+Any expanded routing requires separately reviewed requirements.
+
+A support interruption must not silently reset approval or
+resume a stale callback request.
+Require review if the request content changes.
 
-```bash
-NEXT_PUBLIC_APP_NAME=Medication Companion
-NEXT_PUBLIC_DEMO_MODE=true
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-```
 
-Rules:
+## 21. Language and audio
 
-- Do not prefix Anthropic, Gemini, or service-role secrets with `NEXT_PUBLIC_`.
-- Keep `.env.local` out of Git.
-- Supply production and preview variables in Vercel Project Settings.
-
-## 13. Security requirements
-
-- Validate content type, size, and dimensions for image upload.
-- Limit image size to a conservative prototype maximum, such as 5 MB.
-- Use server-side request size limits.
-- Strip or ignore EXIF metadata before further handling when practical.
-- Add basic origin/CSRF protections according to chosen session model.
-- Never execute model-generated HTML, URLs, or tool calls.
-- Sanitize audit/event fields before rendering.
-- Use Supabase RLS if any persisted tables are exposed to browser clients.
-
-## 14. Test contract
-
-### Unit tests
-
-- Deterministic record matching.
-- Call-start gate prevents contextual route actions on home state.
-- Conversation routing: unknown medicine returns `show-medicine` only.
-- Conversation routing: broad/unconfirmed schedule returns contextual clarification options.
-- Explanation gate rejects unconfirmed session.
-- Safety trigger detector.
-- Zod model response validation.
-- Language content resolver.
-
-### Integration tests
-
-- Landing screen contains exactly one primary CTA.
-- Happy path with call start and demo label.
-- Rejected match path.
-- Unreadable upload path.
-- Claude failure fallback.
-- Camera permission denial fallback.
-- Gemini Live fallback.
-
-### Manual demo checklist
-
-- Test in Chrome desktop and mobile Safari/Chrome if possible.
-- Test without camera/microphone permissions.
-- Test reduced motion.
-- Test keyboard navigation.
-- Test English and Chinese rendering.
-- Test Vercel preview with environment variables set.
-
-## 15. Deployment contract
-
-1. Push repository to GitHub.
-2. Import repository into Vercel.
-3. Add server-only environment variables.
-4. Deploy preview first.
-5. Run seeded demo label route on preview.
-6. Confirm no secret appears in browser network payloads or built JavaScript.
-7. Promote to production after manual checklist passes.
-
-The deployed site must include a visible prototype disclaimer and a link to `/about`.
-
-## 16. Assignment 3 experience amendments
-
-See CLAUDE.md § Assignment 3 experience amendments and `content-model.md` §19 for the copy.
-
-### A. Companion tone contract
-
-- `POST /api/companion/understand` validates the model reply with `isSafeCompanionReply(reply, language)`: the existing number/dosing/advice/match-claim/markup filters, plus the tone-contract blame words, advice phrased as an instruction, the requested language, and a closing question. Any failure returns the deterministic approved line (`source: "fallback"`).
-
-### B. Gentler label-failure copy
-
-- `buildEscalation` picks `labelSafetyHeading` / `labelSafetyBody` for the four non-urgent label reasons. No state, transition, action or retry rule changes.
-
-### C. Record conflict
-
-- Session flag `recordConflict` (state stays `explain`). Set by `USER_MESSAGE` when `routeMessage` returns `record-conflict` in `explain` with a confirmed match.
-- `RECORD_CONFLICT_CHOICE`: `pharmacist` → `safety` (`help-requested`, confirmed candidate kept, audit detail `from: record-conflict`); `carry-on` → clears the flag, same step. Ignored when no conflict is raised.
-- Moving a step, `UNDERSTOOD`, `NEW_MEDICINE` and any safety entry clear the flag.
-- Voice/typed: in `explain`, a dispute is sent as a message; while the flag is set, "pharmacist" or "carry on / next" answers it, and a bare "yes" re-asks.
-- No model is called: the understanding pass only runs in `listening`.
-
-### D. Label check on the explanation
-
-- `LABEL_CHECK { matches }`, valid only in `explain` at step 1 with a confirmed match and no open record conflict. `matches: true` → step 2. `matches: false` → `safety` (`label-differs`), candidate and match status cleared, so the explanation is unreachable until a new label is confirmed.
-- Voice/typed at step 1: "different / doesn't match / 不一样" or a short "no" → differs; "matches / same / 一样" or a short "yes" → matches; "next" still moves on without answering.
-
-### E. Off-topic, health signals and wellbeing
-
-- `ContextualActionId` adds `end-call` (after the wrap-up) and `carry-on` (after wellbeing). `SELECT_ROUTE` accepts them only when offered: `end-call` → `END_CALL`; `carry-on` → `anotherMedicineGuide`, no actions. The understanding pass still offers only the two doors.
-- Session `offTopicStreak`: +1 on an off-topic message, reset by any other message or a route taken; the wrap-up fires at `OFF_TOPIC_TURN_CAP` (2).
-- `VoiceProvider.onTranscript(callback: (text, confidence?) => void)`: the browser provider passes the lowest confidence of the final segments. Typed input has none.
-- `buildEscalation(..., selfHarm)` adds `crisisKey` on the urgent path; the caller derives it from the triggering message with `mentionsSelfHarm`.
-
-### F. Family help with consent
-
-- `ASK_FAMILY` (also `SELECT_ROUTE ask-family` when offered) sets `familyConsentPending`. Valid in non-urgent `safety`, or in `listening` when `ask-family` was offered.
-- `FAMILY_CONSENT { granted }`, only while pending. `true` writes `caregiver-help-requested` and shows the demo notice; `false` just closes the question. Any new message, a safety entry or returning to the call also closes it without writing anything.
-- Voice: while pending, only a short clear "yes" consents; "no", "not now" or a hedge declines; anything else re-asks.
-- `HELP_ACTION` never carries `ask-family`, so no demo-action audit can bypass consent.
-
-### G. Study mode
-
-- Enabled only when `STUDY_MODE=true` **and** `VERCEL_ENV !== "production"` (`isStudyModeEnabled`). Otherwise `/study` is a 404 and the cookie is ignored. Add `STUDY_MODE` to local or Preview env only. It is read when the app is built and rendered, so redeploy the preview after setting it.
-- `/study` (not linked, `noindex`): a server-action form sets the httpOnly session cookie `mc_study` to `control` or `wrong-explanation`, or clears it. Query parameters cannot set it, and unknown values are ignored.
-- The root layout reads the cookie server-side and passes the condition to `StudyBadge`, which shows "Study session" on every screen (never the condition itself) and dispatches `SET_STUDY_CONDITION`.
-- `resolveExplanation(session, language, studyCondition)` swaps only the instruction, and only for a confirmed match. Call start, camera consent and confirmation all still apply.
-- The caregiver timeline shows a `Study: <condition>` tag on tagged events.
-
-### H4. Service adapters and help flows
-
-- `src/lib/services/`: `PharmacyService`, `CareCircleService` and `IdentityService` interfaces, `Simulated*` implementations, `getServices()` selected by `SERVICE_MODE=simulated` (the only mode, and the default). `SIMULATED_SERVICE_FAILURE=pharmacy,care-circle` switches failures on. `notifyCaregiver` takes an optional `contact: "family" | "trusted-helper"`.
-- `POST /api/help/request` (replaces the earlier demo contract): `{ sessionId, kind: "pharmacist-callback" | "family" | "trusted-helper", reason: HelpReason }` → `{ kind, reference?, expectedWindow?, contactName? }`, or a 503 `service_unavailable` envelope. Origin check and rate limit as for the other routes. There is no emergency kind (amendment I).
-- Session `helpFlow: { kind, stage: "confirm" | "sending" | "sent" | "failed" | "info", reason, reference?, contactName? } | null` replaces `helpAction` and `familyConsentPending`. Events: `HELP_START`, `HELP_CONFIRM`, `HELP_RESULT`, `HELP_RETRY`, `HELP_SHOW_NUMBER`, `HELP_DISMISS`.
-  - `HELP_START` is allowed on non-urgent safety screens (all kinds), and for `family` after the wellbeing reply. The record conflict's "Ask a pharmacist to call me" opens the callback on top of the explanation.
-  - The client posts to the API only in `sending`. `sent` is set only by `HELP_RESULT ok`.
-  - `HELP_DISMISS` after `sent` on a safety screen continues the call where it left off.
-- Clinic shows the clinic's number as text. No `tel:` links anywhere.
-- Urgent-risk screen: no actions until amendment I.
-
-### H3. Choose from my medicines
-
-- `CHOOSE_MEDICINE { medicineId }`, valid only in `camera-guidance` and only for an id in `recordMedicines`. It sets a possible candidate and moves to `confirm-match`. Confirmation is still required before any explanation.
-
-### H2. Camera or photo
-
-- Session `showMethod: "choose" | "camera"`. Show medicine sets `camera-permission` with `choose`. `CHOOSE_CAMERA` → `camera`, and only then is `CAMERA_CONSENT` accepted.
-- `SUBMIT_LABEL` is accepted on the choice step for inputs that need no camera: `image` with `source: "upload"`, or `typed`. A camera photo still needs consent.
-- Photos are prepared in the browser (`preparePhoto`): long edge at most 2048 px, JPEG about 0.85, which drops EXIF. Anything undecodable (e.g. HEIC) shows `photoFormat` and nothing is sent. The upload then uses the same `/api/label/analyze` route and the same gates; images are never stored.
-- Voice on the choice step: "camera" → `CHOOSE_CAMERA`; saying the name and strength submits it as typed. A photo needs a tap, because the system picker can't be opened from speech.
-
-### H1. Prototype framing
-
-- `PrototypeBadge` (client, in the session's language) is rendered once in `src/app/layout.tsx`, fixed in the top padding band beside the study badge.
-- `CandidateDisplay.recordSource`, `RecordSource.displayLabel` and the label-analysis `sourceLabel` literal are now `"BrightCare Pharmacy"`.
+- Supported language values follow content-model.md.
+- Critical copy uses fixed reviewed keys.
+- Preserve confirmation and comparison across language changes.
+- Do not imply complete language support when critical copy is missing.
+- Record language-review limitations.
+
+Audio:
+- Uses the same approved content as visible text.
+- Can be stopped, muted, or repeated.
+- Does not automatically approve choices.
+- Does not need to finish before text appears.
+- Avoids competing screen-reader announcements.
+- Has a typed fallback.
+
+Provider failure must not produce a misleading message that
+all voice input is unavailable when only speech output failed.
+
+
+## 22. Privacy and security
+
+- Fictional input only; warn users not to upload real records.
+- Server-side secrets only.
+- Validate input/output with Zod or existing equivalent schemas.
+- Validate sessions and fixture IDs.
+- Constrain request sizes and AI usage.
+- Treat input and model output as untrusted.
+- Never execute model-generated tools, HTML, or arbitrary URLs.
+- Escape user-provided text in UI.
+- Exclude raw media and transcripts from sharing and audit events.
+- Redact sensitive values from errors and logs.
+- Keep .env.local out of version control.
+
+If external AI processes uploaded content:
+- Disclose the actual processing.
+- Verify retention settings before making deletion claims.
+
+If persistence is introduced:
+- Specify retention, access, deletion, and deployment scope.
+- Do not silently enable production data collection.
+
+A fictional caregiver view does not establish production
+caregiver authorisation.
+
+
+## 23. Audit behaviour
+
+Use content-model.md event types.
+
+Record:
+- Event category.
+- Scenario ID.
+- Record/label/draft revision.
+- Simulated outcome.
+- Non-sensitive request reference.
+
+Do not record:
+- Callback number.
+- Raw transcript.
+- Image/audio.
+- Full payload.
+- Unnecessary symptom details.
+
+Keep these events distinct:
+- Draft created.
+- Approved.
+- Submission attempted.
+- Submitted.
+- Failed.
+- Cancelled.
+
+Never record clinical resolution after callback submission.
+
+
+## 24. Reviewer scenarios
+
+Required:
+- Conflict → simulated success.
+- Conflict → definitive simulated failure.
+- Misread label → correction.
+- Matching instructions.
+- Record unavailable.
+
+Reviewer controls:
+- Clearly separate from user controls.
+- Reset deterministically.
+- Show fictional/simulated framing.
+- Do not bypass required confirmations.
+
+Existing study-mode wrong-explanation injection:
+- Remains separately gated.
+- Must not leak into ordinary demo scenarios.
+- Must not be described as real model behaviour.
+
+
+## 25. Test contract
+
+### Unit checks
+
+- Identity gates.
+- Label revision confirmation.
+- Structured comparison.
+- Missing-field handling.
+- Draft revision and approval invalidation.
+- Allowlisted payload construction.
+- Idempotency.
+- Stale-result rejection.
+- Approved copy resolution.
+
+### Interaction checks
+
+- One home CTA.
+- Corrections without restart.
+- Conflict with no dose recommendation.
+- Exact sharing preview.
+- Edit and reapproval.
+- Cancellation without submission.
+- Submitted versus unresolved status.
+- Failed-submission recovery.
+- End/reset during pending work.
+
+### Regression checks
+
+- Existing medicine explanation.
+- Voice/text fallback.
+- Camera decline.
+- Repeat and language controls.
+- Existing help and safety routes.
+- Study-mode isolation.
+
+### Manual checks
+
+- 320, 360, 393, and 430 px widths.
+- Desktop layout.
+- 200% zoom.
+- Keyboard operation and focus.
+- Reduced motion.
+- Mobile keyboard.
+- Audio interruption.
+- English and supported Chinese.
+- No-keys deterministic demo.
+
+Record actual results.
+Passing tests does not establish clinical safety.
+
+
+## 26. Deployment and evidence
+
+- Use existing package scripts.
+- Inspect commands before running.
+- Report commands actually executed.
+- Separate pre-existing failures from new regressions.
+- Verify the demonstrated build matches captured screenshots.
+- Check preview configuration and service simulation.
+- Confirm no real messaging or calling integration is enabled.
+
+Do not commit, push, deploy, or change external service configuration
+without explicit approval.
+
+README.md must contain:
+- Actual demo route.
+- Build/run instructions.
+- Scenario instructions.
+- Implemented/simulated/proposed status.
+- Known limitations.
+
+Evidence should link:
+Requirement ID → test → actual result → screenshot/build.
+
+Freeze a named reviewed version before submission.
+
+
+## 27. Definition of done
+
+- [ ] Main dose-change journey is coherent and complete.
+- [ ] Confirmation gates cannot be bypassed.
+- [ ] Comparison preserves provenance and uncertainty.
+- [ ] No conflicting dose is recommended.
+- [ ] Callback payload matches the reviewed revision.
+- [ ] Edits invalidate approval.
+- [ ] Cancellation makes no submission.
+- [ ] Duplicate requests are prevented within the documented scope.
+- [ ] Failure preserves work.
+- [ ] Unknown outcomes do not create false claims.
+- [ ] Submission does not imply medication resolution.
+- [ ] End/reset protects against stale updates.
+- [ ] Simulation is visible.
+- [ ] Existing functionality is regression-tested.
+- [ ] Actual validation and remaining gaps are documented.
+- [ ] Active specifications agree.

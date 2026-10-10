@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
 import type { Session } from "@/lib/session/state-machine";
+import { doseCheckLine } from "@/lib/voice/speakable";
 import type { T } from "./screen-chrome";
 
 export type FeedMessage = {
@@ -114,8 +115,15 @@ export function useCallFeed(
       // Language is part of the signature: switching language while reading a
       // step re-says that step in the new language (content-only, per
       // design-standard — it never resets which step or whether it's confirmed).
-      const explainSig = `${session.explainStep}:${session.language}`;
-      if (explainSig !== seen.current.explainSig) {
+      // Dose check: one line per step (keyed by its text), instead of the step-by-step explanation.
+      const doseLine = session.doseCheck ? doseCheckLine(session, t, explanation) : null;
+      const explainSig = session.doseCheck ? `dose:${doseLine}` : `${session.explainStep}:${session.language}`;
+      if (session.doseCheck) {
+        if (doseLine && explainSig !== seen.current.explainSig) {
+          seen.current.explainSig = explainSig;
+          pushRecord(doseLine);
+        }
+      } else if (explainSig !== seen.current.explainSig) {
         seen.current.explainSig = explainSig;
         pushRecord(...explainStepLines(session.explainStep, explanation.explanation));
       }
