@@ -357,17 +357,22 @@ to disclose simulation.
 
 ## 10. Continuous call structure
 
-An active call contains:
+An active call contains (amended 12 October 2026 at the owner's direction,
+docs/decisions.md "Active-call controls"):
 
-1. Compact identity and status.
-2. Current companion message.
-3. Latest user response with correction.
-4. One contextual panel.
-5. Voice/text input.
-6. Repeat, help, and end controls.
+1. Compact header: identity and trust badge.
+2. The companion orb and one short status line.
+3. The conversation transcript, in order, every turn readable,
+   newest brought into view only while the person is at the bottom.
+4. At most one contextual panel, only when the step has controls.
+5. A compact text box only when typing is needed (muted, no speech
+   input, a paused mic) or asked for (Get help → Type instead).
+6. Exactly three persistent controls: Get help, Mute/Unmute, End call.
 
-The full transcript may be available as optional history,
-but must not dominate the primary experience.
+Repeat, typing, the interrupt-by-voice setting and About are one tap
+away in the Get help sheet; Repeat, Try again and Tap to talk also
+appear by themselves when recovery needs them. The transcript is not
+collapsed behind an "Earlier in this call" control.
 
 Reviewer scenario controls belong outside this structure.
 
@@ -460,23 +465,21 @@ The 44 px rule is this product's design standard,
 not a statement that it is the universal WCAG AA minimum.
 
 
-## 13. Medicine confirmation panel
+## 13. Medicine confirmation (conversational)
 
-Heading:
-
-“Is this the medicine you mean?”
-
-Show:
-- Possible-match label.
+Amended 12 October 2026 at the owner's direction: there is no
+confirmation panel. The companion says, and the transcript shows,
+one line (`confirmSpoken`) that carries:
+- "A possible match" (never certain).
 - Medicine name.
 - Strength.
-- Form when useful.
+- Form.
 - Fictional record provenance.
+- The question, and that "not sure" is an answer.
 
-Actions:
-- Yes, this is the medicine.
-- No, try again.
-- I’m not sure.
+Answers are said or typed: a clear yes confirms; no denies;
+"not sure", a hedged yes or a question never confirm. The AI
+meaning-match is never offered "yes".
 
 Do not show instructions before identity confirmation.
 

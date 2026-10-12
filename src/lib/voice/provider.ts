@@ -1,6 +1,6 @@
 import type { UiLanguage } from "@/types/content";
 
-/** Provider abstraction from CLAUDE.md. A later GeminiLiveProvider implements the same shape. */
+/** Browser speech provider abstraction (the degraded fallback behind the realtime adapters in ./adapters.ts). */
 export interface VoiceProvider {
   isAvailable(): Promise<boolean>;
   connect(): Promise<void>;
@@ -32,12 +32,14 @@ export class VoiceError extends Error {
 
 export type VoiceCapabilities = { recognition: boolean; synthesis: boolean };
 
-/** Extra surface for providers that own a microphone and a speaker (browser speech, later live audio). */
+/** Extra surface for providers that own a microphone and a speaker (browser speech). */
 export interface SpeechVoiceProvider extends VoiceProvider {
   readonly capabilities: VoiceCapabilities;
   /** Must only be called from a user action: this is what triggers the browser's mic prompt. */
   startListening(language: UiLanguage): void;
   stopListening(): void;
+  /** Push-to-talk "send": stop listening but deliver what was heard (optional; stopListening drops it). */
+  commitListening?(): void;
   /** `slow`: "Repeat slowly" — the same approved text at a slower rate. */
   speak(text: string, language: UiLanguage, slow?: boolean): void;
   stopSpeaking(): void;

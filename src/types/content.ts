@@ -245,8 +245,7 @@ export type AuditEvent = {
     | "claude-understanding"
     | "typed-input"
     | "record-list" // extension: chosen from "Choose from my medicines"
-    | "local-fallback"
-    | "gemini-live";
+    | "local-fallback";
   validationStatus: "passed" | "blocked" | "not-applicable";
   details: Record<string, string | number | boolean | null>;
 };

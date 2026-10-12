@@ -104,11 +104,11 @@ export function determineEscalation(
     // Pause condition: red-flag symptoms bypass the score — weak data must never silence an emergency.
     action = "alert_family";
     reasoning =
-      "Red-flag symptom: questions stop and family is alerted now, whatever the score. Family decides whether to call 995.";
+      "Demo (simulated): a red-flag symptom would stop the questions and suggest alerting family, whatever the score. Nothing is sent.";
   } else if (confidence >= 80) {
     action = "alert_family";
     reasoning =
-      "High confidence: potential serious interaction detected. Family contacted for immediate attention.";
+      "Demo (simulated, unvalidated score): the design would suggest alerting family. Nothing is sent.";
   } else if (confidence >= 50 && confidence < 80) {
     action = "user_decides";
     reasoning =

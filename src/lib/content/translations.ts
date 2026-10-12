@@ -16,8 +16,6 @@ const en = {
   startSupport:
     "I can help you understand your medicine information from your pharmacy record.",
   callWithCompanion: "Call with companion",
-  callInterrupted:
-    "Your last call ended when the page reloaded, so it isn’t shown here. If you sent a request, it may or may not have gone through.",
   inputReassurance: "You can speak, type, or show a label.",
   help: "Help",
   language: "Language",
@@ -52,7 +50,7 @@ const en = {
     "Thank you for telling me. Which medicine do you mean? You can tell me its name, or would you like to show me the label so we can check it together?",
   // Unclear or unrelated input: what the companion can do, then the two doors.
   capabilityGuide:
-    "I’m here to help with your medicines. I can check a medicine label with you, then explain what your pharmacy record says about it, in English or 中文. Would you like to show me a medicine label, or ask about your medicine schedule?",
+    "I can check a medicine label with you, then explain what your pharmacy record says about it. Would you like to show me a medicine label, or ask about your schedule?",
   scheduleNeedsRecord:
     "To talk about your schedule, I first need to check a medicine against your record. Would you like to show me the medicine label?",
   prescriptionsListed:
@@ -68,13 +66,13 @@ const en = {
   medicineNameCheck:
     "I want to make sure I heard you right. Did you mean Metformin? You can say “yes”, say the name again, or type or spell it below. Or, if it’s easier, you can show me the label.",
   medicineNameRetry:
-    "No problem — speech can be tricky to catch. Could you tell me the medicine name again? Typing it, or spelling it out letter by letter, works well too. You can also show me the label.",
+    "No problem. Could you tell me the medicine name again? Typing or spelling it works too, or you can show me the label.",
   // Spine-based redirection: acknowledge what was said, then walk back to the
   // one thing this companion does. Never used for safety-classified input.
   offTopicSocial:
-    "It’s nice to hear from you. I’m an AI companion, so I stay with one thing — the medicine information in your pharmacy record. Would you like to show me a medicine label, or ask about your schedule?",
+    "It’s nice to hear from you. As an AI companion, I help with the medicine information in your pharmacy record. Would you like to show me a medicine label, or ask about your schedule?",
   offTopicWorld:
-    "I’d enjoy talking about that, but it’s outside what I know. What I can help with is the medicine information in your pharmacy record. Would you like to show me a medicine label, or ask about your schedule?",
+    "I’d enjoy talking about that, but it’s outside what I know. I can help with the medicine information in your pharmacy record. Would you like to show me a medicine label, or ask about your schedule?",
   offTopicCapability:
     "I can’t do that myself. If you tap Get help, I can ask a pharmacist to call you or let your family know. I can also help you understand the medicine information in your record.",
   // After two off-topic turns in a row: warm, and hands the choice back.
@@ -89,27 +87,56 @@ const en = {
   askSchedule: "Ask about my schedule",
   youSay: "Mei Ling says:",
   companionSays: "Companion says:",
-  earlierInCall: "Earlier in this call",
+  hearingNow: "Hearing you…",
+  latestMessage: "Latest message",
   companionThinking: "Let me think about that…",
-  typeLabel: "Type your question",
-  typePlaceholder: "For example: What is this medicine for?",
+  typeLabel: "Say it, or type it here",
+  typeInstead: "Type instead",
+  closeTyping: "Close typing",
+  helpTalkToPerson: "Get help from a person",
+  typePlaceholder: "Type your answer or question",
   send: "Send",
   voiceListeningNow: "I’m listening… please speak now.",
   voiceSpeaking: "Speaking…",
-  voiceMicOn: "Mic on",
-  voiceMicOff: "Mic off",
-  voiceMicLabel: "Microphone",
+  voiceConnecting: "Getting the call ready…",
+  voiceProcessing: "Checking what I heard…",
+  voicePreparing: "Preparing voice…",
+  voiceSpeakingDuplex: "Speaking… I’m still listening, so you can talk any time.",
+  voiceHeardYou: "I heard you — go ahead.",
+  voiceInterrupted: "The voice stopped. The words are above; tap Repeat to hear them again.",
+  voiceChanged: "The streaming voice isn’t available right now, so your browser’s own voice is reading the words for this call.",
+  voiceTapToTalk: "Tap to talk",
+  voiceTapToSend: "Tap to send",
+  voiceInterruptOn: "Interrupt by voice: on",
+  voiceInterruptOff: "Interrupt by voice: off",
+  mute: "Mute",
+  unmute: "Unmute",
+  voiceMuted: "Muted. The companion can’t hear you. Type below, or tap Unmute.",
+  voiceUnmuted: "Unmuted. I can hear you again.",
+  voiceLost: "The voice isn’t available for the rest of this call. Everything is still written here.",
+  voiceTryAgain: "Try again",
   voicePaused:
-    "I’m still here. Tap “Mic on” when you’re ready to talk, or type instead.",
+    "I’m still here. Tap “Try again” when you’re ready to talk, or type instead.",
   voiceDidntCatch:
     "Sorry, I didn’t catch that. Please say it again, or use the buttons.",
   // Step-aware versions of the line above. Outside the open conversation the
   // companion knows exactly what this step is waiting for, so it says so
   // instead of leaving the person to guess ("what do I do now?").
   unclearExplain:
-    "I didn’t quite catch that. You can say “next” to hear the rest, “go back”, or “repeat that”.",
+    "Sorry, I didn’t follow that. I can carry on with your record, go back a step, or say it again. Just tell me what you’d like.",
+  // A clear question that isn't one of this step's answers: no "didn't catch that".
+  unclearExplainQuestion:
+    "That’s a good question, but I can only explain what your pharmacy record says. Shall I carry on, or would you like a pharmacist to help?",
+  unclearLabelCheckQuestion:
+    "That’s a good question, but I can only go through your pharmacy record. For now: does this match the label on your box?",
+  unclearExplainLastQuestion:
+    "That’s a good question, but I can only explain what your pharmacy record says. Would you like me to say it again, or help you contact a pharmacist?",
+  explainWhichOne: "Happy to. Would you like me to say it again, or help you contact a pharmacist?",
+  // Fixed boundary wording (CLAUDE.md §7): never a dose, only the record's own words and a way on.
+  explainDoseQuestion:
+    "I can’t decide your dose for you. Your pharmacy record, checked on {verifiedDate}, says: “{instruction}” If your dose has changed, tell me, or a pharmacist can check it with you.",
   unclearExplainLast:
-    "I didn’t quite catch that. That’s everything your record says. You can say “I understand” when you’re ready, or “repeat that”.",
+    "Sorry, I didn’t follow that. That’s everything your record says. I can say it again, help you contact a pharmacist, or we can finish here.",
   unclearRecordConflict:
     "I didn’t quite catch that. You can say “pharmacist” for help checking, or “carry on”.",
   unclearConfirmMatch:
@@ -130,6 +157,8 @@ const en = {
     "You can also just tell me the medicine name and strength — for example, “It’s Metformin, 500 milligrams.”",
   voicePrivacy:
     "Your browser may send your voice to its own speech service to turn it into text. Typing works the same way.",
+  voicePrivacyRealtime:
+    "Your voice is sent to OpenAI to be turned into text, and the companion’s words to ElevenLabs to be spoken. Typing works the same way.",
   voiceUnsupported: "Voice input isn’t available in this browser. Typing works the same way.",
   voiceDenied:
     "The microphone is off. You can allow it in your browser settings, or keep typing.",
@@ -160,6 +189,7 @@ const en = {
   showMedicineHeading: "How would you like to show me your medicine?",
   useCamera: "Use camera",
   choosePhoto: "Choose a photo",
+  photoNeedsTap: "Of course. Tap “Choose a photo” below to pick a picture of the label from your phone.",
   typeName: "Type the name",
   photoIntro:
     "You can choose a photo of your medicine label. I’ll only look at the medicine name, and the photo won’t be kept.",
@@ -198,6 +228,9 @@ const en = {
   possibleMatch: "I found a possible match",
   // {medicine} and {strength} are filled from the candidate's record — a *possible* match, never certain.
   confirmHeading: "I found a possible match: {medicine}, {strength}.",
+  // The whole confirmation, said and shown in the conversation (no panel): identity, source, the question.
+  confirmSpoken:
+    "I found a possible match on your {source} record (fictional): {medicine}, {strength}, tablet. Please check the name on your label. Is this the medicine you have? If you’re not sure, just say so.",
   confirmQuestion: "Is this the medicine you mean?",
   checkName: "Please check the name on the label before continuing.",
   yesMedicine: "Yes, this is the medicine",
@@ -236,7 +269,7 @@ const en = {
   labelDiffers:
     "Thank you for checking — that’s really helpful. When the label and the record don’t agree, a pharmacist is the best person to look. Would you like help contacting them?",
   unclearLabelCheck:
-    "I didn’t quite catch that. Does this match your label? You can say “yes, it matches” or “it looks different”.",
+    "Sorry, I didn’t follow that. Does this match the label on your box, or does it look different?",
   languageControlLabel: "Explanation language",
   languageEnglish: "English",
   languageChinese: "中文",
@@ -289,6 +322,26 @@ const en = {
   familyConsentYes: "Yes, let them know",
   familySent: "Demo: a message to {caregiverName} saying you’d like some help was simulated. No real message is sent. Would you like to carry on?",
   helpSending: "Sending your request…",
+  callbackReview:
+    "Here is the request I’d send to BrightCare Pharmacy. Please check it. If it’s right, say or type “send”. If not, say “don’t send”.",
+  familyReview:
+    "Here is the message I’d send to {name}. Please check it. If it’s right, say or type “send”. If not, say “don’t send”.",
+  helpSayToSend: "Nothing has been sent yet. If it’s right, say or type “send”.",
+  reviewSayToSend: "If it’s right, say or type “send”. If not, say “don’t send”.",
+  reviewSayToRetry: "To try again, say or type “send again”.",
+  helpMessageRow: "Message",
+  helpMessageValue: "I’d like some help, please.",
+  helpToFamily: "{name}, your family (fictional)",
+  helpToHelper: "{name}, your trusted helper (fictional)",
+  helpRequestRow: "Request",
+  helpRequestValue: "Please call me back",
+  helpNumberFromRecord: "They’ll call (number on your record)",
+  helpShareNotice: "Only what is shown here is sent, with your record. Your label photo and conversation are not included.",
+  helpReasonLabel: "I couldn’t confirm my medicine label",
+  helpReasonMedical: "I have a question about my medicine",
+  helpReasonConflict: "My pharmacy record and what I was told differ",
+  helpReasonWellbeing: "I’d like some help",
+  helpReasonGeneral: "I’d like to talk to a pharmacist",
   serviceTrouble:
     "I’m sorry, I couldn’t send that just now. Would you like to try again, or see the pharmacy’s phone number instead?",
   sendAgain: "Try again",
@@ -376,6 +429,8 @@ const en = {
   doseLabelRow: "My label says",
   doseNumberRow: "Call me on",
   doseChange: "Change",
+  doseShowNumber: "Show number",
+  doseHideNumber: "Hide number",
   doseShareNotice: "Only the details shown here are included. Your label photo and full conversation are not included.",
   doseSend: "Send callback request",
   doseChangeSomething: "Change something",
@@ -394,7 +449,12 @@ const en = {
   doseConcernIncomplete: "I couldn’t complete a check of my medicine label against my current record. I would like a pharmacist to help.",
   doseConcernUnavailable: "My current pharmacy record could not be checked. I would like a pharmacist to help with my medicine instructions.",
   doseBackToCall: "We’re back in the call. The difference in your medicine instructions is still unresolved, and a pharmacist can help with it. What else can I help with?",
-  doseReviewIntro: "I’ve prepared a short summary. Please check it before sending.",
+  doseBackToCallMatch:
+    "We’re back in the call. The label wording you confirmed matched the record for the details we checked. What else can I help with?",
+  doseBackToCallIncomplete:
+    "We’re back in the call. I couldn’t complete the comparison, so your medicine instructions still need checking, and a pharmacist can help with that. What else can I help with?",
+  doseStillUnchecked: "Your medicine instructions still need checking with a pharmacist.",
+  doseReviewIntro: "I’ve prepared a short summary. Please check it, then say or type “send” if it’s right.",
   doseReadSummary: "Read this to me",
   doseReviewRequest: "Review request",
   doseReturnToCall: "Return to call",
@@ -416,7 +476,6 @@ const zhHans: Copy = {
   welcome: "您好，Mei Ling",
   startSupport: "我可以帮助您了解药房记录中的用药信息。",
   callWithCompanion: "呼叫助手",
-  callInterrupted: "页面重新加载时，您上一次的通话已结束，所以这里没有显示。如果您发送过请求，它可能已送达，也可能没有。",
   inputReassurance: "您可以说出来、输入文字，或展示药物标签。",
   help: "帮助",
   language: "语言",
@@ -442,7 +501,7 @@ const zhHans: Copy = {
   clarificationPrompt: "您想给我看药物标签，还是询问您的服药时间？",
   whichMedicine: "谢谢您告诉我。您说的是哪一种药呢？您可以告诉我药名，或者给我看看标签，我们一起核对好吗？",
   capabilityGuide:
-    "我可以帮您了解您的药物。我可以和您一起核对药品标签，再用中文或英文解释您药房记录上的内容。您想给我看药物标签，还是询问您的服药时间？",
+    "我可以和您一起核对药品标签，再解释您药房记录上的内容。您想给我看药物标签，还是询问您的服药时间？",
   scheduleNeedsRecord:
     "要谈服药时间，我需要先对照您的记录核对药物。您想给我看药物标签吗？",
   prescriptionsListed:
@@ -454,9 +513,9 @@ const zhHans: Copy = {
   medicineNameRetry:
     "没关系——语音有时不容易听清。可以再告诉我一次药名吗？也可以在下方输入药名。您也可以给我看标签。",
   offTopicSocial:
-    "很高兴听到您说话。我是一位 AI 助手，只专注于一件事——您药房记录中的药物信息。您想给我看药物标签，还是询问您的服药时间？",
+    "很高兴听到您说话。作为 AI 助手，我帮助您了解药房记录中的药物信息。您想给我看药物标签，还是询问您的服药时间？",
   offTopicWorld:
-    "我也很想聊这个，不过这超出了我知道的范围。我能帮您了解的是您药房记录中的药物信息。您想给我看药物标签，还是询问您的服药时间？",
+    "我也很想聊这个，不过这超出了我知道的范围。我能帮您了解药房记录中的药物信息。您想给我看药物标签，还是询问您的服药时间？",
   offTopicCapability:
     "这个我自己做不到。点击「寻求帮助」，我可以请药剂师给您回电，或告诉您的家人。我也可以帮您了解记录中的药物信息。",
   offTopicWrapUp: "和您聊天很开心。我们一起看看您的药，还是先结束通话？",
@@ -467,22 +526,47 @@ const zhHans: Copy = {
   askSchedule: "询问我的服药时间",
   youSay: "Mei Ling 说：",
   companionSays: "助手说：",
-  earlierInCall: "本次通话的早前内容",
+  hearingNow: "正在听您说…",
+  latestMessage: "最新消息",
   companionThinking: "让我想一想……",
-  typeLabel: "输入您的问题",
-  typePlaceholder: "例如：这个药是做什么用的？",
+  typeLabel: "说出来，或在这里输入",
+  typeInstead: "改为输入文字",
+  closeTyping: "关闭输入",
+  helpTalkToPerson: "向真人求助",
+  typePlaceholder: "输入您的回答或问题",
   send: "发送",
   voiceListeningNow: "我在听…请说话。",
   voiceSpeaking: "正在说话…",
-  voiceMicOn: "麦克风已开",
-  voiceMicOff: "麦克风已关",
-  voiceMicLabel: "麦克风",
-  voicePaused: "我还在这里。准备好说话时，请点“麦克风已开”，或改用输入文字。",
+  // Unreviewed translations (added with the voice coordinator and the realtime voice migration).
+  voiceConnecting: "正在准备通话…",
+  voiceProcessing: "正在确认我听到的内容…",
+  voicePreparing: "正在准备语音…",
+  voiceSpeakingDuplex: "正在说话…我仍在听，您随时可以开口。",
+  voiceHeardYou: "我听到了——请说。",
+  voiceInterrupted: "语音停止了。文字在上方；点“重复”可再听一次。",
+  voiceChanged: "流式语音暂时不可用，这次通话由您浏览器自带的语音朗读文字。",
+  voiceTapToTalk: "点击说话",
+  voiceTapToSend: "点击发送",
+  voiceInterruptOn: "语音打断：开",
+  voiceInterruptOff: "语音打断：关",
+  mute: "静音",
+  unmute: "取消静音",
+  voiceMuted: "已静音。助手听不到您。可在下方输入，或点“取消静音”。",
+  voiceUnmuted: "已取消静音。我又能听到您了。",
+  voiceLost: "本次通话余下的时间无法使用语音。所有内容仍会显示在这里。",
+  voiceTryAgain: "再试一次",
+  voicePaused: "我还在这里。准备好说话时，请点“再试一次”，或改用输入文字。",
   voiceDidntCatch: "抱歉，我没听清楚。请再说一遍，或使用按钮。",
   unclearExplain:
-    "我没太听清楚。您可以说「继续」听下一部分，或说「返回」、「重复」。",
+    "抱歉，我没听明白。我可以继续讲您的记录、回到上一步，或者再说一遍。告诉我您想怎么做就好。",
+  unclearExplainQuestion: "这是个好问题，不过我只能解释您药房记录上的内容。要我继续讲，还是请药剂师帮您？",
+  unclearLabelCheckQuestion: "这是个好问题，不过我只能讲解您的药房记录。先确认一下：这和您药盒上的标签一致吗？",
+  unclearExplainLastQuestion: "这是个好问题，不过我只能解释您药房记录上的内容。要我再说一遍，还是协助您联系药剂师？",
+  explainWhichOne: "好的。要我再说一遍，还是协助您联系药剂师？",
+  explainDoseQuestion:
+    "我不能替您决定剂量。您的药房记录（{verifiedDate}确认）写着：“{instruction}” 如果您的剂量有变化，请告诉我，或者请药剂师和您一起核对。",
   unclearExplainLast:
-    "我没太听清楚。这就是您记录中的全部内容。准备好时可以说「我明白了」，或说「重复」。",
+    "抱歉，我没听明白。这就是您记录中的全部内容。我可以再说一遍、协助您联系药剂师，或者我们就到这里。",
   unclearRecordConflict: "我没太听清楚。您可以说「药剂师」请人帮忙确认，或说「继续」。",
   unclearConfirmMatch:
     "我没太听清楚。这是您的药物吗？您可以说「是」、「不是」，或「我不确定」。",
@@ -499,6 +583,9 @@ const zhHans: Copy = {
     "您也可以直接说出药物名称和剂量——例如：“是二甲双胍，500 毫克。”",
   voicePrivacy:
     "您的浏览器可能会把您的声音发送到它自己的语音服务，转换成文字。输入文字的效果相同。",
+  // Unreviewed translation.
+  voicePrivacyRealtime:
+    "您的声音会发送到 OpenAI 转换成文字，伴侣的话会发送到 ElevenLabs 转换成语音。输入文字的效果相同。",
   voiceUnsupported: "此浏览器不支持语音输入。输入文字的效果相同。",
   voiceDenied: "麦克风未开启。您可以在浏览器设置中允许使用，或继续输入文字。",
   voiceNoSpeech: "我没有听到声音。请点击再试一次，或改用输入文字。",
@@ -524,6 +611,7 @@ const zhHans: Copy = {
   showMedicineHeading: "您想怎样给我看您的药？",
   useCamera: "使用相机",
   choosePhoto: "选择照片",
+  photoNeedsTap: "好的。请点下方的“选择照片”，从手机里选一张标签的照片。",
   typeName: "输入药名",
   photoIntro: "您可以选择一张药品标签的照片。我只看药品名称，照片不会被保存。",
   photoFormat: "这张照片我打不开。您想换一张，还是改用相机？",
@@ -568,6 +656,8 @@ const zhHans: Copy = {
   fieldForm: "剂型",
   fieldRecord: "来自",
   recordFictional: "{name}记录（虚构）",
+  confirmSpoken:
+    "我在您的{source}记录（虚构）中找到一个可能的匹配：{medicine}，{strength}，片剂。请核对药盒标签上的名称。这是您手上的药吗？如果不确定，直接告诉我就好。",
   formTablet: "片剂",
 
   explainWhatFor: "用途",
@@ -588,7 +678,7 @@ const zhHans: Copy = {
   labelLooksDifferent: "看起来不一样",
   labelDiffers:
     "谢谢您仔细核对，这很有帮助。标签和记录不一样的时候，最好请药剂师看一看。需要我帮您联系他们吗？",
-  unclearLabelCheck: "我没太听清楚。这和您的标签一样吗？您可以说「一样」或「不一样」。",
+  unclearLabelCheck: "抱歉，我没听明白。这和您药盒上的标签一样，还是看起来不一样？",
   languageControlLabel: "说明语言",
   languageEnglish: "English",
   languageChinese: "中文",
@@ -623,6 +713,24 @@ const zhHans: Copy = {
   moreHelpOptions: "更多求助方式",
   callbackConfirm:
     "我可以请BrightCare药房按您记录上的号码给您回电。要我发送请求吗？",
+  callbackReview: "这是我会发给BrightCare药房的请求。请先核对。如果没问题，请说或输入“发送”；如果有问题，请说“不发送”。",
+  familyReview: "这是我会发给{name}的消息。请先核对。如果没问题，请说或输入“发送”；如果有问题，请说“不发送”。",
+  helpSayToSend: "还没有发送任何内容。如果没问题，请说或输入“发送”。",
+  reviewSayToSend: "如果没问题，请说或输入“发送”；如果有问题，请说“不发送”。",
+  reviewSayToRetry: "要再试一次，请说或输入“再发送”。",
+  helpMessageRow: "消息",
+  helpMessageValue: "我需要一些帮助。",
+  helpToFamily: "{name}，您的家人（虚构）",
+  helpToHelper: "{name}，您信任的帮手（虚构）",
+  helpRequestRow: "请求",
+  helpRequestValue: "请给我回电",
+  helpNumberFromRecord: "回电号码（记录上的号码）",
+  helpShareNotice: "只会发送这里显示的内容，以及您的记录。您的标签照片和对话不会包括在内。",
+  helpReasonLabel: "我无法确认药品标签",
+  helpReasonMedical: "我对药物有疑问",
+  helpReasonConflict: "我的药房记录和别人告诉我的不一样",
+  helpReasonWellbeing: "我需要一些帮助",
+  helpReasonGeneral: "我想和药剂师谈谈",
   callbackYes: "好，发送请求",
   callbackSent: "演示：您给BrightCare药房的回电请求已提交。演示编号{reference}。不会联系真实的药剂师。还有什么我可以帮您的吗？",
   familyConsent: "需要我告诉您的家人您想请他们帮忙吗？只有您同意，我才会联系。",
@@ -707,6 +815,8 @@ const zhHans: Copy = {
   doseLabelRow: "我的标签写着",
   doseNumberRow: "回电号码",
   doseChange: "更改",
+  doseShowNumber: "显示号码",
+  doseHideNumber: "隐藏号码",
   doseShareNotice: "只包括这里显示的内容。您的标签照片和完整对话不会包括在内。",
   doseSend: "发送回电请求",
   doseChangeSomething: "修改内容",
@@ -725,6 +835,9 @@ const zhHans: Copy = {
   doseConcernIncomplete: "我没能把药品标签和目前的记录核对完整。我希望药剂师帮忙。",
   doseConcernUnavailable: "我目前的药房记录无法查看。我希望药剂师帮我核对用药说明。",
   doseBackToCall: "我们回到通话了。您的用药说明之间的差别仍未解决，药剂师可以帮您。还有什么我可以帮您的吗？",
+  doseBackToCallMatch: "我们回到通话了。您确认的标签文字与记录在我们核对的内容上一致。还有什么我可以帮您的吗？",
+  doseBackToCallIncomplete: "我们回到通话了。我没能完成对照，所以您的用药说明仍需要核实，药剂师可以帮您。还有什么我可以帮您的吗？",
+  doseStillUnchecked: "您的用药说明仍需要请药剂师核实。",
   doseReviewIntro: "我准备了一份简短的摘要。发送之前请先看一看。",
   doseReadSummary: "读给我听",
   doseReviewRequest: "查看请求",

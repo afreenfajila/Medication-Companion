@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { cn } from "@/lib/utils/cn";
 
 /** Page-level wrapper: warm canvas on phones, a soft desk tone behind the phone on desktop. */
@@ -45,10 +45,10 @@ export function PhoneShell({ children, className }: { children: ReactNode; class
   );
 }
 
-/** Scrolling region inside the phone shell. */
-export function ScreenBody({ children, className }: { children: ReactNode; className?: string }) {
+/** Scrolling region inside the phone shell: the screen's one scroller. */
+export function ScreenBody({ children, className, ref }: { children: ReactNode; className?: string; ref?: Ref<HTMLDivElement> }) {
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-4", className)}>
+    <div ref={ref} className={cn("no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-4", className)}>
       {children}
     </div>
   );

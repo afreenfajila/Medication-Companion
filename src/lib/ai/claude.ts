@@ -3,10 +3,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { AcceptedImageType } from "@/lib/label/image-validation";
 import { claudeLabelExtractionJsonSchema, claudeLabelExtractionSchema, type ClaudeLabelExtraction } from "./schemas";
 
-// Claude does exactly one job here: read visible identity text from a label
-// image. It never decides a match and never produces medicine information.
+// Claude is the only reasoning and vision model in this app (label identity text,
+// in-call wording, meaning match). It never decides a match, never produces
+// medicine information, and never receives audio or interim transcripts.
 
-export const DEFAULT_MODEL = "claude-opus-5";
+export const DEFAULT_MODEL = "claude-sonnet-5-5";
 
 export const SYSTEM_PROMPT = `You are a constrained label-text extraction component inside a prototype.
 

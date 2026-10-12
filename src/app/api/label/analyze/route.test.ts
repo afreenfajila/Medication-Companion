@@ -88,10 +88,27 @@ describe("POST /api/label/analyze", () => {
     expect(extract).not.toHaveBeenCalled();
   });
 
+  it("stops reading an oversized body even when no length is declared (chunked upload)", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/label/analyze", {
+        method: "POST",
+        body: new Uint8Array(6 * 1024 * 1024),
+        headers: { "content-type": "multipart/form-data; boundary=x" },
+      }),
+    );
+    expect(res.status).toBe(413);
+    expect(extract).not.toHaveBeenCalled();
+  });
+
   it("refuses cross-origin browser requests", async () => {
     const res = await POST(req({ headers: { origin: "https://evil.example", host: "localhost" } }));
     expect(res.status).toBe(403);
     expect(extract).not.toHaveBeenCalled();
+  });
+
+  it("refuses an opaque 'null' origin instead of crashing", async () => {
+    const res = await POST(req({ headers: { origin: "null", host: "localhost" } }));
+    expect(res.status).toBe(403);
   });
 
   it("rate-limits repeated calls", async () => {

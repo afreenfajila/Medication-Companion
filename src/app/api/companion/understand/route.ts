@@ -1,6 +1,6 @@
 import { AiUnavailableError } from "@/lib/ai/claude";
 import { understandMessage } from "@/lib/ai/understand";
-import { fail, firstIssue, newRequestId, ok } from "@/lib/api/envelope";
+import { fail, isCrossOrigin, firstIssue, newRequestId, ok } from "@/lib/api/envelope";
 import { rateLimit } from "@/lib/api/rate-limit";
 import {
   understandCapabilitySchema,
@@ -30,9 +30,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request): Promise<Response> {
   const requestId = newRequestId();
 
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (origin && host && new URL(origin).host !== host) {
+  if (isCrossOrigin(request)) {
     return fail(403, "forbidden_origin", "This request was not allowed.", "return_home", requestId);
   }
 

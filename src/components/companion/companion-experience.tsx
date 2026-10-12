@@ -15,17 +15,17 @@ import { requestLabelAnalysis } from "@/lib/label/analyze-client";
 import { clearPendingImage, peekPendingImage } from "@/lib/label/pending-image";
 import { dispatch, useSession } from "@/lib/session/session-store";
 import { guardRequestedState, pathForState } from "@/lib/session/state-machine";
-import { getGeminiSpeechPlayer } from "@/lib/voice/gemini-speech-player";
 import { speakableText } from "@/lib/voice/speakable";
-import { getVoiceProvider, useVoiceCapabilities } from "@/lib/voice/use-voice";
+import { getVoiceCoordinator, useVoiceCapabilities } from "@/lib/voice/use-voice";
 import { AnalyzingScreen, CameraGuidanceScreen, CameraPermissionScreen, ShowMedicineChoice } from "./camera-screens";
 import { CallFeed } from "./call-feed";
 import { CompleteScreen } from "./complete-screen";
 import { DoseCheckPanel } from "./dose-check-panel";
-import { ConfirmScreen } from "./confirm-screen";
 import { ExplainScreen } from "./explain-screen";
-import { ListeningActions } from "./listening-screen";
-import { HelpFlowCard, SafetyScreen } from "./safety-screen";
+import { ListeningActions, TypedInput, listeningAction } from "./listening-screen";
+import { SafetyScreen } from "./safety-screen";
+import { HelpSheet } from "./help-sheet";
+import { HelpReviewPanel } from "./help-review";
 import { DisclosureFooter, ScreenHeader } from "./screen-chrome";
 import { StartScreen } from "./start-screen";
 import { useCallFeed } from "./use-call-feed";
@@ -33,6 +33,8 @@ import { useVoiceConversation } from "./use-conversation";
 import { VoiceBar } from "./voice-bar";
 
 const ANALYSIS_DELAY_MS = 900;
+/** Longest a new line waits for the voice to start before its words are shown anyway. */
+export const VOICE_HOLD_MAX_MS = 3000;
 // Longest the (simulated) callback request is awaited before its outcome counts as unknown.
 const SUBMIT_TIMEOUT_MS = 15000;
 // How long the understanding pass gets to answer something the person said.
@@ -41,17 +43,20 @@ const SUBMIT_TIMEOUT_MS = 15000;
 const UNDERSTAND_BUDGET_MS = 4000;
 // How much of the conversation the understanding pass sees for context.
 const UNDERSTAND_HISTORY_TURNS = 6;
-// Longest the words are held back waiting for Gemini's voice to start before
-// switching to the browser voice instead.
-const VOICE_WAIT_MS = 6000; // Gemini renders sentences in parallel: ~3–5 s fresh, instant when cached
 
 /**
  * The whole call — from "Call with companion" to "End call" — happens on this
- * one screen. There is no full-screen swap for the camera, confirmation,
- * explanation, or safety steps: a running conversation transcript (`CallFeed`)
- * scrolls above, and whatever the current step needs (camera preview, decision
- * buttons, language control, safety actions...) stays pinned just above the
- * call controls. Only the pre-call landing (`StartScreen`) is a different
+ * one screen, laid out like a calm phone call:
+ *
+ *   compact header → orb + one status line → the conversation transcript (the
+ *   screen's one scroller) → the current step's contextual controls, only when
+ *   it has some → the text box, only when typing is needed or asked for →
+ *   the three call controls: Get help · Mute · End call.
+ *
+ * Everything else is contextual: camera, confirmation, label and callback
+ * controls appear in their own steps; Repeat, Try again and Tap to talk appear
+ * only for recovery; Repeat, typing, the interrupt setting and About are also in
+ * the Get help sheet. Only the pre-call landing (`StartScreen`) is a different
  * layout, since a call cannot be "in progress" before it starts.
  *
  * The URL never decides the state: `?state=` is compared to the authoritative
@@ -63,6 +68,7 @@ export function CompanionExperience() {
   const language = session.language;
   const t = useCallback((key: CopyKey) => translate(language, key), [language]);
   const mainRef = useRef<HTMLElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef<HTMLDivElement>(null);
   const wasCallActive = useRef(session.callActive);
 
@@ -137,7 +143,7 @@ export function CompanionExperience() {
   useEffect(() => {
     if (!doseSubmitting) return;
     let live = true;
-    const requestId = callbackRequestId(sessionId, doseSubmitting.revision);
+    const requestId = callbackRequestId(doseSubmitting.draftId, doseSubmitting.revision);
     const outcome = doseScenario ? DOSE_SCENARIOS[doseScenario].callbackOutcome : "success";
     // No answer in time, or an error, is NOT proof that nothing was delivered: it's "unknown".
     let timer = 0;
@@ -311,84 +317,87 @@ export function CompanionExperience() {
   // that starts both ears (recognition) and mouth (synthesis) — no second tap, no
   // visible toggle. Nothing about the mic/speaker runs before that tap, and ending
   // the call stops both; the next call starts the same way, automatically.
+  //
+  // All of that is the voice coordinator's: it picks ONE voice for the whole call
+  // (ElevenLabs streaming the exact approved text when configured, otherwise the
+  // browser's own synthesis, otherwise words only) and one ear (OpenAI realtime
+  // transcription, otherwise browser recognition), and drops anything late from
+  // an earlier turn or an earlier call.
   const caps = useVoiceCapabilities();
-  const [speaking, setSpeaking] = useState(false);
-  // Gemini speech doesn't need browser speechSynthesis support at all; the
-  // browser-TTS fallback inside speakNow() already no-ops safely if absent.
-  const canSpeak = session.callActive;
-
   useEffect(() => {
-    const offs = [
-      getVoiceProvider()?.onSpeakingChange(setSpeaking),
-      getGeminiSpeechPlayer()?.onSpeakingChange(setSpeaking),
-    ].filter((off): off is () => void => Boolean(off));
-    return () => offs.forEach((off) => off());
-  }, []);
+    const coordinator = getVoiceCoordinator();
+    if (session.callActive) coordinator.startCall(language);
+    else coordinator.endCall(); // also on mount: a remount never inherits a stale call
+    // The call's language is read once, when it connects.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.callActive, session.callCount]);
 
-  // Gemini renders the exact same approved text as audio, so the voice sounds
-  // the same for every reviewer regardless of which browser/OS they're on,
-  // instead of depending on whatever speech-synthesis voices happen to be
-  // installed. It never composes what is said — only the renderer differs.
-  // Any failure (no key, network, blocked autoplay) falls back to the
-  // browser's own speechSynthesis, which always still works.
-  // Resolves once the voice has actually started. Gemini gets VOICE_WAIT_MS to
-  // start playing; after that it's dropped for the (instant) browser voice, so
-  // the held-back words below never wait long.
-  const speakNow = useCallback(async (text: string, lang: typeof language, signal?: AbortSignal, slow = false) => {
-    const player = getGeminiSpeechPlayer();
-    if (player) {
-      let timer = 0;
-      const cap = new Promise<false>((r) => (timer = window.setTimeout(() => r(false), VOICE_WAIT_MS)));
-      const ok = await Promise.race([player.speak(text, lang, slow), cap]);
-      window.clearTimeout(timer);
-      if (signal?.aborted) return;
-      if (ok) return;
-      player.stop();
-    }
-    getVoiceProvider()?.speak(text, lang, slow);
-  }, []);
-
-  // Text never waits for audio (PRD EN-05): the words and the step's controls
-  // show at once, and the voice follows when it is ready. `voiceHeld` stays as a
-  // named constant so the old hold can't creep back in without a decision.
-  const voiceHeld = false;
-
-  // "Repeat slowly" re-says exactly the current approved line (never new text), slower.
+  // Every line the step shows is said through the coordinator, so the spoken and
+  // visible words are the same string by construction. "Repeat slowly" re-says
+  // exactly the current approved line (never new text), slower.
   const lastRepeat = useRef(session.repeatCount);
   useEffect(() => {
     const slow = session.repeatCount !== lastRepeat.current;
     lastRepeat.current = session.repeatCount;
-    if (!canSpeak || !spoken) {
-      getGeminiSpeechPlayer()?.stop();
-      getVoiceProvider()?.stopSpeaking();
-      return;
-    }
-    const controller = new AbortController();
-    void speakNow(spoken, language, controller.signal, slow);
-    return () => {
-      controller.abort();
-      getGeminiSpeechPlayer()?.stop();
-      getVoiceProvider()?.stopSpeaking();
-    };
-  }, [canSpeak, spoken, language, session.repeatCount, speakNow]);
+    const coordinator = getVoiceCoordinator();
+    if (!session.callActive) return; // endCall above already silenced everything
+    if (!spoken) return coordinator.stopSpeaking(); // a step with no line of its own (e.g. analysing)
+    coordinator.speak(spoken, language, { slow, source: "session" });
+  }, [session.callActive, spoken, language, session.repeatCount]);
 
   const conversation = useVoiceConversation({
     session,
     soundActive: session.callActive,
-    speaking: speaking && canSpeak,
     cameraLive: session.cameraMode === "preview",
-    spokenText: spoken,
-    speakNotice: (text) => canSpeak && speakNow(text, language),
     t,
+    aiIntent: understandingOn?.call === session.callCount && understandingOn.enabled,
   });
-  const showVoiceBar = session.callActive && caps.recognition && session.state !== "start";
+
+  // The companion's words appear as its voice starts (owner decision, 12 October 2026,
+  // amending PRD EN-05): a new line waits while the voice is being prepared, shown as
+  // "thinking", and appears when audio actually plays — or after VOICE_HOLD_MAX_MS at
+  // most, so a slow or failing voice never hides what was said. With no voice (words
+  // only) nothing waits.
+  const vs = conversation.status;
+  const awaitingVoice =
+    session.callActive &&
+    (vs.kind === "connecting" ||
+      !conversation.voiceKnown || // the call's engines haven't reported yet (the first moment of a call)
+      (conversation.voiceOutput &&
+        ((vs.kind === "speaking" && !vs.audioStarted) ||
+          // Rendered before the line is handed to the voice: it is about to be prepared.
+          (spoken !== null && conversation.lastSessionLine !== spoken))));
+  const holdKey = `${session.callCount}|${spoken ?? ""}|${conversation.lastSessionLine ?? ""}`;
+  const [holdExpired, setHoldExpired] = useState<string | null>(null);
+  useEffect(() => {
+    if (!awaitingVoice) return;
+    const id = window.setTimeout(() => setHoldExpired(holdKey), VOICE_HOLD_MAX_MS);
+    return () => window.clearTimeout(id);
+  }, [awaitingVoice, holdKey]);
+  const voiceHeld = awaitingVoice && holdExpired !== holdKey;
+  const inCall = session.callActive && session.state !== "start";
+  const speechInput = caps.recognition || conversation.hasInput;
+  // Typing is shown only when it is needed or asked for: muted, no speech input, listening
+  // stopped by a problem, or "Type instead". Otherwise the call is voice, like a phone call.
+  const [typingOpen, setTypingOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  // Both close when a call starts or ends (adjusted while rendering, not in an effect).
+  const callKey = `${session.callCount}:${session.callActive}`;
+  const [seenCallKey, setSeenCallKey] = useState(callKey);
+  if (seenCallKey !== callKey) {
+    setSeenCallKey(callKey);
+    setTypingOpen(false);
+    setHelpOpen(false);
+  }
+  const typingNeeded = !speechInput || conversation.muted || conversation.paused;
+  const showComposer = inCall && (typingNeeded || typingOpen);
 
   // The one running transcript for the whole call — see use-call-feed.ts.
-  const feed = useCallFeed(session, t, explanation, listeningLine, voiceHeld);
+  const feed = useCallFeed(session, t, explanation, listeningLine, voiceHeld, conversation.notices, conversation.userLines, spoken);
   useEffect(() => {
     feedRef.current = feed;
   }, [feed]);
-  const orbState = speaking ? "speaking" : conversation.listening ? "listening" : "idle";
+  const orbState = conversation.speaking ? "speaking" : conversation.listening ? "listening" : "idle";
 
   let pinnedActions: React.ReactNode = null;
   switch (session.state) {
@@ -397,8 +406,7 @@ export function CompanionExperience() {
         <ListeningActions
           t={t}
           session={session}
-          hideChoices={voiceHeld || companionThinking}
-          onSend={conversation.submitText}
+          hidden={companionThinking}
           onSelectRoute={(route) => dispatch({ type: "SELECT_ROUTE", route })}
         />
       );
@@ -436,20 +444,10 @@ export function CompanionExperience() {
       pinnedActions = <AnalyzingScreen t={t} />;
       break;
     case "confirm-match":
-      pinnedActions = session.candidate ? (
-        <ConfirmScreen
-          t={t}
-          candidate={session.candidate}
-          onDecision={(decision) =>
-            session.candidate &&
-            dispatch({
-              type: "CONFIRM_MATCH",
-              candidateId: session.candidate.candidateId,
-              decision,
-            })
-          }
-        />
-      ) : null;
+      // Owner decision (12 October 2026): no confirmation panel. The companion says what it
+      // found from the record, in the conversation, and a clear "yes" (said or typed) confirms;
+      // "no" / "not sure" don't. The gate itself is unchanged (CONFIRM_MATCH, reducer-checked).
+      pinnedActions = null;
       break;
     case "explain":
       // Defensive: the reducer cannot enter explain without a confirmed match.
@@ -475,14 +473,11 @@ export function CompanionExperience() {
       ) : explanation ? (
         <ExplainScreen
           t={t}
-          language={language}
           step={session.explainStep}
           recordConflict={session.recordConflict}
           onConflictChoice={(choice) => dispatch({ type: "RECORD_CONFLICT_CHOICE", choice })}
           sourceLine={fillRecordFacts(t("recordCheckedOn"), explanation, language)}
           onLabelCheck={(matches) => dispatch({ type: "LABEL_CHECK", matches })}
-          onLanguageChange={(l) => dispatch({ type: "SET_LANGUAGE", language: l })}
-          onSend={conversation.submitText}
         />
       ) : null;
       break;
@@ -504,25 +499,48 @@ export function CompanionExperience() {
     default:
       pinnedActions = null;
   }
-  // A help request sits on top of whichever step offered it, until it is done.
-  if (session.helpFlow) {
+  // A help request sits on top of whichever step offered it, until it is done —
+  // except urgent guidance, which always stays visible, with the request's status below it.
+  // A help request in progress (owner decision, 12 October 2026): its question and status are
+  // lines in the conversation, answered in words — no card, no buttons. Only a clear yes sends
+  // (HELP_CONFIRM, reducer-checked). Urgent guidance always stays on screen.
+  if (session.helpFlow && session.safetyReason !== "urgent-risk") pinnedActions = null;
+  // …except "check before sending": what goes to another party is shown, then sent on an explicit "send".
+  if (session.helpFlow?.stage === "review") {
     pinnedActions = (
-      <HelpFlowCard
+      <HelpReviewPanel
         t={t}
-        flow={session.helpFlow}
-        onConfirm={(granted) => dispatch({ type: "HELP_CONFIRM", granted })}
-        onRetry={() => dispatch({ type: "HELP_RETRY" })}
-        onShowNumber={() => dispatch({ type: "HELP_SHOW_NUMBER" })}
-        onDismiss={() => dispatch({ type: "HELP_DISMISS" })}
+        kind={session.helpFlow.kind}
+        reason={session.helpFlow.reason}
+        onCancel={() => dispatch({ type: "HELP_CONFIRM", granted: false })}
       />
     );
   }
 
+  // The listening step shows at most one contextual action; without one there is no panel.
+  const hasPinned =
+    pinnedActions !== null &&
+    (session.state !== "listening" || (listeningAction(session) !== null && !companionThinking));
+
   return (
     <PhoneShell>
       <div lang={language} className="flex min-h-0 flex-1 flex-col">
-        <ScreenHeader t={t} language={language} />
-        <ScreenBody>
+        <ScreenHeader t={t} language={language} compact={inCall} />
+        {inCall && (
+          // The calm companion area: the orb and one short status line. Not part of the scroller.
+          <div className="flex shrink-0 flex-col items-center gap-1 px-4 pb-2">
+            <CompanionOrb size="xs" state={orbState} />
+            {speechInput ? (
+              <VoiceBar view={conversation} t={t} onRepeat={() => dispatch({ type: "REPEAT" })} />
+            ) : (
+              // Without speech input, typed "didn't catch that" guidance still needs a place.
+              <p role="status" aria-live="polite" className="min-h-[1.5em] text-center text-[15px] leading-snug text-navy-700">
+                {conversation.notice ? t(conversation.notice) : ""}
+              </p>
+            )}
+          </div>
+        )}
+        <ScreenBody ref={scrollerRef}>
           <main
             ref={mainRef}
             tabIndex={-1}
@@ -530,69 +548,92 @@ export function CompanionExperience() {
             className="flex flex-1 flex-col outline-none"
           >
             {/* Always mounted, so every change is announced: exactly what the
-                companion is saying now — replies, confirm prompts, safety status —
-                released together with the voice. */}
+                companion is saying now — replies, confirm prompts, safety status,
+                and the fixed voice notices — the same string the voice renders. */}
             <p data-announcer className="sr-only" aria-live="polite" aria-atomic="true">
-              {session.callActive && !voiceHeld ? (spoken ?? "") : ""}
+              {session.callActive && !voiceHeld ? (conversation.lastLine ?? spoken ?? "") : ""}
             </p>
             {session.state === "start" ? (
               <StartScreen
                 t={t}
                 language={language}
-                interrupted={session.previousCallInterrupted}
                 onCall={() => dispatch({ type: "CALL_START" })}
                 onLanguageChange={(l) => dispatch({ type: "SET_LANGUAGE", language: l })}
               />
             ) : (
               <div className="flex flex-1 flex-col gap-4 py-2">
                 <h1 className="sr-only">{t("callWithCompanion")}</h1>
-                <div className="flex flex-col items-center gap-1">
-                  <CompanionOrb size="sm" state={orbState} />
-                </div>
                 <CallFeed
                   entries={feed}
                   interim={conversation.interim}
                   thinking={companionThinking || voiceHeld}
                   hideRecord={session.state === "safety"}
+                  scrollerRef={scrollerRef}
+                  onJumpToLatest={() => mainRef.current?.focus({ preventScroll: true })}
                   t={t}
                 />
               </div>
             )}
           </main>
         </ScreenBody>
-        {pinnedActions && (session.state === "listening" || !voiceHeld) && (
-          // Capped and scrollable: a tall step (safety options, an open sample picker)
-          // must never be clipped or push the call controls off the screen.
+        {/* Controls never wait for the voice: only the transcript line does. */}
+        {hasPinned && (
+          // The current step's own controls, only while it has some. Capped and scrollable:
+          // a tall step (safety options, an open sample picker) is never clipped and never
+          // pushes the call controls off the screen.
           <div
             ref={pinnedRef}
             tabIndex={-1}
             data-pinned
-            className="max-h-[60%] shrink-0 overflow-y-auto border-t border-line bg-canvas px-4 pb-2 pt-3 outline-none"
+            className="no-scrollbar max-h-[60%] shrink-0 overflow-y-auto border-t border-line bg-canvas px-4 pb-2 pt-3 outline-none"
           >
             {pinnedActions}
           </div>
         )}
-        {showVoiceBar && <VoiceBar view={conversation} t={t} />}
-        {/* Without speech recognition, typed "didn't catch that" guidance still needs a place. */}
-        {!showVoiceBar && session.callActive && conversation.notice && (
-          <p role="status" className="border-t border-line bg-canvas px-4 py-2 text-[13px] leading-snug text-navy-700">
-            {t(conversation.notice)}
-          </p>
+        {showComposer && (
+          <div className="shrink-0 border-t border-line bg-canvas px-4 pb-1 pt-2">
+            <TypedInput
+              t={t}
+              label={t("typeLabel")}
+              placeholder={t("typePlaceholder")}
+              onSend={conversation.submitText}
+              autoFocus={typingOpen}
+              onClose={typingOpen && !typingNeeded ? () => setTypingOpen(false) : undefined}
+            />
+          </div>
         )}
         {session.callActive && (
           <CallFooter
             labels={{
               group: t("appName"),
-              repeat: t("repeat"),
               help: t("getHelp"),
+              mute: t("mute"),
+              unmute: t("unmute"),
               end: t("endCall"),
             }}
-            onRepeat={() => dispatch({ type: "REPEAT" })}
-            onHelp={() => dispatch({ type: "GET_HELP" })}
+            muted={conversation.muted}
+            muteDisabled={!speechInput}
+            onHelp={() => setHelpOpen(true)}
+            onToggleMute={conversation.toggleMute}
             onEnd={() => dispatch({ type: "END_CALL" })}
           />
         )}
-        <DisclosureFooter t={t} />
+        {session.callActive && (
+          <HelpSheet
+            t={t}
+            open={helpOpen}
+            onClose={() => setHelpOpen(false)}
+            canTalkToPerson={session.state !== "safety"}
+            onTalkToPerson={() => dispatch({ type: "GET_HELP" })}
+            onRepeat={() => dispatch({ type: "REPEAT" })}
+            canTypeInstead={!showComposer}
+            onTypeInstead={() => setTypingOpen(true)}
+            duplex={conversation.duplex}
+            autoInterrupt={conversation.autoInterrupt}
+            onToggleAutoInterrupt={conversation.toggleAutoInterrupt}
+          />
+        )}
+        <DisclosureFooter t={t} inCall={session.callActive} />
       </div>
     </PhoneShell>
   );

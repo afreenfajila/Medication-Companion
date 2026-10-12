@@ -45,8 +45,9 @@ describe("unclearGuidanceKey", () => {
       ["complete", 0],
     ];
     for (const key of [...states.map(([state, step]) => at(state, step)), "unclearRecordConflict" as const]) {
-      expect(t("en", key), key).toMatch(/didn’t quite catch that/i);
-      expect(t("zh-Hans", key), key).toMatch(/没太听清楚/);
+      // Acknowledges first: "didn't quite catch that", or in the explanation the warmer "didn't follow that".
+      expect(t("en", key), key).toMatch(/^(I didn’t quite catch that|Sorry, I didn’t follow that)/i);
+      expect(t("zh-Hans", key), key).toMatch(/^(我没太听清楚|抱歉，我没听明白)/);
     }
   });
 

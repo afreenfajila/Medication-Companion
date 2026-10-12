@@ -13,6 +13,9 @@ export function helpLine(t: (key: CopyKey) => string, flow: HelpFlow): string {
       if (flow.kind === "pharmacist-callback") return t("callbackConfirm");
       if (flow.kind === "trusted-helper") return t("helperConsent").replace("{name}", careContacts.trustedHelper.name);
       return t("familyConsent");
+    case "review":
+      if (flow.kind === "pharmacist-callback") return t("callbackReview");
+      return t("familyReview").replace("{name}", flow.kind === "trusted-helper" ? careContacts.trustedHelper.name : careContacts.family.name);
     case "sending":
       return t("helpSending");
     case "sent":

@@ -37,8 +37,8 @@ Implementation status must be checked against the current build.
 Update this table after running the code and tests.
 Do not mark a capability implemented solely because it is specified.
 
-Checked against the working tree on `assignment-4` (base commit `73cc2c3`, uncommitted
-changes), 10 October 2026. "Implemented" means covered by automated tests; manual and
+Checked against the working tree on `assignment-4` (base commit `a5b0740` plus the
+uncommitted audit fixes), 10 October 2026. "Implemented" means covered by automated tests; manual and
 device checks are listed under Manual testing.
 
 | Capability | Status |
@@ -49,6 +49,7 @@ device checks are listed under Manual testing.
 | Label correction without restart | Implemented (label revisions, reconfirmation) |
 | Callback sharing preview | Implemented (allowlisted payload matches the preview) |
 | Simulated submission and failure recovery | Implemented (submitted, failed, unknown, cancelled) |
+| Realtime voice: OpenAI transcription, local Silero VAD, ElevenLabs speech, full-duplex interruption | Implemented behind faked providers; live round trip with real keys and the manual Chrome checklist (Medication-Companion-Architecture.md) still pending |
 | Manual device, zoom and screen-reader checks | Pending |
 | Real pharmacy integration | Not implemented |
 | Real callback or messaging | Not implemented |
@@ -219,22 +220,48 @@ The primary call does not use:
 | Label identity extraction | Read visible identity fields | Does not decide clinical correctness |
 | Label instruction extraction, if implemented | Read visible wording verbatim | Does not interpret or recommend a dose |
 | Conversation understanding | Understand ordinary requests | Cannot bypass deterministic gates |
-| Speech output | Speak approved content | Does not independently choose medication advice |
+| Meaning match (`/api/companion/intent`) | When fixed phrases miss: pick the on-screen action meant (in any order), say the words were unclear (the companion asks them to repeat), or write a short natural reply | Never offered a "yes" to a gate (medicine, label wording, consent, sending); a reply must pass the AI-reply guard (no numbers, doses, advice or match claims; their language; ends with a question) on the server and again in the browser; stale answers dropped |
+| Speech input (OpenAI Realtime transcription) | Turn the person's speech into words | Words only: never answers, confirms, or sees the record; interim text is display-only |
+| Speech output (ElevenLabs) | Speak the exact visible, approved companion line | Never composes what is said; cannot speak anything not on screen |
 | Deterministic logic | Confirmation, comparison, approval, and outcomes | Must follow documented rules |
 
-Current provider roles must be verified against the implementation.
+Claude (`claude-sonnet-5-5`) is the only reasoning and vision model. It never receives audio,
+interim transcripts, or anything but the committed words of a turn and the medicine's name.
 
-Preferred voice scope:
-- Browser speech recognition where supported.
-- Typed fallback.
-- Optional server-side text-to-speech.
-- Browser speech synthesis fallback.
+Implemented voice (12 October 2026; detail in `Medication-Companion-Architecture.md`):
+- **Pipeline:** microphone → AudioWorklet PCM → adaptive loudness candidate → local Silero
+  VAD confirmation (ONNX Runtime Web, on the device) → OpenAI Realtime transcription →
+  final `UserVoiceTurn` → deterministic safety classifier → Claude → Zod and content
+  validation → `reduceSession()` → visible `AssistantTurn` → ElevenLabs streaming speech →
+  Web Audio playback.
+- **Input:** `POST /api/voice/openai-session` mints a short-lived client secret (the permanent
+  key never leaves the server); the browser opens the Realtime WebSocket itself with
+  `turn_detection` off. Audio is sent only while a user turn is open, so the companion's own
+  playback is never transcribed. Interim words are shown live and go nowhere else; only the
+  committed final text becomes a turn, leading words included. English and Simplified Chinese.
+- **Output:** `POST /api/voice/elevenlabs-token` mints a single-use token; the browser streams
+  the exact visible line (`pcm_24000`, one voice per call) and plays it through Web Audio.
+  "Speaking…" appears only once audio actually plays; before that, "Preparing voice…".
+- **Full duplex:** the mic stays open while the companion speaks. Loudness alone (a cough, a
+  door) never interrupts; confirmed speech stops the voice, keeps its words on screen, and starts
+  a new turn that includes 300 ms of audio from before the interruption. "Interrupt by voice" can
+  be switched off; typing and the mic button always interrupt. Without the local VAD (it fails to
+  load, or is still loading) the mic is push-to-talk and the voice is not interruptible by talking.
+- **Fallback (one way, sticky for the call, with one visible notice):** ElevenLabs → the browser's
+  own voice → text only. The server first checks the configured voice and model are usable by
+  the account (free accounts can't use every library voice through the API). If the voice fails
+  before any of it was heard, the browser voice takes the whole call. Once it has been heard,
+  voices never switch: a one-off failure interrupts that line (Repeat), and running out of
+  credits leaves the rest of the call as words only. ElevenLabs isn't retried until the next
+  call. Without `OPENAI_API_KEY` the browser's own speech recognition is used where it exists
+  and labelled as such. Typing always works.
+- **Checking it in a real browser:** with `npm run dev`, the console shows `[voice] …` lines
+  (stage, milliseconds, engine, reason code) and nothing else. They never include words,
+  tokens, keys, medicine names or audio.
 
-Gemini Live is not required for the current build.
-Do not claim it is implemented unless verified.
-
-Browser speech recognition is not necessarily on-device.
-Provider processing and retention must be described accurately.
+Neither OpenAI transcription nor browser recognition is on-device; only the VAD is. This app
+does not store audio or transcripts, but the providers' terms apply to what they receive, so use
+fictional input only.
 
 
 ## Run locally
@@ -273,9 +300,12 @@ Typical configuration categories:
 | Variable/category | Purpose |
 |---|---|
 | ANTHROPIC_API_KEY | Optional bounded extraction/understanding |
-| ANTHROPIC_MODEL | Supported model override, if implemented |
-| GEMINI_API_KEY | Optional speech provider |
-| GEMINI_TTS_MODEL | Supported speech-model override, if implemented |
+| ANTHROPIC_MODEL | Model override (default `claude-sonnet-5-5`) |
+| OPENAI_API_KEY | Optional: realtime speech input (transcription only). Server-side; the browser gets a short-lived client secret |
+| OPENAI_TRANSCRIBE_MODEL | Transcription model override (default `gpt-live-transcribe`) |
+| ELEVENLABS_API_KEY | Optional: streaming speech output. Server-side; the browser gets a single-use token |
+| ELEVENLABS_VOICE_ID | The one voice used for every line of a call (required with the key). On a free account, use a voice from "My Voices" or a default voice; library voices may not be usable through the API |
+| ELEVENLABS_TTS_MODEL | Speech model override (default `eleven_flash_v2_5`) |
 | SERVICE_MODE | Simulation selection, if implemented |
 | SIMULATED_SERVICE_FAILURE | Deterministic failure testing, if implemented |
 | STUDY_MODE | Separately gated study fixtures, if retained |
@@ -319,16 +349,19 @@ Do not describe unrun checks as passing.
 
 ### Latest results
 
-10 October 2026, working tree on `assignment-4` (base `73cc2c3`, uncommitted).
-`npm run verify` (lint, typecheck, test, build, bundle check) passes as one command.
+12 October 2026, working tree on `assignment-4` (base `a5b0740` plus the uncommitted audit fixes,
+conversation-first work, the realtime voice migration and the active-call control simplification). Run individually, in this order:
 
 | Command | Result |
 |---|---|
 | `npm run typecheck` | Pass |
-| `npm run lint` | Pass (the 3 pre-existing unescaped-apostrophe errors in `medication-investigation-feed.tsx` were fixed) |
-| `npm run test` | 33 files, 631 tests pass |
-| `npm run build` | Pass; `/companion/dose-check-demo` is a static route |
-| `npm run check:bundle` | Pass: no secrets or server-only SDK in client files |
+| `npm run lint` | Pass |
+| `npm run test` | 50 files, 871 tests pass (no live provider calls; providers are faked) |
+| `npm run build` | Pass; `/api/voice/openai-session` and `/api/voice/elevenlabs-token` are dynamic routes |
+| `npm run check:bundle` | Pass: 24 client files, no secrets, credential endpoints or the removed SDK |
+
+Note: a stale `.next/dev/types/validator.ts` (written by `next dev`) still referenced the deleted
+speech routes and failed `tsc` until the dev server was started once; `.next` is a build cache.
 
 
 ## Manual testing
@@ -411,6 +444,42 @@ Expected limitations include:
 - Deduplication is an in-memory map per browser tab, lost on reload: not production-grade.
 - The callback is simulated in the browser; there is no server-side approval check.
 - The instruction comparison only understands this record's wording (English and Chinese).
+  Wording it can't read safely (negation, "then", extra doses, strengths such as "mg",
+  "as directed", and similar) gives "I cannot complete this comparison", never a match.
+- Spoken yes/no is a deterministic word check: questions ("Is that right?") never confirm or
+  consent, but it is not natural-language understanding.
+- The realtime voice (OpenAI transcription, ElevenLabs speech, local VAD) is covered by tests
+  with fakes only; it has not been exercised against the live providers from this checkout (no
+  keys configured here). Without keys the call uses the browser's own engines, labelled as such.
+- Interruption and endpointing use fixed loudness and timing defaults (`BARGE_IN_DEFAULTS`) that
+  haven't been tuned with real rooms, headsets or older voices. A realtime turn ends after 0.9 s
+  of silence (1.4 s once the person has been slow to answer); the browser engine still uses 1.5 s.
+- A turn committed to OpenAI whose transcript never arrives is closed after 6 s; those words are
+  lost and the person says them again.
+- The local VAD model and ONNX runtime load lazily at the first call; until they have loaded, or
+  if they can't (CSP, download), the mic is push-to-talk and talking cannot interrupt the
+  companion (typing and the mic button still do).
+- Free ElevenLabs plans have a small monthly character allowance (10,000 at the time of
+  writing; check your plan). Every spoken companion line counts, including Repeat and "didn't
+  catch that" lines; usage per demo call has not been measured. When credits run out mid-call
+  the rest of that call is words only, and later calls use the browser voice.
+- The voice/model check is cached per server instance (10 minutes when it passes, 1 minute when
+  it fails), so fixing `ELEVENLABS_VOICE_ID` needs a restart or a minute.
+- Echo cancellation is the browser's: a loud speaker near the mic may still start a candidate,
+  but the VAD and the raised threshold during playback must agree before anything is interrupted.
+- The meaning match adds 2–6 s when the fixed phrases miss (measured with the configured model).
+- The active call has three persistent controls (Get help, Mute, End call). Repeat, typing,
+  the interrupt setting and About are in the Get help sheet, so they are one tap further
+  away than before. In the open conversation only one suggestion button is shown (Show
+  medicine, or family help); schedule and "carry on" are asked in words.
+- Mute stops turns and barge-in in the app; the browser's microphone stays open (its
+  indicator stays on) until the call ends, but no audio is sent for transcription.
+- Narrow widths (320–430 px), 200% zoom and the help sheet's focus trap have only been
+  checked by automated tests in jsdom, not on devices.
+- Rate limiting is per server instance and keyed on `x-forwarded-for`: a cost guard, not abuse protection.
+- Screen-reader announcements alongside spoken audio have not been checked on a device.
+- `/companion/a4-investigation-demo` is an earlier, unlinked design exploration. It is marked
+  simulated and non-clinical, its scores are unvalidated, and it does not affect this journey.
 - Camera reading of the instruction line is simulated by reviewer scenarios only.
 - New Simplified Chinese copy has not had native-speaker review.
 - Regulatory qualification has not been determined.

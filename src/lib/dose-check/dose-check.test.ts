@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { t as translate } from "@/lib/content/translations";
 import { resolveExplanation } from "@/lib/content/explanation";
 import { metforminRecord } from "@/lib/content/seed-record";
+import { buildTimeline, deriveRecordStatus } from "@/lib/session/audit-view";
 import { routeMessage } from "@/lib/session/intent";
 import { reduceSession, type DoseAction, type Session } from "@/lib/session/state-machine";
 import { SimulatedDoseCallbackService } from "@/lib/services/dose-callback";
@@ -48,7 +49,7 @@ function toDoseConfirm(scenario: DoseScenario | null = null, from?: Session): Se
 const toLabelStep = (scenario: DoseScenario | null = null) => confirm(toDoseConfirm(scenario));
 const toConflict = () => labelAs(OLD_LABEL, toLabelStep());
 const toReview = () => run([dose({ kind: "offer-callback" }), dose({ kind: "accept-offer" })], toConflict());
-const requestIdOf = (s: Session) => callbackRequestId(s.sessionId, s.doseCheck!.callback!.revision);
+const requestIdOf = (s: Session) => callbackRequestId(s.doseCheck!.callback!.draftId, s.doseCheck!.callback!.revision);
 const line = (s: Session) => doseCheckLine(s, (k) => translate(s.language, k), resolveExplanation(s, s.language)!);
 const editSave = (s: Session, changes: Partial<{ callbackContact: string; concernSummary: string; labelInstruction: string }>) => {
   const d = s.doseCheck!.callback!.draft;
@@ -539,5 +540,169 @@ describe("callback reasons, return to call and audit events (content-model §13,
     expect(corrected.audit.at(-1)).toMatchObject({ eventType: "label-corrected", details: { labelRevision: 2 } });
     const paused = run([{ type: "GET_HELP" }], toConflict());
     expect(paused.audit.map((e) => e.eventType)).toContain("support-interruption");
+  });
+});
+
+describe("audit fixes (10 October 2026)", () => {
+  const record = parseInstruction(RECORD);
+  const ictx = (s: Session) => ({
+    state: s.state,
+    contextualActions: s.contextualActions,
+    candidateId: s.candidate?.candidateId ?? null,
+    explainStep: s.explainStep,
+    cameraLive: false,
+    helpStage: s.helpFlow?.stage ?? null,
+    showMethod: s.showMethod,
+    doseCheck: s.doseCheck,
+    pendingSpokenMedicineName: null,
+  });
+
+  it("keeps decimals: 1.0 matches, 1.5 and .5 keep their real value", () => {
+    expect(parseInstruction("Take 1.5 tablets twice daily with meals").amount).toBe(1.5);
+    expect(parseInstruction("Take .5 tablet twice daily with meals").amount).toBe(0.5);
+    expect(compareInstructions(record, parseInstruction("Take 1.0 tablet twice daily with meals."))).toEqual({ outcome: "match" });
+  });
+
+  it("negation, steps, extra doses, strengths and conditions are never a match (or a conflict)", () => {
+    for (const label of [
+      "Do not take 1 tablet twice daily with meals",
+      "Take 1 tablet twice daily with meals for 3 days, then 2 tablets twice daily",
+      "Take 1 tablet (1000 mg) twice daily with meals",
+      "Take one tablet twice daily with meals. Take 1 extra tablet at bedtime",
+      "Take 1 tablet twice daily with meals or as directed",
+      "Take 2 tablets once daily, not twice daily, with meals",
+      "随餐每日服用一片，每日两次，不要与酒同服",
+    ]) {
+      expect(compareInstructions(record, parseInstruction(label)).outcome, label).toBe("insufficient");
+    }
+  });
+
+  it("a difference and a gap are both kept", () => {
+    expect(compareInstructions(record, parseInstruction("Take 2 tablets twice daily"))).toEqual({
+      outcome: "conflict",
+      differing: ["amount"],
+      missing: ["timing"],
+    });
+  });
+
+  it("a question never confirms the medicine or consents to telling family", () => {
+    const confirmStep = toDoseConfirm();
+    for (const q of ["Is that right?", "is it ok?", "对吗？", "这个可以吗？"]) {
+      expect(interpretUtterance(q, ictx(confirmStep)), q).not.toMatchObject({ event: { decision: "confirmed" } });
+    }
+    const consent = {
+      ...confirmStep,
+      state: "safety" as const,
+      helpFlow: { kind: "family" as const, stage: "confirm" as const, reason: "help-requested" as const },
+    };
+    for (const q of ["Is that okay?", "Will it be ok?", "可以吗？"]) {
+      expect(interpretUtterance(q, ictx(consent)), q).not.toMatchObject({ event: { granted: true } });
+    }
+    expect(interpretUtterance("yes", ictx(confirmStep))).toMatchObject({ event: { decision: "confirmed" } });
+    expect(interpretUtterance("是的，这是我的药", ictx(confirmStep))).toMatchObject({ event: { decision: "confirmed" } });
+  });
+
+  it("on the label step, new wording that starts with 'OK' is a new reading, not a yes to the old one", () => {
+    const shown = run([dose({ kind: "enter-label", text: "Take 7 tablet twice daily with meals" })], toLabelStep());
+    for (const said of ["OK one tablet twice daily", "right, one tablet", "每日两次，每次一片，可以随餐服用", "不要与酒同服"]) {
+      expect(interpretUtterance(said, ictx(shown)), said).toEqual({ kind: "message", text: said });
+    }
+    expect(interpretUtterance("Yes, that's it", ictx(shown))).toMatchObject({
+      event: { action: { kind: "confirm-label" } },
+    });
+  });
+
+  it("reading the box aloud is a reading, not a medical question; questions about herself still escalate", () => {
+    const step = toLabelStep();
+    const read = run([{ type: "USER_MESSAGE", text: "Take half a tablet twice daily with meals. Avoid alcohol" }], step);
+    expect(read.state).toBe("explain");
+    expect(read.doseCheck?.reading).toBe("Take half a tablet twice daily with meals. Avoid alcohol");
+    expect(run([{ type: "USER_MESSAGE", text: "I took 2 tablets by mistake" }], step).state).toBe("safety");
+    expect(run([{ type: "USER_MESSAGE", text: "Should I skip tonight's dose?" }], step).state).toBe("safety");
+    expect(run([{ type: "USER_MESSAGE", text: "Take 1 tablet, I have chest pain" }], step).safetyReason).toBe("urgent-risk");
+  });
+
+  it("two callback requests in one call have different request IDs, and both go through", async () => {
+    const service = new SimulatedDoseCallbackService(0);
+    const submit = async (s: Session) => {
+      const sending = run([dose({ kind: "send", revision: s.doseCheck!.callback!.revision })], s);
+      const id = requestIdOf(sending);
+      const r = await service.submit(buildCallbackPayload(sending.doseCheck!.callback!.draft, id));
+      const reference = r.status === "submitted" ? r.reference : undefined;
+      return { id, r, after: run([dose({ kind: "result", requestId: id, outcome: r.status, reference })], sending) };
+    };
+    const first = await submit(toReview());
+    const back = run(
+      [dose({ kind: "return-to-call" }), { type: "USER_MESSAGE", text: "My doctor changed it again, the label says the old dose" }],
+      first.after,
+    );
+    const secondReview = run(
+      [dose({ kind: "offer-callback" }), dose({ kind: "accept-offer" })],
+      labelAs("Take 3 tablets twice daily with meals", back),
+    );
+    const second = await submit(secondReview);
+    expect(second.id).not.toBe(first.id);
+    expect([first.r.status, second.r.status]).toEqual(["submitted", "submitted"]);
+  });
+
+  it("after a failure, a new summary is a new request, not a refused duplicate", async () => {
+    const service = new SimulatedDoseCallbackService(0);
+    const sending = run([dose({ kind: "send", revision: 1 })], toReview());
+    const failedId = requestIdOf(sending);
+    await service.submit(buildCallbackPayload(sending.doseCheck!.callback!.draft, failedId), { outcome: "fail-once" });
+    const failed = run([dose({ kind: "result", requestId: failedId, outcome: "failed" })], sending);
+    const redo = run(
+      [dose({ kind: "dont-send" }), dose({ kind: "review-details" }), dose({ kind: "enter-label", text: `${OLD_LABEL}.` })],
+      failed,
+    );
+    const review = run([dose({ kind: "offer-callback" }), dose({ kind: "accept-offer" })], confirmShown(redo));
+    const id = requestIdOf(review);
+    expect(id).not.toBe(failedId);
+    expect((await service.submit(buildCallbackPayload(review.doseCheck!.callback!.draft, id))).status).toBe("submitted");
+  });
+
+  it("returning to the call says only what is true for the outcome", () => {
+    expect(run([dose({ kind: "return-to-call" })], labelAs(RECORD, toLabelStep())).assistantKey).toBe("doseBackToCallMatch");
+    expect(run([dose({ kind: "return-to-call" })], toConflict()).assistantKey).toBe("doseBackToCall");
+    expect(run([dose({ kind: "cannot-confirm" }), dose({ kind: "return-to-call" })], toLabelStep()).assistantKey).toBe(
+      "doseBackToCallIncomplete",
+    );
+  });
+
+  it("caregiver view: a conflict left open shows 'unresolved', not 'identity confirmed'", () => {
+    expect(deriveRecordStatus(buildTimeline(run([{ type: "END_CALL" }], toConflict()).audit))).toBe("Unresolved");
+    expect(deriveRecordStatus(buildTimeline(labelAs(RECORD, toLabelStep()).audit))).toBe("Confirmed");
+  });
+
+  it("an urgent interruption keeps a family request that is already sending, and its outcome still lands", () => {
+    const sending = run([
+      startCall,
+      { type: "USER_MESSAGE", text: "I feel lonely and sad today" },
+      { type: "SELECT_ROUTE", route: "ask-family" },
+      { type: "HELP_CONFIRM", granted: true },
+      { type: "HELP_SEND" },
+    ]);
+    expect(sending.helpFlow?.stage).toBe("sending");
+    const urgent = run([{ type: "USER_MESSAGE", text: "I have chest pain" }], sending);
+    expect(urgent.safetyReason).toBe("urgent-risk");
+    expect(urgent.helpFlow).toBe(sending.helpFlow); // same object: the request in flight isn't cancelled
+    const sent = run([{ type: "HELP_RESULT", ok: true, contactName: "Daniel" }], urgent);
+    expect(sent.helpFlow?.stage).toBe("sent");
+    expect(sent.safetyReason).toBe("urgent-risk"); // urgent guidance stays
+  });
+
+  it("a dose check still at 'which medicine?' ends when she returns from help", () => {
+    const asked = run([startCall, { type: "USER_MESSAGE", text: "my doctor changed my dose" }]);
+    expect(asked.doseCheck?.step).toBe("identify");
+    expect(run([{ type: "GET_HELP" }, { type: "RETURN_TO_CALL" }], asked).doseCheck).toBeNull();
+  });
+
+  it("a reported dose change opens the comparison in Chinese too; a question alongside it still escalates", () => {
+    for (const said of ["医生给我减量了，但是药盒上还是旧的", "医生给我换药了", "My doctor told me to take less", "The pharmacist changed my dose"]) {
+      expect(routeMessage(said, { matchConfirmed: false }).intent, said).toBe("dose-change");
+    }
+    expect(routeMessage("My doctor reduced my dose, should I stop taking it?", { matchConfirmed: false }).intent).toBe(
+      "unsupported-medical-question",
+    );
   });
 });

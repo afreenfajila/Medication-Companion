@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
 import type { Session } from "@/lib/session/state-machine";
-import { doseCheckLine } from "@/lib/voice/speakable";
+import type { AssistantTurn } from "@/lib/voice/coordinator";
+import { helpLine } from "@/lib/content/help-lines";
+import { confirmLine, doseCheckLine } from "@/lib/voice/speakable";
 import type { T } from "./screen-chrome";
 
 export type FeedMessage = {
@@ -21,10 +23,18 @@ type Seen = {
   inExplain: boolean;
   explainSig: string;
   conflictSig: string;
+  noticeTurn: number;
+  confirmSig: string;
+  helpSig: string;
+  userLineId: number;
+  /** The current step's line, shown in its panel and not yet in the chat. */
+  pendingStep: { sig: string; line: string } | null;
+  /** The step line already moved into the chat (so it isn't added twice). */
+  flushedStepSig: string;
 };
 
 function initialSeen(callCount: number): Seen {
-  return { callCount, assistantSig: "", userSig: "", inExplain: false, explainSig: "", conflictSig: "" };
+  return { callCount, assistantSig: "", userSig: "", inExplain: false, explainSig: "", conflictSig: "", noticeTurn: 0, confirmSig: "", helpSig: "", userLineId: 0, pendingStep: null, flushedStepSig: "" };
 }
 
 function explainStepLines(step: 0 | 1 | 2, e: ExplanationView["explanation"]): string[] {
@@ -61,6 +71,12 @@ export function useCallFeed(
   listeningLine: string | null,
   /** The companion's voice hasn't started yet — hold its new words until it does. */
   held = false,
+  /** Fixed lines said outside the session's own text ("didn't catch that"): every spoken line is visible here. */
+  notices: AssistantTurn[] = [],
+  /** Her turns that the session doesn't record as a message ("yes", "next", a misheard phrase). */
+  userLines: Array<{ id: number; text: string }> = [],
+  /** What the companion says on the current step (the same string the voice renders). */
+  stepLine: string | null = null,
 ): FeedMessage[] {
   const [entries, setEntries] = useState<FeedMessage[]>([]);
   const seen = useRef<Seen>(initialSeen(session.callCount));
@@ -82,6 +98,34 @@ export function useCallFeed(
       idRef.current += 1;
       additions.push({ id: `f${idRef.current}`, speaker: "companion", lines, record: true });
     };
+
+    // The companion's line on the steps that show it in their own panel (camera, photo
+    // reading, help screen, wrap-up). While the panel shows it, the chat doesn't repeat
+    // it; as soon as the conversation moves on — she answers, a remark is said, or the
+    // step changes — it goes into the chat in its place, so the history is complete.
+    const ownStep = session.state === "listening" || session.state === "explain" || session.state === "confirm-match" || session.state === "start";
+    const helpSpeaks = session.helpFlow !== null && session.safetyReason !== "urgent-risk";
+    const stepNow = session.callActive && !ownStep && !helpSpeaks && stepLine && !held ? { sig: `${session.state}|${stepLine}`, line: stepLine } : null;
+    const flushStep = () => {
+      const pending = seen.current.pendingStep;
+      if (!pending) return;
+      seen.current.pendingStep = null;
+      seen.current.flushedStepSig = pending.sig;
+      push("companion", pending.line);
+    };
+    if (seen.current.pendingStep && seen.current.pendingStep.sig !== stepNow?.sig) flushStep(); // the step changed
+    const herNewTurn =
+      userLines.some((l) => l.id > seen.current.userLineId) || (session.userText !== null && `${session.turnCount}` !== seen.current.userSig);
+    const newNotice = !held && notices.some((n) => n.id.turnId > seen.current.noticeTurn);
+    if (herNewTurn || newNotice) flushStep(); // the conversation moved on within the step
+
+    // Her answers and commands, in the order she gave them (ids only grow).
+    for (const line of userLines) {
+      if (line.id > seen.current.userLineId) {
+        seen.current.userLineId = line.id;
+        if (line.text) push("user", line.text);
+      }
+    }
 
     // Keyed by turn, not by text: saying the same thing twice is two turns, and
     // must look like two turns.
@@ -105,6 +149,29 @@ export function useCallFeed(
     ) {
       seen.current.assistantSig = assistantSig;
       push("companion", listeningLine);
+    }
+
+    // A help request's question and status ("Shall I send the request?", "…was submitted"): lines in
+    // the conversation, each once per stage and language (no card).
+    if (session.callActive && session.helpFlow && !held) {
+      const f = session.helpFlow;
+      const helpSig = `${f.kind}:${f.stage}:${f.reference ?? ""}:${f.contactName ?? ""}:${session.language}`;
+      if (helpSig !== seen.current.helpSig) {
+        seen.current.helpSig = helpSig;
+        push("companion", helpLine(t, f));
+      }
+    } else if (!session.helpFlow) {
+      seen.current.helpSig = "";
+    }
+
+    // "I found a possible match… Is this the medicine you have?": the confirmation is part of
+    // the conversation, once per candidate and language (no separate panel).
+    if (session.state === "confirm-match" && session.candidate && !held) {
+      const confirmSig = `${session.candidate.candidateId}:${session.language}:${session.turnCount}`;
+      if (confirmSig !== seen.current.confirmSig) {
+        seen.current.confirmSig = confirmSig;
+        push("companion", confirmLine(t, session.candidate));
+      }
     }
 
     if (session.state === "explain" && explanation && !held) {
@@ -137,13 +204,27 @@ export function useCallFeed(
       seen.current.inExplain = false;
     }
 
+    // Turn ids only grow, so each notice is added once, in the order it was said —
+    // and, like every line, once its voice has started (or the wait is over).
+    for (const n of held ? [] : notices) {
+      if (n.id.turnId > seen.current.noticeTurn) {
+        seen.current.noticeTurn = n.id.turnId;
+        push("companion", n.text);
+      }
+    }
+
+    // This step's line waits in its panel until the conversation moves on.
+    if (stepNow && stepNow.sig !== seen.current.flushedStepSig && seen.current.pendingStep?.sig !== stepNow.sig) {
+      seen.current.pendingStep = stepNow;
+    }
+
     if (additions.length > 0 || base !== entries) {
       setEntries([...base, ...additions]);
     }
     // `entries` intentionally excluded: this effect only ever reads the latest
     // value via closure to build the next one, and depending on it would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, t, explanation, listeningLine, held]);
+  }, [session, t, explanation, listeningLine, held, notices, userLines, stepLine]);
 
   return entries;
 }

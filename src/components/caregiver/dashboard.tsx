@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleCheck, Clock, LifeBuoy, ShieldCheck } from "lucide-react";
+import { CircleCheck, CircleHelp, Clock, LifeBuoy, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { DemoNotice } from "@/components/ui/notices";
 import { formatVerifiedDate } from "@/lib/content/explanation";
@@ -28,6 +28,10 @@ const CHIP_STYLE: Record<StatusChip, { icon: React.ReactNode; className: string 
     icon: <Clock className="h-4 w-4" aria-hidden="true" />,
     className: "bg-line text-navy-700",
   },
+  Unresolved: {
+    icon: <CircleHelp className="h-4 w-4" aria-hidden="true" />,
+    className: "bg-danger-100 text-danger-800",
+  },
 };
 
 /** Chips name what they're about (design-standard §22): never a bare "Confirmed". */
@@ -35,6 +39,7 @@ const CHIP_TEXT: Record<StatusChip, string> = {
   Confirmed: "Medicine identity confirmed",
   "Needs help": "Needs help",
   Pending: "Pending",
+  Unresolved: "Medication question unresolved",
 };
 
 /** Status is always icon + word, never colour alone. */
@@ -189,7 +194,7 @@ export function CaregiverDashboard() {
 }
 
 function TimelineItem({ event }: { event: DisplayEvent }) {
-  const chip = chipForEvent(event.eventType);
+  const chip = chipForEvent(event.eventType, event.validationStatus);
   return (
     <li className="flex flex-col gap-1 rounded-md border border-line bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">

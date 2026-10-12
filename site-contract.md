@@ -96,36 +96,72 @@ The prototype must use fictional data only.
 
 ## 4. Current voice architecture
 
-Preferred current prototype architecture:
+Implemented (12 October 2026; detail in Medication-Companion-Architecture.md):
 
 ```text
-User speech
-  → supported browser speech recognition
-  → transcript confirmation where required
-  → deterministic conversation/state logic
-  → approved response text
-  → optional server-side Gemini TTS
-  → browser speech synthesis fallback
+Microphone
+  → AudioWorklet PCM capture (24 kHz mono; echo cancellation, noise
+    suppression and gain control requested; settings reported as booleans)
+  → adaptive loudness: candidate (RMS over a floor calibrated at call start)
+  → local Silero VAD (ONNX Runtime Web, on the device): confirmed speech
+  → OpenAI Realtime transcription (transcription session, turn_detection
+    off; short-lived client secret from POST /api/voice/openai-session)
+  → one final UserVoiceTurn per committed turn (interim text display-only)
+  → deterministic safety classifier
+  → Claude (claude-sonnet-5-5) for bounded understanding, when configured
+  → Zod and content validation
+  → reduceSession() guarded transition
+  → visible AssistantTurn (identical to what is spoken)
+  → ElevenLabs streaming speech (single-use token from
+    POST /api/voice/elevenlabs-token; one voice per call)
+  → Web Audio playback
 ```
 
-Typed input remains available.
+Typed input remains available on every step and is handled as the same kind of turn.
 
-Before implementation, verify this against the code.
+Full duplex: the microphone stays open during playback. Audio is sent for
+transcription only while a user turn is open, so the companion's playback is
+never committed as user speech. During playback a turn opens only on
+VAD-confirmed speech (a loudness candidate alone does nothing), after a short
+echo guard following the end of audio; the turn includes 300 ms of pre-roll.
+The person can switch automatic interruption off; typing and the mic button
+always interrupt. Without the local VAD the mic is push-to-talk.
 
-Gemini Live is not a required feature for this assignment.
-Do not reintroduce streaming voice solely because historical
-documentation specified it.
+One voice per call, chosen at call start. Fallback is one way and visible
+(amended 12 October 2026 for free ElevenLabs accounts):
 
-If an existing streaming integration is retained:
-- Document its actual role.
-- Keep credentials secure.
-- Preserve the same state and confirmation gates.
-- Do not allow it to independently generate medication guidance.
+- Before any token is minted, the server checks once (cached ~10 minutes)
+  that the configured voice and model are usable through the API. A voice
+  the account can't use fails here, before any playback.
+- If the streaming voice can't be used before any of it was heard in the
+  call, the browser voice says every line of that call, with one sticky
+  notice. ElevenLabs is not tried again until the next call.
+- Once the streaming voice has been heard in a call, voices never switch.
+  A passing problem with one line (socket, decode, start timeout) stops
+  that line as "interrupted" (Repeat tries the same voice); a lasting one
+  (credits, voice, model, token) leaves the rest of the call as words only,
+  with one sticky notice.
+- A line the speech guard refuses is shown and not voiced; no second voice
+  says it.
+- An unconfigured voice (no key or voice id) is a setup choice: browser
+  voice, no notice.
 
-Browser speech recognition must not be described as necessarily
-on-device or private without verifying provider behaviour.
+Status copy (fixed keys): connecting "Getting the call ready…", listening
+"I'm listening…", processing "Checking what I heard…", preparing voice
+"Preparing voice…", speaking "Speaking…" only once audio actually plays (with
+"I'm still listening…" in duplex), interrupted by the person "I heard you — go
+ahead.", voice stopped "The voice stopped…", unavailable and error notices.
 
-Document actual provider processing and retention separately.
+Credentials: the permanent OpenAI and ElevenLabs keys are server-only; the
+browser receives a short-lived client secret or a single-use token from
+same-origin, rate-limited routes that attach no medicine data and log no audio
+or transcript. The browser's own recognition and synthesis are used only as the
+explicitly labelled degraded fallback; they are not on-device and must not be
+described as such. Document actual provider processing and retention separately.
+
+Google speech integrations (speech output, recorded-turn transcription, the
+Google voice provider and bootstrap) were removed on 12 October 2026. Do not
+reintroduce a removed provider because historical documentation specified it.
 
 
 ## 5. Routes and entry behaviour
@@ -540,6 +576,20 @@ before accepting a callback submission.
 
 
 ## 15. Callback draft lifecycle
+
+> **Implemented in this prototype (amended 10 October 2026, see docs/decisions.md):**
+> §15–17 are realised by a browser-side simulation adapter, not by the
+> server endpoints sketched below. Drafts, revisions, approval, the
+> allowlisted payload and deduplication live in the client reducer and
+> `SimulatedDoseCallbackService` (in-memory, per browser tab, lost on
+> reload). No server re-validation of the comparison or approval exists,
+> so this is not a security or authorisation boundary. Each prepared
+> summary has its own draft ID; the request ID is draft ID plus revision.
+> `POST /api/help/request` (pharmacist callback, family, trusted helper)
+> now has its own review step: confirm → "check before sharing" → an
+> explicit "send" (said or typed). It carries only the kind and reason
+> shown on the review.
+> The endpoint designs below remain the target for any server-side version.
 
 Reuse or extend the existing help-service contract.
 

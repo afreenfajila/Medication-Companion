@@ -466,8 +466,13 @@ describe("help flows: confirm, then sent only on service success (Assignment 3, 
   it("a pharmacist callback confirms first, sends, and is 'sent' with a reference only after success", () => {
     const asked = run([{ type: "HELP_START", kind: "pharmacist-callback" }], safety());
     expect(asked.helpFlow).toMatchObject({ kind: "pharmacist-callback", stage: "confirm", reason: "help-requested" });
-    const sending = run([{ type: "HELP_CONFIRM", granted: true }], asked);
+    // "Yes" opens "check before sending"; another yes there sends nothing — only the Send tap does.
+    const review = run([{ type: "HELP_CONFIRM", granted: true }], asked);
+    expect(review.helpFlow?.stage).toBe("review");
+    expect(run([{ type: "HELP_CONFIRM", granted: true }], review)).toBe(review);
+    const sending = run([{ type: "HELP_SEND" }], review);
     expect(sending.helpFlow?.stage).toBe("sending");
+    expect(sending.audit.at(-1)?.eventType).toBe("callback-approved");
     expect(helpEvents(sending)).toHaveLength(0); // nothing claimed yet
 
     const sent = run([{ type: "HELP_RESULT", ok: true, reference: "BC-123456" }], sending);
@@ -477,12 +482,22 @@ describe("help flows: confirm, then sent only on service success (Assignment 3, 
   });
 
   it("a service failure shows the failure state, never 'sent'; try again or see the pharmacy's number", () => {
-    const sending = run([{ type: "HELP_START", kind: "pharmacist-callback" }, { type: "HELP_CONFIRM", granted: true }], safety());
+    const sending = run([{ type: "HELP_START", kind: "pharmacist-callback" }, { type: "HELP_CONFIRM", granted: true }, { type: "HELP_SEND" }], safety());
     const failed = run([{ type: "HELP_RESULT", ok: false }], sending);
     expect(failed.helpFlow?.stage).toBe("failed");
     expect(helpEvents(failed)).toHaveLength(0);
     expect(run([{ type: "HELP_RETRY" }], failed).helpFlow?.stage).toBe("sending");
     expect(run([{ type: "HELP_SHOW_NUMBER" }], failed).helpFlow?.stage).toBe("info");
+  });
+
+  it("the review can be cancelled with nothing sent; Send is ignored anywhere but the review", () => {
+    const review = run([{ type: "HELP_START", kind: "pharmacist-callback" }, { type: "HELP_CONFIRM", granted: true }], safety());
+    const cancelled = run([{ type: "HELP_CONFIRM", granted: false }], review);
+    expect(cancelled.helpFlow).toBeNull();
+    expect(helpEvents(cancelled)).toHaveLength(0);
+    const asked = run([{ type: "HELP_START", kind: "pharmacist-callback" }], safety());
+    expect(run([{ type: "HELP_SEND" }], asked)).toBe(asked); // no skipping the review
+    expect(blocked([{ type: "HELP_SEND" }], safety())).toBe(true);
   });
 
   it("a result that arrives when nothing is being sent is ignored", () => {
@@ -496,6 +511,7 @@ describe("help flows: confirm, then sent only on service success (Assignment 3, 
         { type: "GET_HELP" },
         { type: "HELP_START", kind: "trusted-helper" },
         { type: "HELP_CONFIRM", granted: true },
+        { type: "HELP_SEND" },
         { type: "HELP_RESULT", ok: true, contactName: "Mrs Lim" },
         { type: "HELP_DISMISS" },
       ],
@@ -632,10 +648,19 @@ describe("family help needs consent every time (Assignment 3, F)", () => {
   const familyEvents = (s: ReturnType<typeof run>) =>
     s.audit.filter((e) => e.eventType === "caregiver-help-requested");
 
+  // "Yes" opens the review; an explicit "send" sends it; then the service answers.
   const yes = [
     { type: "HELP_CONFIRM", granted: true },
+    { type: "HELP_SEND" },
     { type: "HELP_RESULT", ok: true, contactName: "Daniel" },
   ] as const;
+
+  it("a family message is reviewed before it goes: 'yes' only opens the review", () => {
+    const review = run([{ type: "HELP_CONFIRM", granted: true }], asked());
+    expect(review.helpFlow?.stage).toBe("review");
+    expect(familyEvents(review)).toHaveLength(0);
+    expect(run([{ type: "HELP_CONFIRM", granted: false }], review).helpFlow).toBeNull(); // "don't send"
+  });
 
   it("choosing 'Let my family know' only asks — nothing is recorded yet", () => {
     const s = asked();

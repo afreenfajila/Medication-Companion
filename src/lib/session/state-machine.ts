@@ -9,6 +9,7 @@ import {
   callbackRequestId,
   compareInstructions,
   isPlausibleNumber,
+  looksLikeLabelWording,
   parseInstruction,
   type CallbackDraft,
   type CallbackReason,
@@ -40,7 +41,8 @@ import { namesRecordMedicine, routeMessage } from "./intent";
 export type HelpKind = "pharmacist-callback" | "family" | "trusted-helper" | "clinic";
 export type HelpFlow = {
   kind: HelpKind;
-  stage: "confirm" | "sending" | "sent" | "failed" | "info";
+  /** Anything sent to another party goes confirm → review ("check before sending") → sending, on an explicit "send". */
+  stage: "confirm" | "review" | "sending" | "sent" | "failed" | "info";
   reason: HelpReason;
   /** From the service on success: the callback reference, or who was told. */
   reference?: string;
@@ -85,6 +87,8 @@ export type CallbackState = {
    * answer (timeout, error) — it may have gone through, so neither is claimed.
    */
   status: "reviewing" | "editing" | "submitting" | "submitted" | "failed" | "unknown" | "cancelled";
+  /** Unique per prepared summary, so two requests in one call never share a request ID. */
+  draftId: string;
   draft: CallbackDraft;
   /** Bumped by any change to the draft: a new version needs a fresh review and has a new request ID. */
   revision: number;
@@ -234,6 +238,8 @@ export type SessionEvent =
   /** Opens a help flow: the confirm/consent step, or the clinic's number. */
   | { type: "HELP_START"; kind: HelpKind }
   | { type: "HELP_CONFIRM"; granted: boolean }
+  /** "Send", said or typed, after the review. Never offered to the AI meaning-match. */
+  | { type: "HELP_SEND" }
   /** The service's answer to a confirmed request (dispatched by the client after the API call). */
   | { type: "HELP_RESULT"; ok: boolean; reference?: string; contactName?: string }
   | { type: "HELP_RETRY" }
@@ -395,6 +401,11 @@ function closeHelp(s: Session, ctx: ReduceContext, resume: boolean): Session {
   return closed;
 }
 
+/** A help request already sent can't be taken back, so an interruption must not hide its outcome. */
+function keepSending(flow: HelpFlow | null): HelpFlow | null {
+  return flow?.stage === "sending" ? flow : null;
+}
+
 function enterSafety(
   s: Session,
   ctx: ReduceContext,
@@ -410,7 +421,8 @@ function enterSafety(
     state: "safety",
     safetyReason: reason,
     contextualActions: [],
-    helpFlow: null,
+    // A request already on its way stays, so its outcome is still shown; anything else closes.
+    helpFlow: keepSending(s.helpFlow),
     recordConflict: false,
   };
   // The dose check pauses here; its confirmed context is kept for "Carry on".
@@ -711,7 +723,7 @@ function reduceDose(s: Session, action: DoseAction, ctx: ReduceContext): Session
   // dropping it there left the request stuck on "Sending…" when she came back.
   // Late answers for an ended call, an edited draft, or a finished request are dropped.
   if (action.kind === "result") {
-    if (cb?.status !== "submitting" || action.requestId !== callbackRequestId(s.sessionId, cb.revision)) return s;
+    if (cb?.status !== "submitting" || action.requestId !== callbackRequestId(cb.draftId, cb.revision)) return s;
     if (action.outcome === "failed") {
       return withAudit(setCb({ status: "failed" }), ctx, {
         eventType: "callback-failed",
@@ -784,8 +796,10 @@ function reduceDose(s: Session, action: DoseAction, ctx: ReduceContext): Session
       const draft = newDraft(s, d, reason);
       if (!draft) return s;
       const revision = (cb?.revision ?? 0) + 1;
+      // ponytail: the audit sequence is already unique and monotonic for this session, so it doubles as the draft number.
+      const draftId = `${s.sessionId}-d${s.auditSeq + 1}`;
       return withAudit(
-        set({ offer: false, notice: null, callback: { status: "reviewing", draft, revision, approvedRevision: null } }),
+        set({ offer: false, notice: null, callback: { status: "reviewing", draftId, draft, revision, approvedRevision: null } }),
         ctx,
         { eventType: "callback-draft-created", summary: "Callback summary prepared for review", details: { reason, draftRevision: revision, simulated: true } },
       );
@@ -842,11 +856,21 @@ function reduceDose(s: Session, action: DoseAction, ctx: ReduceContext): Session
     case "return-to-call":
       // Back to the conversation. The difference is not resolved, and the companion says so.
       if (cb?.status === "submitting" || (d.step !== "compared" && d.step !== "record-unavailable")) return s;
-      return withAudit(
-        { ...s, state: "listening", doseCheck: null, assistantKey: "doseBackToCall", contextualActions: [], replyTo: null },
-        ctx,
-        { eventType: "dose-check-left-unresolved", summary: "Back to the call; the medication question is still unresolved" },
-      );
+      {
+        // Say only what is true: a difference, an incomplete check, or (after a match) nothing open.
+        const reason = callbackReasonFor(d);
+        const back: Session = {
+          ...s,
+          state: "listening",
+          doseCheck: null,
+          assistantKey: !reason ? "doseBackToCallMatch" : reason === "instruction-discrepancy" ? "doseBackToCall" : "doseBackToCallIncomplete",
+          contextualActions: [],
+          replyTo: null,
+        };
+        return reason
+          ? withAudit(back, ctx, { eventType: "dose-check-left-unresolved", summary: "Back to the call; the medication question is still unresolved" })
+          : back;
+      }
     case "dont-send":
       if (!cb || !ACTIVE_DRAFT.includes(cb.status)) return s;
       return withAudit(
@@ -940,12 +964,22 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         replyTo: null,
         nameCheckPending: false,
         offTopicStreak: routed.intent === "off-topic" ? s.offTopicStreak + 1 : 0,
-        helpFlow: null, // moving on without answering a help question is a "not now"
+        helpFlow: keepSending(s.helpFlow), // moving on without answering a help question is a "not now"
       };
 
       // Urgent-risk overrides the normal path from ANY active-call state.
       if (routed.intent === "urgent-risk") {
         return enterSafety(heard, ctx, "urgent-risk");
+      }
+
+      // Reading the box aloud ("Take half a tablet… avoid alcohol") on the label step is
+      // label wording to confirm, not her own medical question. Questions and anything
+      // about herself ("I took two by mistake") still go to safety.
+      const readingLabel =
+        s.state === "explain" && isMatchConfirmed(s) && s.doseCheck?.step === "label" && looksLikeLabelWording(text);
+      if (readingLabel && s.doseCheck) {
+        const read: Session = { ...heard, doseCheck: withReading(s.doseCheck, text, event.via === "typed" ? "typed" : "speech-transcript") };
+        return s.doseCheck.labelRevision > 0 ? withAudit(read, ctx, labelCorrected(s.doseCheck.labelRevision + 1)) : read;
       }
 
       // Unsupported medical questions and human-help requests also leave the normal path
@@ -1456,6 +1490,9 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         nameCheckPending: false,
         labelRouteSelected: false,
         resumeExplainStep: null,
+        // A dose check that never got past "which medicine?" ends here, so a later,
+        // unrelated medicine isn't pulled into it. One already comparing is kept.
+        doseCheck: s.doseCheck?.step === "identify" ? null : s.doseCheck,
       };
     }
 
@@ -1465,18 +1502,39 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       const fromSafety = s.state === "safety" && s.safetyReason !== "urgent-risk";
       const fromWellbeing =
         s.state === "listening" && event.kind === "family" && s.contextualActions.includes("ask-family");
-      if (!s.callActive || s.helpFlow || !(fromSafety || fromWellbeing)) return s;
+      // "Would you like help contacting a pharmacist?" is asked during the explanation: answering it
+      // opens the same confirm step (nothing is requested without a clear yes there).
+      const fromExplain =
+        s.state === "explain" && isMatchConfirmed(s) && !s.doseCheck && event.kind === "pharmacist-callback";
+      if (!s.callActive || s.helpFlow || !(fromSafety || fromWellbeing || fromExplain)) return s;
       return {
         ...s,
-        helpFlow: { kind: event.kind, stage: event.kind === "clinic" ? "info" : "confirm", reason: helpReasonFor(s) },
+        recordConflict: fromExplain ? false : s.recordConflict,
+        helpFlow: {
+          kind: event.kind,
+          stage: event.kind === "clinic" ? "info" : "confirm",
+          reason: fromExplain && !s.recordConflict ? "help-requested" : helpReasonFor(s),
+        },
       };
     }
 
     case "HELP_CONFIRM": {
-      if (s.helpFlow?.stage !== "confirm") return s;
-      if (!event.granted) return closeHelp(s, ctx, false);
-      // Consent given: the client now sends the request. Nothing is "sent" until the service says so.
-      return { ...s, helpFlow: { ...s.helpFlow, stage: "sending" } };
+      if (s.helpFlow?.stage !== "confirm" && s.helpFlow?.stage !== "review") return s;
+      if (!event.granted) return closeHelp(s, ctx, false); // "not now" / "don't send": nothing is sent
+      if (s.helpFlow.stage === "review") return s; // a yes on the review sends nothing: "send" does (HELP_SEND)
+      // Everything sent to another party is checked first (owner decision, 12 October 2026):
+      // "yes" opens the review; only an explicit "send" (said or typed) sends it.
+      return { ...s, helpFlow: { ...s.helpFlow, stage: "review" } };
+    }
+
+    case "HELP_SEND": {
+      // An explicit "send" (said or typed) after the review — never from the AI, a yes or a question.
+      if (s.helpFlow?.stage !== "review") return s;
+      return withAudit({ ...s, helpFlow: { ...s.helpFlow, stage: "sending" } }, ctx, {
+        eventType: "callback-approved",
+        summary: "Help request reviewed; send given",
+        details: { kind: s.helpFlow.kind },
+      });
     }
 
     case "HELP_RESULT": {

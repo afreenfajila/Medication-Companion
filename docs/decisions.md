@@ -720,7 +720,8 @@ fixed here; H covers choose-from-my-medicines, typed name on failure, real callb
   - Simulated outcomes must say "Demo"; the framing test now checks that, instead of banning the
     word.
   - The tone test still exempts `doseConflict`'s mandated "…which instruction you should follow."
-    It should be rewritten to the content-model §18 rules in the docs pass.
+    Resolved (10 October 2026): content-model §12 mandates that exact sentence and §18 does not
+    ban "should", so the exemption stays and the wording is unchanged.
 
 ## A4 review fixes, first group (10 October 2026)
 
@@ -768,3 +769,188 @@ fixed here; H covers choose-from-my-medicines, typed name on failure, real callb
 | The call shows only the person's latest response and the companion's current message; earlier turns sit behind "Earlier in this call" | design-standard §10; instructor feedback ("simplify the mobile journey") | History is one tap away rather than always on screen; it is still announced line by line as it happens | UI test: "the call shows the latest exchange…" |
 | Confirm screen: "Is this the medicine you mean?", "Yes, this is the medicine", "I'm not sure" as a full button, and the fictional record source shown | design-standard §12–13 | The found-match sentence stays as a line above the question, and is still spoken | Existing journey tests, updated wording |
 | About page: dose-change callbacks run in the browser only; examples aren't for real use; validation pending; it doesn't pick between differing instructions | content-model §3 | — | Framing tests |
+
+## A4 audit fixes (10 October 2026)
+
+Evidence for every row: a whole-branch audit of `a5b0740`, with probe tests run against the real modules.
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| The parser keeps decimals, and any wording it can't safely read (negation, steps, extra doses, strengths/units, conditions, "as directed") makes the comparison insufficient | Probe: "1.5" read as 5, "1.0" as 0; "Do not take…", "(1000 mg)", "then 2 tablets" all gave **match**. site-contract §14, content-model §11, invariant 7 | Conservative: some harmless wording ("and", "or") now gives "can't complete" instead of a match | "keeps decimals…", "negation, steps…" |
+| A conflict that also has gaps keeps both | content-model §11 | The panel shows "Different" and "Not clear on both" together | "a difference and a gap are both kept" |
+| Questions never count as yes; Chinese is measured in characters | Probe: "Is that right?", "对吗？" confirmed the medicine; "Is that okay?", "可以吗？" consented to telling family. ID-02, consent | A spoken "right?" without a question word can't be told apart from "right" | "a question never confirms…" |
+| On the label step, anything with instruction words is new wording, not yes/no | Probe: "OK one tablet twice daily" confirmed the earlier misread reading. DC-01 | Pressing the button is still the clearest confirmation | "new wording that starts with 'OK'…" |
+| Each prepared summary has its own draft ID; request ID = draft ID + revision | Probe: a second request in the same call (or a new summary after a failure) reused `-r1`, was refused as different content, and every retry failed. SR-02 | The draft number reuses the audit sequence (unique per session) | "two callback requests in one call…", "after a failure…" |
+| Return-to-call and "submitted" lines follow the outcome; "the difference" only when one was found | Scenario 4: after a match, the companion said the difference was unresolved | New copy keys `doseBackToCallMatch`, `doseBackToCallIncomplete`, `doseStillUnchecked`; zh-Hans needs native review. This deviates from content-model §17's single "submitted" body | "returning to the call says only what is true…" |
+| A dose check still at "which medicine?" ends on return from help | Probe: a later, unrelated identification was pulled into the old dose check | She says the change again to restart it | "a dose check still at 'which medicine?'…" |
+| Label wording read aloud on the label step becomes a reading, even if it would trip the unsupported-question classifier | Probe: "Take half a tablet…" and "Avoid alcohol" went to the safety screen | **Safety trade-off:** only text with an amount or frequency, no "I/my", and no question counts. Urgent wording always escalates first | "reading the box aloud…" |
+| A reported dose change opens the comparison when the rest of the sentence isn't a medical question | Probe: "医生给我减量了" and "医生给我换药了" went to the safety screen; English variants got the generic reply | "…should I stop taking it?" still escalates | "a reported dose change opens the comparison…" |
+| Caregiver status: a conflict or incomplete comparison reads "Medication question unresolved" | Probe: after a conflict and ending the call, the view showed "Medicine identity confirmed" with a check. design-standard §22 | A match leaves the status unchanged | "caregiver view: a conflict left open…" |
+| Investigation demo kept (removal needs approval) but marked simulated and non-clinical; "Alert Sent to Family" now reads "Demo: family alert simulated" | content-model §17; PRD §7 (no triage, no scores as probabilities) | Its scoring is unchanged and still unvalidated | Existing investigation tests |
+| A malformed or `null` Origin header is refused instead of crashing | `new URL("null")` threw, giving a 500 on all four routes | One shared `isCrossOrigin` helper | Full suite |
+| site-contract §15–17 amended to describe the browser-only simulation adapter | The code had diverged from the spec's server endpoints | Not a security boundary; documented in README | — |
+| A family/helper request already "Sending…" survives a safety interruption; under urgent guidance its status shows below the urgent message, which stays visible and is what's spoken | Probe: "I have chest pain" during sending cancelled the request on screen and its outcome was never shown. site-contract §18, §20 | The urgent screen can show a request card beneath it | "an urgent interruption keeps a family request…" |
+| The masked callback number has a labelled "Show number" toggle | design-standard §16 ("let the user inspect the full fictional value") | — | UI test: "the payload sent is exactly what the review panel showed" |
+| The upload cap is also enforced while reading, not only from `content-length` | A chunked upload could skip the declared-length check and be buffered in full | Body is read into memory up to the cap, then parsed | Route test: "stops reading an oversized body…" |
+| Return-to-call and "submitted" copy recorded in content-model §17 | Keeps the spec and the copy catalogue in step | zh-Hans still needs native review | — |
+| Not changed: dose lines quoting her wording use the browser voice | Sending her own words to Gemini would widen what leaves the browser; that needs a privacy decision | Listed in README known limitations | — (superseded below, 12 October 2026) |
+
+## Google voice input and output (12 October 2026)
+
+Asked for: "use Google voice output and input." Evidence: live calls with our Gemini key, using fictional approved text only.
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| Gemini TTS may read the person's own words when an approved line reads them back | The owner asked for Google voice output throughout; before this, those lines switched to the browser voice | Her words (label wording, her note) now reach Google. Bounded: approved wording must be at least half the line, her part at most 400 characters, no links or markup | Speak route test "voices her own words…" |
+| New `POST /api/companion/transcribe`: one recorded turn (16 kHz mono WAV) in, the words out, via Gemini | Uses the existing key and SDK, with no new dependency. Not Gemini Live (site-contract §4) | Audio reaches Google; not stored by the app. On unpaid tiers Google may use it | Route, library and provider tests |
+| Default input is browser-first: browser recognition where it exists, Gemini where it doesn't, or everywhere with `GEMINI_SPEECH_INPUT=always` | Measured on a 6 s clip: `gemini-3.8-flash` ~10 s; `gemini-3.5-flash-lite` 2.3 s at first, later 7–10 s; one run took 57 s. In Chrome, browser recognition is Google's own streaming service and near-instant | Safari users get Apple's recognition by default. The owner can force Gemini | Provider tests "by default the browser's own recognition…" |
+| Transcription model `gemini-3.5-flash-lite`, low thinking, 8 s timeout, then browser fallback | `gemini-2.5-flash` is no longer available to new keys; MINIMAL thinking is rejected by these models | A timed-out turn's words are lost and repeated | Library test; live round trip returned the exact English words |
+| Considered and not done: a check that rejects near-silent TTS audio | A test-harness bug (curl on Windows sent Chinese as "???") looked like Gemini dropping Chinese. With correct UTF-8, Chinese lines were voiced in full | — | Live: both Chinese test lines voiced and transcribed correctly |
+| Not done: OpenAI transcription | Not measured (no key configured); it would add a second AI provider and data processor | Can be benchmarked if a key is added | — |
+
+## Conversation first, and voice fixes from live use (12 October 2026)
+
+Owner feedback from using the prototype: "too many buttons and actions, overwhelming"; "it has to be done via voice or text input"; "I ask the companion to have the pharmacist call me back but it says it doesn't understand… I want non-deterministic matching of similar meaning"; "some voice output is from the browser"; "some of my words are not captured or transcribed incorrectly".
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| One text box for every step of the call; the per-step boxes and "say or type 'next'" hints are gone; the language switch inside the explanation is gone ("中文"/"English" in words) | Owner feedback; screenshots showed six controls on one step | **Deviates from design-standard §12–16** (full-size decision buttons) by the owner's direction | conversation-first UI tests |
+| Step buttons are hidden by default behind "Show choices" (one CSS rule on the shared button marker); Repeat / Get help / End call stay visible | CLAUDE.md §12 keeps help and end visible; a tap path must remain for anyone who can't speak or prefers to tap | Hidden buttons can't be reached by keyboard until shown; "Show choices" is in the tab order | "one text box on every step…" |
+| The help screen understands its own options in words (pharmacist, clinic, family, helper); "talk to a pharmacist" there no longer dead-ends on "Get help" | Owner report: "ask the pharmacist to call me back" got "I didn't catch that" | — | conversation-first command tests |
+| Meaning match (`POST /api/companion/intent`, Claude, low effort): when fixed phrases miss, pick one of the on-screen actions or none | Owner asked for non-deterministic matching. Live: 4/4 example phrases correct in English and Chinese, 2–5.6 s | **Gates are never in its list** (confirming a medicine or label wording, consent to contact someone, sending): AI output can't approve (CLAUDE.md §7). An answer arriving after the screen changed is dropped. No AI → behaves as before | Library, route, gate-exclusion and UI tests |
+| A gate's "yes" may be a natural sentence (≤10 words) and "send it" / "don't send" work on the review | So the person can answer the gates by voice or text, as asked | Still never a question, hedge or contradiction | Command tests |
+| **Reversed:** no spoken phrase ("send it", "yes, send it", "submit it") submits the callback request any more; "don't send" still cancels | Send authorises exactly the reviewed text on screen; approval must be the explicit tap on it (CLAUDE.md §10), not something the recogniser heard | Speech can reach the review step but not finish it | Command tests; "speech never submits the callback request" UI test |
+| One voice coordinator owns voice status, turn identity, playback and the mic for a call: one voice per call (Gemini when installed, else browser, else words only), a one-way browser fallback only if Gemini fails before any audio, and a failed line after audio started stops as "interrupted" (Repeat) instead of another voice finishing it. The 6 s per-turn race and the mid-line browser hand-off are gone; every spoken line (notices included) is a visible companion turn first | Screenshots/audits: voices alternated between turns and mid-sentence; "speaking" was set by three places; notices were voice-only | A hung browser voice is only detected after 8 s (`START_TIMEOUT_MS`); the input choice (browser vs Gemini transcription) still lives in `GoogleVoiceProvider`, already one-way | `coordinator.test.ts`; voice-experience tests |
+| Fixed a pre-existing defect: "don't", "do not" and "cancel" now count as no | Test caught "don't send it" **sending**, and "please don't" **granting consent** ("please" read as yes) | — | "please don't" tests |
+| Long lines are voiced sentence by sentence (next renders while the current plays; "speaking" stays on throughout; a failed later sentence goes to the browser voice) | Screenshot: mixed voices. First-time lines took 2.6–7.4 s to render whole, past the 6 s wait, so the browser voice spoke them | More, shorter TTS requests (cached per sentence). Each sentence of approved copy is approved by the speech guard | Player tests |
+| Browser recognition listens across pauses and ends the turn after 1.5 s of silence | Screenshot: "age of the medicine I have" then a separate "didn't catch that" — single-phrase mode cut the sentence at a pause | Replies start ~1.5 s after she stops. Late results after a turn ended are ignored (they were showing the companion's own voice as live text) | Recogniser tests |
+| Hints belong to the screen they were said on; mic problems stay until fixed | Screenshot: a safety-screen hint stayed under the pharmacist question | — | Full suite |
+
+## Realtime voice migration: OpenAI + Silero + ElevenLabs, Gemini removed (12 October 2026)
+
+Asked for: replace every Gemini integration with full-duplex realtime voice (OpenAI Realtime transcription, local Silero VAD, ElevenLabs streaming speech), Claude Sonnet 5.5 as the only reasoning model, no UI redesign, no callback-service work. Evidence: unit and component tests with fakes (no live provider calls were made from this checkout; no OpenAI or ElevenLabs key is configured here).
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| Every Gemini/Google voice file, route, env variable, SDK and label removed; `src/test/google-voice-removed.test.ts` fails if any returns outside this log | The brief: "This replaces every Gemini integration… no dead aliases" | The untracked Google voice files (never committed) are gone from the tree; a copy was kept outside the repository for this session only. The 12 October "Google voice" decisions above are superseded | `google-voice-removed.test.ts` |
+| OpenAI over a browser WebSocket with an ephemeral client secret (`POST /api/voice/openai-session`), not WebRTC | Pre-roll audio from before an interruption must be injected into the stream; WebRTC exposes no such seam. `turn_detection: null`: the local detector is the endpointer, so playback and room noise never commit a turn | The secret lives ~10 min; the route is same-origin and rate-limited and attaches no medicine data | `openai-session/route.test.ts`, `openai-transcription.test.ts` |
+| Interim deltas are display-only; exactly one final per committed turn; empty, duplicate, late and cancelled finals are dropped; provider text is treated as untrusted (markup stripped, bounded) | Brief tests 1–10; the classifier and Claude must only ever see committed words | A final that never arrives closes the turn after 6 s and those words are lost | adapter tests "interim deltas…", "distinct nearby utterances…" |
+| Hybrid barge-in: an adaptive RMS candidate (200 ms over a floor calibrated at call start) plus Silero confirmation (300 ms) before `speech-start`; loudness alone never interrupts; without the model the call is push-to-talk | Brief invariant "never RMS-only interruption"; a cough or a door must not stop the companion | The floor adapts only during quiet non-speech (a defect found by the cough test: adapting during loud frames crept the threshold up). Defaults are untuned against real rooms | `barge-in.test.ts` |
+| Full duplex in the coordinator: frames go to OpenAI only while a user turn is open; during playback a turn opens only on confirmed speech past a 200 ms post-playback echo guard, with 300 ms pre-roll; at most one user and one assistant turn are authoritative | Brief: playback must never be committed as user speech | Echo cancellation is the browser's; the detector raises its threshold ×2 during playback | `coordinator.test.ts` "barge-in" |
+| ElevenLabs speaks only the exact visible `AssistantTurn` text, through the existing speech guard; a single-use token per line from `POST /api/voice/elevenlabs-token`; one voice per call; "Speaking…" only on actual playback start | Brief: permanent key never in the browser; every spoken line has identical visible text | A line the guard refuses is said by the browser for that line only (call voice unchanged) | `elevenlabs-speech.test.ts`, `playback-queue.test.ts`, voice-experience tests |
+| Sticky one-way fallback with a visible notice (`voiceChanged`): elevenlabs → browser → text-only; after audio started a failure is "interrupted" (Repeat) | Brief fallback policy; no voice alternates within a call | — | coordinator "output: one voice per call" |
+| Browser engines kept only as the labelled degraded fallback; `commitListening()` added so push-to-talk can "send" on the browser engine without dropping words | Brief: "browser speech only as explicitly labelled degraded fallback" | Browser recognition is not on-device and is documented as such | coordinator "push-to-talk 'send'…" |
+| Claude default model `claude-sonnet-5-5` for conversation and vision | Brief | The SDK's typed model list lags; the string is accepted | `claude.test.ts` |
+| Silero VAD v5 through onnxruntime-web (wasm, single thread), assets copied to `/public/vad/` by `scripts/copy-vad-assets.mjs` on `predev`/`prebuild`; lazy-loaded; fails safely to push-to-talk | On-device confirmation with no audio leaving the device for it; no SharedArrayBuffer requirement | Adds `onnxruntime-web` (runtime) and `@ricky0123/vad-web` (dev, for the model file). `/public/vad/` is git-ignored | `silero-vad.test.ts` |
+| Not done: a live round trip with real OpenAI and ElevenLabs keys; tuning of the detector; native zh-Hans review of the new status copy | No keys in this checkout; needs the owner | The manual Chrome checklist in the migration report is still open | — |
+
+## Active-call controls: three persistent controls, readable transcript (12 October 2026)
+
+Asked for: "The default active-call screen must expose only three persistent controls: Get help, Mute / Unmute, End call", a readable chronological transcript, and every other action contextual. Provider architecture, reducer gates, callback logic and routes unchanged. Evidence: automated tests in jsdom (`src/test/call-controls.test.tsx`, coordinator mute tests); no device checks yet.
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| Footer is Get help · Mute/Unmute · End call (icon above word, 56 px tall, 12 px gaps); Repeat leaves the footer | Owner instruction | **Supersedes design-standard §10 item 6** (amended) and keeps PRD EN-04 ("reachable") through the Get help sheet | "a normal call shows exactly three controls" |
+| Mute is enforced in the voice coordinator (`setMuted`): the open turn is dropped, no turn opens or commits, barge-in is off; unmute resumes the same call; every call starts unmuted | Audio reaches transcription only through an open turn, so one gate covers OpenAI and the browser engine | The microphone track stays open while muted (indicator on); nothing is sent | coordinator "mute…" tests; "muted, no audio reaches transcription…" |
+| Get help opens a sheet (native dialog) and dispatches nothing; "Get help from a person" is the existing guarded help step | Owner: "Opening help must not send anything" | One more tap to reach pharmacist/clinic options than before; urgent wording still escalates automatically | "opening and closing it sends nothing…" |
+| Repeat, Type instead, Interrupt by voice and the About link move into the sheet; the in-call disclosure text stays on screen without the link | Three persistent controls | About is one tap further during a call | "holds the moved actions…" |
+| **Reversed:** "Show choices" is gone; each step's own controls (camera, confirmation, label, safety, callback review) show directly in that step | Owner: contextual controls appear in their states; callback Send must be a visible deliberate action on review | Supersedes the "conversation first" row that hid step buttons by default | conversation-first, dose-check and call-controls tests |
+| In the open conversation at most one suggestion button: Show medicine when offered, otherwise "Let my family know" (secondary, consent step follows) | Owner: no competing suggested actions | "Ask about my schedule" and "carry on" are said or typed, not tapped | companion-experience call-flow tests |
+| The text box shows only when muted, without speech input, after a mic problem, or via Type instead (closable) | Owner: no persistent text form during a healthy call | Typing is one tap further in a healthy voice call | "the text box is absent in a healthy call…" |
+| Recovery buttons appear by themselves: Try again (paused mic), Tap to talk (no local VAD, not muted), Repeat (voice stopped mid-line, until the companion speaks again) | Owner: recovery controls only when applicable | — | "Repeat appears only after…", "Try again…", "Tap to talk…" |
+| **Reversed:** the transcript is no longer collapsed behind "Earlier in this call"; it is the screen's one scroller, scrolls to new turns only when the reader is at the bottom, and offers "Latest message" otherwise; live words are labelled "Hearing you…" and replaced by the final words | Owner: "no collapsed Earlier in this call section"; scroll must not jump | Supersedes design-standard §10's "optional history" (amended) | "the whole conversation stays readable…", "a person re-reading earlier turns…" |
+| End call acts once (a second tap is ignored) and still releases mic, VAD, sockets, playback and pending model requests | Owner | No confirmation added | "End call stops…", "End call aborts pending model work", "acts once" |
+| Not done: call duration in the header; language switch in the sheet (chosen before the call, or by saying "中文"/"English"); an "Interrupted" label on cut-off companion lines (their words stay) | Optional in the brief | — | — |
+
+## Free-tier ElevenLabs robustness (12 October 2026)
+
+Asked for: make the voice reliable on a free ElevenLabs account (limited API voices, limited credits) without changing the architecture or any safety gate. Evidence: ElevenLabs' documented error codes (`voice_not_found`, `invalid_voice_id`, `subscription_required`, `feature_not_available`, `insufficient_credits`, `model_not_found`, `model_access_denied`); automated tests with fakes. No live ElevenLabs call was made from this checkout.
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| The token route checks the voice (`GET /v1/voices/{id}`) and model (`GET /v1/models`) before minting, cached per instance (10 min ok, 1 min failed), with distinct error codes | A voice a free account can't use through the API must fail before playback | Metadata calls spend no characters. A key without read permission can't be checked: treated as unverified, not unavailable | token route tests |
+| Typed reason codes (`unconfigured`, `token-unavailable`, `voice-unavailable`, `model-unavailable`, `quota-exceeded`, `websocket-failed`, `playback-decode-failed`, `timeout`, …); provider text is mapped by documented codes and never passed on | Owner: internal reason codes, no raw provider payloads | Keyword mapping may misfile an undocumented error as `websocket-failed` (treated as passing) | adapter tests |
+| Browser pre-flight per line before a socket opens (this call, approved visible text, token, voice id, model) | Owner | — | adapter tests |
+| After a terminal reason the adapter fetches no token and opens no socket again until the next call | Owner: no repeated retries | A new call retries once (cheap if the server check is cached as failed) | "later lines fail fast…" |
+| **Changed:** once the streaming voice has been heard in a call, voices never switch. A one-off line failure is "interrupted" (Repeat); a terminal one makes the rest of the call words only. Before it is heard, the browser voice takes the whole call | Owner: "Do not auto-switch voices mid-call after audible playback has begun" | Supersedes "a failure before audio switches" for lines after the first heard one. Words-only calls rely on the transcript and live region | coordinator and call-screen tests |
+| **Changed:** a line the guard refuses is shown and not voiced (was: browser voice for that line) | One voice per call; never split voices within a call | That rare line is silent | coordinator test |
+| One sticky notice per call (`voiceChanged` or `voiceLost`), announced once via the status line; none for an unconfigured voice | Owner | Unconfigured setups get no notice by design | call-screen tests |
+| Mute: name = visible word (Mute/Unmute), `aria-pressed` removed; "Unmuted…" announced once in the polite status line. Same fix for the interrupt setting and Tap to talk/send | Owner; ARIA practice (no `aria-pressed` with a changing label) | — | call-screen tests |
+| Four conversational lines shortened; safety, dose, escalation and outcome lines untouched and pinned by test; other lines kept ≤ 200 characters | Credits are per character | zh-Hans edits need native review | `spoken-copy.test.ts` |
+| Development-only `[voice]` diagnostics: stages, ms, booleans, reason codes, engine ids; sanitised at run time | Owner: verify the real demo without logging sensitive content | Silent in production and tests | `voice-diagnostics.test.ts` |
+| Not done: caching voiced audio for Repeat | Would keep companion audio in memory; small saving | Repeat spends credits again | — |
+
+## The explanation as a conversation (12 October 2026)
+
+Owner feedback from the live demo: asking "what should the next dosage be?" during the explanation got "I didn't quite catch that… say next, go back or repeat that", and answering the closing question ("repeat that, or help you contact a pharmacist?") also failed: "the AI should not expect me to say specific words".
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| A dose question during the explanation gets a fixed boundary line that quotes the confirmed record's instruction and date, and offers the dose-change check or a pharmacist; checked before "next", so it never skips ahead | Found: "next" anywhere advanced the explanation; dose questions weren't answered. CLAUDE.md §7: conflict/dose boundaries are fixed copy, never model text | Record facts only after a confirmed match (unchanged gate) | `explain-conversation.test.tsx` |
+| "Can a pharmacist call me?" is understood at every explanation step and opens the existing pharmacist consent step (`HELP_START` now allowed from the explanation, pharmacist only) | The closing line offers exactly that; nothing understood it | Consent is still a separate clear yes; family/clinic and the dose check are not opened this way | reducer and UI tests |
+| **Fixed:** a bare "yes" to "repeat that, or help you contact a pharmacist?" no longer counts as "I understand" (which ended the explanation); it is asked back. "No thanks", "that's all", "I'm fine" finish | The yes answered a question that wasn't asked | One more turn for a bare yes | interpreter tests |
+| The AI meaning-match is offered "ask a pharmacist" at every explanation step, with plainer action descriptions | With an Anthropic key, unmatched words are matched by meaning, but the pharmacist wasn't a choice | Gates are still never offered to it | interpreter tests |
+| Explanation prompts say what is possible in plain words instead of quoting trigger words; a clearly heard question is no longer told it wasn't heard | Owner feedback | Other steps' prompts (camera, confirm, safety) still quote words; confirm keeps quoting yes/no/not sure on purpose | guidance tests |
+
+## Meaning-match: action, "say that again", or a natural reply (12 October 2026)
+
+Owner direction: "ask the user to repeat if AI couldn't understand what the user is saying or it is gibberish. If the user is saying something, find the similar intent to the next approved step. If not, reply naturally. Be mindful, the approved steps can be jumbled around."
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| The meaning-match returns one of three outcomes: an on-screen action, `unclear` (the companion says "Sorry, I didn't quite catch that. Could you say it again?"), or `reply` (a short natural line steering back to what's possible) | Owner direction | Needs `ANTHROPIC_API_KEY`; without it, the fixed step guidance is used as before | intent unit, route and call tests |
+| The actions are explicitly unordered: Claude is told they are not a sequence and never to assume "next"; the browser maps the answer by id, never by position | "The approved steps can be jumbled around" | — | prompt test; "the earlier part" goes back |
+| A reply is used only if it passes `isSafeCompanionReply` (no numbers, doses, timing, advice or match claims; the person's language; ends with a question), checked on the server and again in the browser; otherwise the fixed guidance line | CLAUDE.md §7: model text stays non-clinical; AI output can't confirm, approve or decide | A good reply can occasionally be refused and replaced by the fixed line | route test; "a reply that fails the guard…" |
+| Claude gets where the person is in plain words (e.g. "hearing their pharmacy record explained, part 2 of 3"), never record content | Better replies without sending health data | — | route and call tests |
+| Unchanged: gates are never in the action list; safety wording never reaches the model; dose questions get the fixed boundary line first | Safety invariants | — | existing tests |
+
+## Words with the voice; photo instead of camera (12 October 2026)
+
+Owner bug reports from live testing: "Companion says appears before voice output. It should appear as the AI guide speaks." and "I wanted to choose the photo, but the AI misinterprets that I want to go for the camera."
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| **Reversed (owner decision):** a new transcript line (and its screen-reader announcement) waits until its voice actually starts, shown meanwhile as "thinking"; it appears anyway after 3 s (`VOICE_HOLD_MAX_MS`), and at once when the call has no voice. Step controls do not wait | Owner report. **Amends PRD EN-05** ("must not be artificially delayed") and reverses the A4 row "Text and panels no longer wait for the voice to start" | Up to 3 s before words show when the voice is slow (free tier). A line with exactly the same words as the previous step line can still appear before its voice | voice-experience "as its voice starts", "a slow voice never hides the words" |
+| On "may I use the camera?", wanting a photo ("choose a photo", "upload", "from my gallery", 照片/相册) declines the camera, which opens the photo, medicine-list and typing choices; "take a photo" is still the camera | The only non-camera action offered was "not use the camera", so the request looked like neither | — | `photo-choice.test.tsx` |
+| On the first "camera or photo?" choice, asking for a photo says where to tap (`photoNeedsTap`), since the phone's photo picker only opens from a tap | Browser security: file pickers need a user gesture | One extra tap | `photo-choice.test.tsx` |
+| The meaning-match is told that "not the camera" includes choosing a photo | So natural wording maps there | — | `photo-choice.test.tsx` |
+
+## Medicine confirmation in words, no panel (12 October 2026)
+
+Owner feedback: "I don't really need these 3 buttons and the screen, but AI can just say what it has found from the record."
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| **Changed (owner decision):** no confirmation panel (record card and Yes / No, try again / I'm not sure buttons). The companion says, and the transcript shows, one fixed line with "a possible match", name, strength, form and fictional source, the question, and that "not sure" is an answer | Owner feedback. **Amends design-standard §13** | Fewer tap targets: answering is said or typed (the text box opens when there is no speech input, or from Get help → Type instead) | `confirm-conversational.test.tsx`, updated journeys |
+| The gate is unchanged: only a clear yes confirms (CONFIRM_MATCH, reducer-checked); no, not sure, a hedged yes or a question never unlock the record; the AI meaning-match is never offered "yes" | CLAUDE.md §5.3, PRD ID-01–03 | — | same |
+| Fixed: the transcript hold now reads the last step line from the voice coordinator's snapshot, so a screen that mounts mid-call shows the line as soon as the voice starts (it waited the full 3 s) | Found while testing this change | — | "no panel or buttons…" |
+| `confirm-screen.tsx` is no longer rendered; left in place (not deleted without approval) | CLAUDE.md §19 | Dead file until removed | — |
+
+## Start screen and scroll bars (12 October 2026)
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| Removed the start-screen notice "Your last call ended when the page reloaded… it may or may not have gone through" (`callInterrupted`) | Owner request | After a reload mid-request, the person is no longer told the request's outcome is unknown. Nothing is restored either way; the `previousCallInterrupted` flag is still computed but no longer shown | dose-check journey test |
+| Scroll areas (transcript, step panel) hide their scrollbars (`.no-scrollbar`) | Owner request | Less visible that there is more to scroll; touch, wheel and keyboard still scroll, and "Latest message" appears when scrolled up | call-controls "scroll areas" |
+
+## Help requests in the chat, a reviewed callback, and a complete chat (12 October 2026)
+
+Owner reports: the help-request card "is not necessary, just show it in the chat… the user can say what they want to do"; "not sure why this Carry on button is present"; "before sending the message to the pharmacist… the companion didn't let me review the message"; "some of the voice input by me or conversations I had… is not captured in the chat list".
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| The help-request card (Yes, send the request / Not now / Send again / See the number / Carry on) is gone: each stage's line is in the chat and answered in words | Owner request | No tap path for consent and "carry on"; typing works the same way | `chat-and-callback.test.tsx` |
+| **Fixed:** a pharmacist callback asked for in the conversation now has "Check before sharing": recipient, "please call me back", the reason (exactly the code sent), and the record's number (masked, "Show number"). "Yes" opens it; only a tap on "Send callback request" sends (`HELP_SEND`, audited as `callback-approved`); "don't send" (said or tapped) cancels with nothing sent; no spoken phrase sends | Owner report; CLAUDE.md §10 (review, explicit action, preview = payload) and the owner's rule "callback submission must remain a deliberate tap only". This also resolves the conflict flagged earlier (a spoken yes used to send this request) | Family / trusted-helper notifications still go on a clear spoken or typed yes after their consent question | reducer, interpreter and UI tests |
+| **Fixed:** every turn of hers is in the chat — answers and commands that act on a step ("yes", "next", "no thanks") and words a step doesn't take — not only free-form messages | Owner report: such turns never reached the transcript | Low-confidence guesses are still not shown (a misheard "chest pain" shown but not acted on would look ignored) | `chat-and-callback.test.tsx`; low-confidence test |
+| **Fixed:** the companion's line on steps with their own panel (camera, photo reading, help screen, wrap-up) goes into the chat once the conversation moves on — she answers, a remark is said, or the step changes — in its place, never twice | Owner report; avoids showing the same words twice while the panel is on screen | While a step is current its words are in the panel, not yet in the chat | same |
+
+## Review everything sent to another party; send by command, no button (12 October 2026)
+
+Owner direction: "User should always review before sending to any other party. Do not need any button to send. Can get the command from user voice or input."
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| Every outbound message is reviewed first: pharmacist callback, family and trusted-helper messages (new: "Check before sharing" with recipient, message and reason), and the dose-check summary | Owner direction; CLAUDE.md §10 | One more step for family/helper messages | reducer, interpreter, UI tests |
+| **Reversed (owner decision):** no Send or Send-again buttons. After the review, an explicit, short "send" (said or typed: "send", "send it", "yes, send it", 发送) sends exactly the revision on screen; "try again"/"send again" re-sends after a failure | Owner direction. **Supersedes** the earlier rows "no spoken phrase submits the callback request" and "callback submission must remain a deliberate tap only", and amends CLAUDE.md §10 | **Safety trade-off:** a misheard "send" could share the summary. Mitigations: review first; a plain yes, a question, a hedge, a negative or a long sentence never sends; low-confidence transcripts are dropped before interpretation; the AI meaning-match is never offered "send"; the companion's playback is never transcribed and the echo guard still applies; the reducer only accepts the exact current revision | `conversation-first.test.ts`, `chat-and-callback.test.tsx`, dose-check journey |
+| "Don't send" (said, typed or the remaining text link) cancels with nothing sent; a hedge on the review also cancels | Safe default | — | same |
+

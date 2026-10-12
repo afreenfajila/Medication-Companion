@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# local speech-detection assets copied from node_modules (scripts/copy-vad-assets.mjs)
+/public/vad/
+
 # production
 /build
 

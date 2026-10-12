@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, CircleHelp, Equal, FileText, Info, Package, Phone, Volume2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleHelp, Equal, FileText, Info, Mic, Package, Phone, Volume2 } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
 import { formatVerifiedDate } from "@/lib/content/explanation";
@@ -8,6 +8,7 @@ import { careContacts } from "@/lib/content/seed-record";
 import type { CopyKey } from "@/lib/content/translations";
 import { isPlausibleNumber, maskNumber, type InstructionField, type LabelSource } from "@/lib/dose-check/dose-check";
 import type { CallbackState, DoseAction, DoseCheck } from "@/lib/session/state-machine";
+import { stillOpenKey } from "@/lib/voice/speakable";
 import type { UiLanguage } from "@/types/content";
 import type { T } from "./screen-chrome";
 
@@ -120,7 +121,7 @@ export function DoseCheckPanel({
   // Compared.
   const c = dose.comparison;
   const differing = c?.outcome === "conflict" ? c.differing : [];
-  const missing = c?.outcome === "insufficient" ? c.missing : [];
+  const missing = c?.outcome === "insufficient" || c?.outcome === "conflict" ? (c.missing ?? []) : [];
   return (
     <div className="flex flex-col gap-3">
       {dose.notice === "nothing-shared" && (
@@ -264,6 +265,8 @@ function CallbackPanel({
   onEnd: () => void;
 }) {
   const [showSummary, setShowSummary] = useState(false);
+  // design-standard §16: masked by default, with a labelled way to see exactly what will be sent.
+  const [showNumber, setShowNumber] = useState(false);
   const d = cb.draft;
   if (cb.status === "editing") return <EditDraft t={t} cb={cb} onAction={onAction} />;
 
@@ -288,8 +291,11 @@ function CallbackPanel({
     [t("doseLabelRow"), d.confirmedLabel ? d.confirmedLabel.instructionText : t("doseNotConfirmed")],
     [
       t("doseNumberRow"),
-      <span key="number" className="inline-flex items-center gap-2">
-        <span>{maskNumber(d.callbackContact)}</span>
+      <span key="number" className="inline-flex flex-wrap items-center gap-2">
+        <span>{showNumber ? d.callbackContact : maskNumber(d.callbackContact)}</span>
+        <TextAction className="min-h-11 px-1" aria-pressed={showNumber} onClick={() => setShowNumber((v) => !v)}>
+          {showNumber ? t("doseHideNumber") : t("doseShowNumber")}
+        </TextAction>
         {(cb.status === "reviewing" || cb.status === "failed") && (
           <TextAction className="min-h-11 px-1" onClick={() => onAction({ kind: "edit" })}>
             {t("doseChange")}
@@ -321,7 +327,7 @@ function CallbackPanel({
     const sent = cb.status === "submitted";
     const unknown = cb.status === "unknown";
     const [heading, body, requestStatus] = sent
-      ? (["doseSubmitted", "doseStillUnresolved", "doseRequestSubmitted"] as const)
+      ? (["doseSubmitted", stillOpenKey(d.reason), "doseRequestSubmitted"] as const)
       : unknown
         ? (["doseUnknown", "doseUnknownBody", "doseRequestUnknown"] as const)
         : (["doseFailed", "doseFailedBody", "doseRequestNotSubmitted"] as const);
@@ -357,7 +363,10 @@ function CallbackPanel({
         )}
         {!sent && (
           <>
-            <PrimaryButton onClick={() => onAction({ kind: "send", revision: cb.revision })}>{t("sendAgain")}</PrimaryButton>
+            <p className="flex items-start gap-2 text-lg font-bold leading-snug">
+              <Mic className="mt-1 h-5 w-5 shrink-0" aria-hidden="true" />
+              <span>{t("reviewSayToRetry")}</span>
+            </p>
             {/* After an unknown outcome the summary isn't reopened for editing: it may already have been sent. */}
             {!unknown && (
               <SecondaryButton onClick={() => onAction({ kind: "review-summary" })}>{t("doseReviewSummary")}</SecondaryButton>
@@ -389,14 +398,12 @@ function CallbackPanel({
       </h2>
       {summary}
       <p className="text-base font-medium leading-snug text-navy-700">{t("doseShareNotice")}</p>
-      {/* Disabled while sending: a second tap can't create a second request. */}
-      <PrimaryButton
-        disabled={submitting}
-        aria-busy={submitting}
-        onClick={() => onAction({ kind: "send", revision: cb.revision })}
-      >
-        {submitting ? t("doseSubmitting") : t("doseSend")}
-      </PrimaryButton>
+      {/* No Send button (owner decision, 12 October 2026): an explicit "send", said or typed,
+          sends exactly this revision; while it is going, a repeat does nothing. */}
+      <p role={submitting ? "status" : undefined} className="flex items-start gap-2 text-lg font-bold leading-snug">
+        <Mic className="mt-1 h-5 w-5 shrink-0" aria-hidden="true" />
+        <span>{submitting ? t("doseSubmitting") : t("reviewSayToSend")}</span>
+      </p>
       {!submitting && (
         <>
           <SecondaryButton onClick={() => onAction({ kind: "edit" })}>{t("doseChangeSomething")}</SecondaryButton>

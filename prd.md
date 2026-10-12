@@ -344,9 +344,11 @@ Typed input remains available when voice is unavailable.
 EN-04:
 Repeat, help, and end-call controls remain reachable during the call.
 
-EN-05:
+EN-05 (amended 12 October 2026 by the owner):
 Each conversational turn has a visible textual equivalent.
-Text must not be artificially delayed solely to wait for audio.
+The companion's words appear in the transcript as its voice starts,
+and never more than 3 seconds after the line was ready; when the call
+has no voice, they appear at once. Step controls never wait for audio.
 
 
 ### ID — Medicine identification
@@ -476,7 +478,8 @@ No callback time or response commitment is promised.
 - Bounded extraction of visible text.
 - Understanding ordinary conversational input.
 - Approved non-clinical phrasing.
-- Speech output of approved content.
+- Transcription of the person's speech into words (words only).
+- Speech output of approved, visible content.
 
 ### AI must not decide
 

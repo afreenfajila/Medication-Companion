@@ -19,6 +19,10 @@ import {
   toExplain,
 } from "./helpers";
 
+
+/** The confirmation is said and shown in the conversation (no panel): a possible match, from the fictional record. */
+const POSSIBLE_MATCH = /^I found a possible match on your BrightCare Pharmacy record \(fictional\): Metformin, 500 mg, tablet\./;
+
 // Submission hardening: one named test per safety-critical invariant that was
 // not already pinned elsewhere. Landing CTA, confirmation gate and label
 // blocking are covered in companion-experience / state-machine / image-flow tests.
@@ -134,8 +138,8 @@ describe("INVARIANT: the URL cannot open a gated screen (rendered app)", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     window.history.replaceState(null, "", "/companion?state=explain");
-    fireEvent.change(screen.getByLabelText(/type your question/i), { target: { value: "What is this for?" } });
-    fireEvent.submit(screen.getByLabelText(/type your question/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "What is this for?" } });
+    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
     expect(window.location.search).toBe("?state=listening");
     expect(document.body.textContent).not.toMatch(INSTRUCTION);
   });
@@ -209,8 +213,8 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
 
   const flush = () => act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
   const send = async (text: string) => {
-    fireEvent.change(screen.getByLabelText(/type your question/i), { target: { value: text } });
-    fireEvent.submit(screen.getByLabelText(/type your question/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
+    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
     await flush();
   };
   const noRawError = () =>
@@ -229,10 +233,9 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
     fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     await flush();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(INSTRUCTION);
-    fireEvent.click(screen.getByRole("button", { name: /yes, this is the medicine/i }));
-    await flush();
+    await send("yes, this is my medicine"); // confirmed in words: there is no confirmation panel
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "next" } });
     fireEvent.submit(screen.getByRole("textbox").closest("form")!);
     await flush();
@@ -252,7 +255,7 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500 mg" } });
     fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
     await flush();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg.")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     noRawError();
   });
 });

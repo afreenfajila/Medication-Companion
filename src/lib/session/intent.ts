@@ -72,10 +72,20 @@ export function isRecordConflict(text: string): boolean {
 // A routing pattern only, read AFTER the safety classifier — it never decides
 // anything clinical; it opens the label-vs-record comparison.
 const DOSE_CHANGE =
-  /\b(doctor|clinic|gp)\b.{0,40}\b(changed?|increased|reduced|lowered|raised|adjusted)\b|\b(box|label|packet|bottle|pack)\b.{0,40}\b(old|still says|different|doesn'?t match|does not match)\b|\b(old|new) (amount|dose|dosage|instructions?)\b|医生.{0,8}(换|改|调整|加|减)|(盒子|标签|药盒|包装).{0,12}(旧|不一样|不同)|(旧|新)的?(药量|剂量|用量)/i;
+  /\b(doctor|clinic|gp|pharmacist|specialist|hospital)\b.{0,40}\b(changed?|increased|reduced|lowered|raised|adjusted)\b|\btold me to take (less|more|fewer)\b|\bmy (dose|dosage) (is|has|was) (different|changed)\b|\b(box|label|packet|bottle|pack)\b.{0,40}\b(old|still says|different|doesn'?t match|does not match)\b|\b(box|label)\b.{0,40}\bbut\b.{0,30}\b(told|prescribed)\b|\b(old|new) (amount|dose|dosage|instructions?)\b|医生.{0,8}(换|改|调整|加|减)|(盒子|标签|药盒|包装).{0,12}(旧|不一样|不同)|(旧|新)的?(药量|剂量|用量)/i;
 
 export function isDoseChange(text: string): boolean {
   return DOSE_CHANGE.test(text.replace(/[’‘]/g, "'"));
+}
+
+/**
+ * "My doctor reduced my dose" reports a change; "…should I skip tonight?" also asks
+ * something. Only a report whose REST is free of medical questions opens the comparison
+ * ahead of the safety classifier ("医生给我减量了" contains 减量, but only as the report).
+ */
+function isReportedDoseChangeOnly(text: string): boolean {
+  const t = text.replace(/[’‘]/g, "'");
+  return DOSE_CHANGE.test(t) && classifySafety(t.replace(DOSE_CHANGE, " ")).level === "none";
 }
 
 // Answers to "Did you mean Metformin?" — only read on the turn right after it.
@@ -152,6 +162,9 @@ export function routeMessage(
       contextualActions: [],
       safetyReason: safety.reason,
     };
+  }
+  if (safety.level === "unsupported" && isReportedDoseChangeOnly(text)) {
+    return { intent: "dose-change", assistantKey: "doseChangeIntro", contextualActions: ["show-medicine"] };
   }
   if (safety.level === "unsupported") {
     return {

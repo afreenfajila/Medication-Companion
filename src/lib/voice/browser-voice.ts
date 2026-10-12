@@ -91,6 +91,12 @@ const ERROR_MAP: Record<string, VoiceErrorCode> = {
 type Listener<T> = (value: T) => void;
 
 /**
+ * How long a pause, after words were heard, ends the person's turn.
+ * ponytail: fixed value; older speakers may pause longer — tune in testing.
+ */
+export const TURN_END_MS = 1500;
+
+/**
  * Browser speech recognition + speech synthesis behind the VoiceProvider
  * abstraction. Nothing is opened at construction/connect time: the microphone is
  * only touched when `startListening` runs (a user tap), and speech only plays
@@ -99,16 +105,17 @@ type Listener<T> = (value: T) => void;
  */
 export class BrowserVoiceProvider implements SpeechVoiceProvider {
   private recognition: RecognitionLike | null = null;
+  private cancelTurn: () => void = () => undefined;
   private utterance: UtteranceLike | null = null;
-  private transcript = new Set<(text: string, confidence?: number) => void>();
-  private interim = new Set<Listener<string>>();
+  protected transcript = new Set<(text: string, confidence?: number) => void>();
+  protected interim = new Set<Listener<string>>();
   private assistant = new Set<Listener<string>>();
-  private errors = new Set<Listener<Error>>();
-  private listening = new Set<Listener<boolean>>();
+  protected errors = new Set<Listener<Error>>();
+  protected listening = new Set<Listener<boolean>>();
   private speaking = new Set<Listener<boolean>>();
   private voicesCache: VoiceLike[] = [];
 
-  constructor(private readonly env: VoiceEnv) {
+  constructor(protected readonly env: VoiceEnv) {
     // Chrome/Edge load the voice list ASYNCHRONOUSLY, and in some versions it never
     // populates at all until something subscribes to `onvoiceschanged` — without
     // this, getVoices() can return [] forever and every utterance falls back to
@@ -170,30 +177,61 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
     const rec = new Ctor();
     rec.lang = SPEECH_LANG[language];
     rec.interimResults = true;
-    rec.continuous = false;
+    // Continuous, so a pause mid-sentence doesn't end the turn: single-phrase mode cut
+    // "I want to show you the image of the medicine I have" in two, losing words and
+    // sending the second half as a separate, low-confidence turn.
+    rec.continuous = true;
     rec.maxAlternatives = 1;
 
+    // Final segments by result index (continuous mode keeps adding results).
+    const finals: string[] = [];
+    let confidence: number | undefined; // the least confident segment speaks for the whole turn
+    let emitted = false;
+    let turnTimer: ReturnType<typeof setTimeout> | undefined;
+    const emit = () => {
+      clearTimeout(turnTimer);
+      const text = finals.join(" ").replace(/\s+/g, " ").trim();
+      if (emitted || cancelled.value || !text) return;
+      emitted = true;
+      this.transcript.forEach((l) => l(text, confidence));
+    };
+    const cancelled = { value: false };
+    this.cancelTurn = () => {
+      cancelled.value = true;
+      clearTimeout(turnTimer);
+    };
+
     rec.onresult = (e) => {
+      // A late result after the turn was sent or dropped (e.g. the companion's own voice) is ignored.
+      if (emitted || cancelled.value) return;
       let interimText = "";
-      let finalText = "";
-      // The least confident final segment speaks for the whole utterance.
-      let confidence: number | undefined;
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         if (r.isFinal) {
-          finalText += r[0].transcript;
+          finals[i] = r[0].transcript.trim();
           const c = r[0].confidence;
-          if (typeof c === "number") confidence = confidence === undefined ? c : Math.min(confidence, c);
+          if (typeof c === "number" && c > 0) confidence = confidence === undefined ? c : Math.min(confidence, c);
         } else interimText += r[0].transcript;
       }
-      if (interimText.trim()) this.interim.forEach((l) => l(interimText.trim()));
-      if (finalText.trim()) this.transcript.forEach((l) => l(finalText.trim(), confidence));
+      const shown = [...finals.filter(Boolean), interimText.trim()].filter(Boolean).join(" ");
+      if (shown) this.interim.forEach((l) => l(shown));
+      // The turn ends after a pause with nothing new — still speaking keeps it open.
+      clearTimeout(turnTimer);
+      if (finals.some(Boolean)) {
+        turnTimer = setTimeout(() => {
+          emit();
+          rec.stop();
+        }, TURN_END_MS);
+      }
     };
     rec.onerror = (e) => {
       if (e.error === "aborted") return; // we stopped it ourselves
+      if (e.error === "no-speech" && finals.some(Boolean)) return; // words were heard; onend sends them
       this.fail(ERROR_MAP[e.error] ?? "unknown");
     };
     rec.onend = () => {
+      emit(); // the engine ended by itself (or after our pause timer): send what was heard
+      this.interim.forEach((l) => l("")); // the live words are done either way
       if (this.recognition === rec) this.recognition = null;
       this.listening.forEach((l) => l(false));
     };
@@ -208,8 +246,15 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
     }
   }
 
+  /** Stops listening and drops anything heard but not yet sent (the companion started speaking, or the call ended). */
   stopListening(): void {
+    this.cancelTurn();
     this.recognition?.stop();
+  }
+
+  /** Push-to-talk "send": stops listening and delivers whatever was heard so far (nothing is dropped). */
+  commitListening(): void {
+    this.recognition?.stop(); // onend emits the finals collected so far
   }
 
   speak(text: string, language: UiLanguage, slow = false): void {
@@ -248,7 +293,7 @@ export class BrowserVoiceProvider implements SpeechVoiceProvider {
     if (had) this.speaking.forEach((l) => l(false));
   }
 
-  private fail(code: VoiceErrorCode): void {
+  protected fail(code: VoiceErrorCode): void {
     this.errors.forEach((l) => l(new VoiceError(code)));
   }
 

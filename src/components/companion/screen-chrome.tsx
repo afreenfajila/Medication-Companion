@@ -11,13 +11,16 @@ export function ScreenHeader({
   t,
   language,
   control,
+  compact = false,
 }: {
   t: T;
   language: UiLanguage;
   control?: React.ReactNode;
+  /** In a call: tighter, so the conversation keeps the screen. */
+  compact?: boolean;
 }) {
   return (
-    <header className="flex flex-col items-center gap-2 px-6 pb-2 pt-6 text-center">
+    <header className={compact ? "flex flex-col items-center gap-1 px-4 pb-1 pt-3 text-center" : "flex flex-col items-center gap-2 px-6 pb-2 pt-6 text-center"}>
       <p className="text-[17px] font-bold tracking-tight">{t("appName")}</p>
       {/* "Plan checked by BrightCare Pharmacy · 21 September 2026" — the date comes from the record. */}
       <TrustBadge label={t("trustBadge").replace("{verifiedDate}", formatVerifiedDate(language))} />
@@ -26,18 +29,33 @@ export function ScreenHeader({
   );
 }
 
-/** Persistent disclosure + link to /about (site-contract §15). */
-export function DisclosureFooter({ t }: { t: T }) {
+/**
+ * Persistent disclosure + link to /about (site-contract §15). During a call the
+ * words stay on screen and the link moves into the Get help sheet, so the call
+ * keeps exactly three persistent controls.
+ */
+export function DisclosureFooter({ t, inCall = false }: { t: T; inCall?: boolean }) {
   return (
     <footer className="px-6 pb-3 pt-1.5 text-center text-[12px] leading-snug text-navy-700">
       <p className="font-medium">{t("aiDisclosure")}</p>
       <p>
-        {t("prototypeNotice")} ·{" "}
-        <Link href="/about" className="-my-3 inline-block py-3 font-medium text-teal-800 underline underline-offset-2">
-          {t("aboutLink")}
-        </Link>
+        {t("prototypeNotice")}
+        {!inCall && (
+          <>
+            {" "}·{" "}
+            <AboutLink t={t} className="-my-3 inline-block py-3" />
+          </>
+        )}
       </p>
     </footer>
+  );
+}
+
+export function AboutLink({ t, className }: { t: T; className?: string }) {
+  return (
+    <Link href="/about" className={`font-medium text-teal-800 underline underline-offset-2 ${className ?? ""}`}>
+      {t("aboutLink")}
+    </Link>
   );
 }
 

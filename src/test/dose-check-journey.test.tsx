@@ -30,7 +30,7 @@ beforeEach(() => {
   sessionStore.reset();
   service = new SimulatedDoseCallbackService(0);
   setDoseCallbackServiceForTest(service);
-  // No AI, no Gemini: the deterministic call only.
+  // No AI, no realtime voice: the deterministic call only.
   vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new Error("offline"))));
 });
 afterEach(() => {
@@ -38,6 +38,11 @@ afterEach(() => {
 });
 
 const click = (name: RegExp | string) => fireEvent.click(screen.getByRole("button", { name }));
+/** Typed exactly as it could be said: sending is an explicit "send" (no Send button). */
+const typeIn = (text: string) => {
+  fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
+  fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+};
 const pinned = () => within(document.querySelector<HTMLElement>("[data-pinned]")!);
 
 async function toReviewPanel() {
@@ -67,8 +72,18 @@ describe("dose-change journey in the call (UI)", () => {
     expect(panel.getByText(/Only the details shown here are included/)).toBeInTheDocument();
     expect(panel.getByText("•••• 0188")).toBeInTheDocument(); // masked by default
     expect(panel.queryByText("0000 0188")).toBeNull();
+    // …with a labelled way to see exactly what will be sent (design-standard §16).
+    click("Show number");
+    expect(panel.getByText("0000 0188")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide number" })).toHaveAttribute("aria-pressed", "true");
+    click("Hide number");
+    expect(panel.queryByText("0000 0188")).toBeNull();
 
-    await act(async () => click("Send callback request"));
+    // No Send button: the review says how to send, and an explicit "send" does it.
+    expect(screen.queryByRole("button", { name: "Send callback request" })).toBeNull();
+    expect(panel.getByText("If it’s right, say or type “send”. If not, say “don’t send”.")).toBeInTheDocument();
+    expect(service.received).toHaveLength(0);
+    await act(async () => typeIn("send"));
     expect(service.received).toHaveLength(1);
     const p = service.received[0];
     const shown = document.body.textContent ?? "";
@@ -106,12 +121,12 @@ describe("dose-change journey in the call (UI)", () => {
     click("Yes, that is what the label says");
     click("Ask for a pharmacist callback");
     click("Yes, prepare a summary");
-    await act(async () => click("Send callback request"));
+    await act(async () => typeIn("send it"));
     expect(pinned().getByText("Demo: request not submitted.")).toBeInTheDocument();
     expect(pinned().getByText("The request could not be delivered. No one has been notified. Your summary is still available.")).toBeInTheDocument();
     expect(pinned().getByText("Unresolved")).toBeInTheDocument();
     expect(pinned().getByText("View fictional pharmacy contact")).toBeInTheDocument();
-    await act(async () => click("Try again"));
+    await act(async () => typeIn("try again"));
     expect(service.received.map((p) => p.requestId)).toEqual([service.received[0].requestId, service.received[0].requestId]);
     expect(service.deliveredCount).toBe(1);
     expect(pinned().getByText("Demo: callback request submitted.")).toBeInTheDocument();
@@ -123,12 +138,12 @@ describe("dose-change journey in the call (UI)", () => {
     click("Yes, that is what the label says");
     click("Ask for a pharmacist callback");
     click("Yes, prepare a summary");
-    await act(async () => click("Send callback request"));
+    await act(async () => typeIn("send it"));
     expect(pinned().getByText("Demo: submission could not be confirmed.")).toBeInTheDocument();
     expect(pinned().getByText("Not confirmed — simulated")).toBeInTheDocument();
     expect(pinned().queryByText(/No one has been notified/)).toBeNull();
     expect(pinned().queryByRole("button", { name: "Review summary" })).toBeNull();
-    await act(async () => click("Try again"));
+    await act(async () => typeIn("try again"));
     expect(service.deliveredCount).toBe(1);
     expect(pinned().getByText("Demo: callback request submitted.")).toBeInTheDocument();
   });
@@ -167,7 +182,7 @@ describe("dose-change journey in the call (UI)", () => {
 
   it("after submission: review the request, return to the call (still unresolved), or end the call", async () => {
     await toReviewPanel();
-    await act(async () => click("Send callback request"));
+    await act(async () => typeIn("send it"));
     click("Review request");
     expect(pinned().getByText("•••• 0188")).toBeInTheDocument();
     click("Return to call");
@@ -195,27 +210,26 @@ describe("dose-change journey in the call (UI)", () => {
     expect(pinned().getByText("Not confirmed")).toBeInTheDocument();
   });
 
-  it("after a reload mid-call, the start screen says the call is gone without guessing about requests", () => {
+  it("after a reload mid-call, the start screen is the ordinary one: no notice about the earlier call (owner decision)", () => {
     sessionStore.setForTest({ ...sessionStore.getSnapshot(), previousCallInterrupted: true });
     render(<CompanionExperience />);
-    expect(screen.getByText(/may or may not have gone through/)).toBeInTheDocument();
+    expect(screen.queryByText(/may or may not have gone through|page reloaded/)).toBeNull();
     expect(screen.getAllByRole("button").filter((b) => b.dataset.variant === "primary")).toHaveLength(1);
   });
 
-  it("the call shows the latest exchange; earlier turns are optional history (design-standard §10)", () => {
+  it("the whole conversation stays readable in order: nothing is collapsed behind 'Earlier in this call'", () => {
     sessionStore.setForTest(run([startCall]));
     render(<CompanionExperience />);
     act(() => dispatch({ type: "USER_MESSAGE", text: "What is this for?", via: "typed" }));
     act(() => dispatch({ type: "USER_MESSAGE", text: OPENING, via: "typed" }));
-    const history = document.querySelector("details")!;
-    expect(history).toHaveTextContent("Earlier in this call");
-    expect(history).toHaveTextContent("What is this for?");
-    expect(history.open).toBe(false);
-    // Outside the history: just her latest words and the companion's current reply.
     const main = document.querySelector("main")!;
-    const current = [...main.querySelectorAll("[data-speaker]")].filter((el) => !history.contains(el));
-    expect(current.map((el) => el.getAttribute("data-speaker"))).toEqual(["user", "companion"]);
-    expect(current[0]).toHaveTextContent(OPENING);
+    expect(main.querySelector("details")).toBeNull();
+    expect(screen.queryByText(/Earlier in this call/)).toBeNull();
+    const turns = [...main.querySelectorAll("[data-speaker]")];
+    expect(turns.map((el) => el.getAttribute("data-speaker"))).toEqual(["companion", "user", "companion", "user", "companion"]);
+    expect(turns[1]).toHaveTextContent("What is this for?");
+    expect(turns[3]).toHaveTextContent(OPENING);
+    turns.forEach((el) => expect(el).toBeVisible());
   });
 
   it("reviewer controls live outside the call and pick a scenario", () => {

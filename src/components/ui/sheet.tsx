@@ -5,7 +5,9 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 
 /**
  * Non-critical modal built on native <dialog>: focus is trapped while open,
- * Escape closes it, and focus returns to the opener — no ARIA patching needed.
+ * Escape closes it, and focus returns to the opener. Where `showModal` is
+ * missing (old browsers, jsdom) it opens non-modally, and Escape and focus
+ * return are handled here too.
  */
 export function Sheet({
   open,
@@ -23,11 +25,27 @@ export function Sheet({
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
+  const opener = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
+    if (open && !dialog.open) {
+      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else {
+        dialog.setAttribute("open", "");
+        dialog.querySelector<HTMLElement>("button, a, input")?.focus();
+      }
+    }
+    if (!open && dialog.open) {
+      if (typeof dialog.close === "function") dialog.close();
+      else dialog.removeAttribute("open");
+    }
+    if (!open && opener.current?.isConnected) {
+      opener.current.focus();
+      opener.current = null;
+    }
   }, [open]);
 
   return (
@@ -36,6 +54,12 @@ export function Sheet({
       className="sheet"
       aria-labelledby={titleId}
       onClose={onClose}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onClose();
+        }
+      }}
       onClick={(e) => {
         if (e.target === ref.current) onClose(); // backdrop click
       }}

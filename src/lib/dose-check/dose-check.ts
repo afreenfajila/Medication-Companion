@@ -11,7 +11,13 @@ import type { SimulatedOutcome } from "@/lib/services/dose-callback";
 
 export type Timing = "with-meals" | "before-meals" | "after-meals" | "bedtime" | "morning";
 export type InstructionField = "amount" | "perDay" | "timing";
-export type ParsedInstruction = { amount: number | null; perDay: number | null; timing: Timing | null };
+export type ParsedInstruction = {
+  amount: number | null;
+  perDay: number | null;
+  timing: Timing | null;
+  /** Wording the parser can't safely read (negation, steps, strengths, conditions): never a match. */
+  unsupported?: boolean;
+};
 
 const WORD_NUMBERS: Record<string, number> = {
   one: 1, a: 1, an: 1, two: 2, three: 3, four: 4, half: 0.5, "1/2": 0.5,
@@ -40,6 +46,12 @@ function perDayEn(n: string): number | null {
   return null;
 }
 
+// Wording that changes meaning in ways the field reader can't follow: negation,
+// steps or extra doses, conditions, strengths/units. Its presence means "can't compare".
+const UNSUPPORTED_EN =
+  /\b(not|no|don'?t|never|stop|avoid|skip|then|until|after \d|for \d+|extra|additional|another|and|or|if|when|unless|instead|except|only|as (directed|needed|required)|prn|mg|mcg|ml|milligrams?|micrograms?|units?|g)\b|%/;
+const UNSUPPORTED_ZH = /不|别|勿|停|然后|之后|以后|如果|或|额外|另外|再加|直到|需要时|毫克|微克|毫升|克/;
+
 /**
  * Reads the fields that matter for comparison. Anything it can't read is null,
  * which later makes the comparison "insufficient", never a guess.
@@ -47,19 +59,40 @@ function perDayEn(n: string): number | null {
  * a real product needs a reviewed label grammar, not regexes.
  */
 export function parseInstruction(text: string | null | undefined): ParsedInstruction {
-  const n = (text ?? "").toLowerCase().replace(/[.,;:!?"“”'’()]/g, " ").replace(/\s+/g, " ").trim();
+  // Decimal points between digits are kept: "1.5 tablets" is not "1 5 tablets".
+  const n = (text ?? "")
+    .toLowerCase()
+    .replace(/(^|[^\d])\.(\d)/g, "$10.$2") // ".5" is "0.5"
+    .replace(/[,;:!?"“”'’()，。；：！？（）]|\.(?!\d)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   const amountMatch = n.match(AMOUNT_EN) ?? n.match(AMOUNT_ZH);
   const zhPerDay = n.match(PER_DAY_ZH);
-  return {
+  const parsed: ParsedInstruction = {
     amount: amountMatch ? num(amountMatch[1]) : null,
     perDay: zhPerDay ? num(zhPerDay[1]) : perDayEn(n),
     timing: TIMING.find(([p]) => p.test(n))?.[1] ?? null,
   };
+  return UNSUPPORTED_EN.test(n) || UNSUPPORTED_ZH.test(n) ? { ...parsed, unsupported: true } : parsed;
+}
+
+/**
+ * Spoken or typed words that read like label wording ("Take half a tablet twice
+ * daily") rather than the person talking about themselves or asking something.
+ * Used only on the dose check's "what does your box say?" step.
+ */
+export function looksLikeLabelWording(text: string): boolean {
+  const n = text.toLowerCase().replace(/[’‘]/g, "'");
+  if (/[?？]|吗|呢/.test(n) || /^\s*(what|when|how|why|should|can|could|is|are|do|does|will|would)\b/.test(n)) return false;
+  if (/\b(i|i'm|i've|i'd|me|my|mine)\b|我/.test(n)) return false;
+  const p = parseInstruction(text);
+  return p.amount !== null || p.perDay !== null;
 }
 
 export type Comparison =
   | { outcome: "match" }
-  | { outcome: "conflict"; differing: InstructionField[] }
+  /** `missing` is present only when some fields also couldn't be compared. */
+  | { outcome: "conflict"; differing: InstructionField[]; missing?: InstructionField[] }
   | { outcome: "insufficient"; missing: InstructionField[] };
 
 const FIELDS: readonly InstructionField[] = ["amount", "perDay", "timing"];
@@ -73,11 +106,14 @@ const REQUIRED: readonly InstructionField[] = ["amount", "perDay"];
  * there isn't enough to compare.
  */
 export function compareInstructions(record: ParsedInstruction, label: ParsedInstruction): Comparison {
+  // Wording that can't be read safely is never compared field by field: no match, no conflict.
+  if (record.unsupported || label.unsupported) return { outcome: "insufficient", missing: [...FIELDS] };
   const differing = FIELDS.filter((f) => record[f] !== null && label[f] !== null && record[f] !== label[f]);
-  if (differing.length > 0) return { outcome: "conflict", differing };
   const missing = FIELDS.filter(
     (f) => (record[f] === null) !== (label[f] === null) || (REQUIRED.includes(f) && record[f] === null),
   );
+  // A clear difference and a gap can both be true: keep both, never imply a complete check.
+  if (differing.length > 0) return missing.length > 0 ? { outcome: "conflict", differing, missing } : { outcome: "conflict", differing };
   if (missing.length > 0) return { outcome: "insufficient", missing };
   return { outcome: "match" };
 }
@@ -210,9 +246,9 @@ export function buildCallbackPayload(draft: CallbackDraft, requestId: string): C
   };
 }
 
-/** One logical request per reviewed version: a retry of the same version reuses its ID. */
-export function callbackRequestId(sessionId: string, revision: number): string {
-  return `${sessionId}-callback-r${revision}`;
+/** One logical request per reviewed version of one summary: a retry of the same version reuses its ID. */
+export function callbackRequestId(draftId: string, revision: number): string {
+  return `${draftId}-callback-r${revision}`;
 }
 
 export function maskNumber(n: string): string {

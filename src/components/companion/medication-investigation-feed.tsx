@@ -110,9 +110,9 @@ export function MedicationInvestigationFeed({
 
               {escalation.action === "alert_family" && (
                 <div className="rounded-lg border-l-4 border-red-600 bg-red-50 p-3">
-                  <p className="font-semibold text-red-900">Alert Sent to Family</p>
+                  <p className="font-semibold text-red-900">Demo: family alert simulated</p>
                   <p className="text-sm text-red-800">
-                    Family contact has been alerted to check on you or call the pharmacist.
+                    In this design exploration, family would be asked to check on you. No one is actually contacted.
                   </p>
                 </div>
               )}

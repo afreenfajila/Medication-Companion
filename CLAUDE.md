@@ -235,18 +235,30 @@ Do not hide limitations or fabricate successful provider results.
 
 Inspect the actual provider implementation before changing it.
 
-Current preferred scope:
-- Browser speech recognition where supported.
-- Typed fallback.
-- Approved text rendered through optional server-side TTS.
-- Browser speech synthesis fallback.
+Current scope (detail in Medication-Companion-Architecture.md):
+- AudioWorklet microphone capture; adaptive loudness plus a local
+  Silero VAD decide candidate and confirmed speech on the device.
+- OpenAI Realtime transcription, transcription only: a short-lived
+  client secret from our own route; the permanent key stays server-side.
+- Typed input, always available.
+- The validated visible AssistantTurn streamed through ElevenLabs
+  (single-use token from our own route), played through Web Audio.
+- Browser speech recognition and synthesis only as the explicitly
+  labelled degraded fallback.
+- Full duplex: the mic stays open during playback; only confirmed
+  speech, never loudness alone, interrupts it.
+- Claude (claude-sonnet-5-5) is the only reasoning and vision model.
+  It never receives audio or interim transcripts.
 
-Do not reintroduce Gemini Live because an archived specification
-mentioned it.
+Do not reintroduce a removed voice provider because an archived
+specification mentioned it. The Google speech integrations were
+removed on 12 October 2026 (docs/decisions.md).
 
 Rules:
 - Audio and text refer to the same conversational turn.
-- Visible text need not wait for audio.
+- The transcript line appears as its voice starts, never more than
+  3 seconds later, and at once when there is no voice (PRD EN-05,
+  amended). Step controls never wait for audio.
 - Speech completion does not confirm a decision.
 - Repeat does not advance the flow.
 - Stop recognition/playback on end/reset.
@@ -298,8 +310,13 @@ Submission payload:
 - Exclude raw images, audio, and full transcript.
 - Never serialise the entire session.
 
-Approval:
-- Requires explicit user action.
+Approval (amended 12 October 2026 by the owner):
+- Everything sent to another party (pharmacist callback, family,
+  trusted helper, dose-check summary) is reviewed first.
+- Requires explicit user action: a short, explicit "send" (said or
+  typed) after the review. There is no Send button. A plain "yes",
+  a question, a hedge, a negative, a low-confidence transcript or the
+  AI meaning-match never sends.
 - Applies to the exact current draft.
 - Is invalidated by edits.
 - Is not restored from query parameters.
@@ -582,3 +599,13 @@ Report:
 8. Any unresolved specification conflict.
 
 Do not commit, push, or deploy as part of this final step.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

@@ -67,6 +67,9 @@ body {
   place-items: center;
   flex: none;
 }
+.orb--xs {
+  --orb-size: 64px;
+}
 .orb--sm {
   --orb-size: 112px;
 }
@@ -254,6 +257,15 @@ body {
 .fade-in {
   animation: fade-in 250ms ease-out both;
 }
+
+/* Scroll areas without a visible scrollbar (owner decision, 12 October 2026). They still
+   scroll by touch, wheel and keyboard; the transcript offers "Latest message" when scrolled up. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -312,3 +324,4 @@ dialog.sheet::backdrop {
     transform: translateY(calc(50cqh - 1px));
   }
 }
+

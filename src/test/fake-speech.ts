@@ -32,8 +32,8 @@ export function createFakeSpeech(
     // --- test drivers
     say(transcript: string, isFinal = true, confidence?: number) {
       this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript, confidence }], { isFinal })] as never });
-      // Real engines run with continuous=false (see BrowserVoiceProvider.startListening):
-      // a final result auto-ends the recognition, just like a real browser would.
+      // Simplification: a final result ends the recognition (the provider sends the turn on end;
+      // real engines in continuous mode end later, after the provider's pause timer).
       if (isFinal) {
         this.started = false;
         this.onend?.();

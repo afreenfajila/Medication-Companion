@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { CompanionExperience } from "@/components/companion/companion-experience";
 import { DoseCheckReviewer } from "@/components/companion/dose-check-reviewer";
-import { GeminiVoiceBootstrap } from "@/components/companion/gemini-voice-bootstrap";
 import { AppShell } from "@/components/ui/shell";
 
 export const metadata: Metadata = { title: "Dose-change demo — Medication Companion prototype" };
@@ -12,7 +11,6 @@ export default function DoseCheckDemoPage() {
     <div className="bg-canvas md:bg-desk">
       <DoseCheckReviewer />
       <AppShell>
-        <GeminiVoiceBootstrap />
         <CompanionExperience />
       </AppShell>
     </div>

@@ -82,16 +82,6 @@ export type HelpResult = z.infer<typeof helpResultSchema>;
 export const helpResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(helpResultSchema), apiFailureSchema]);
 
 /**
- * Speech output: renders already-approved text to audio (never generates
- * content). Success returns the raw WAV bytes directly (Content-Type:
- * audio/wav), not a JSON envelope — only failures use the standard envelope.
- */
-export const speakRequestSchema = z.object({
-  text: z.string().min(1).max(600),
-  language: z.enum(["en", "zh-Hans"]),
-});
-
-/**
  * In-call understanding (Claude task 3): the person's own message plus a short
  * window of the conversation. `key` names the deterministic reply the router
  * already chose; the server looks up its approved text itself and returns it
@@ -129,3 +119,48 @@ export const understandCapabilityResponseSchema = z.discriminatedUnion("ok", [
   apiSuccessSchema(understandCapabilitySchema),
   apiFailureSchema,
 ]);
+
+/** Which on-screen action the person meant (POST /api/companion/intent). Gates are never in `actions`. */
+export const intentRequestSchema = z.object({
+  utterance: z.string().trim().min(1).max(300),
+  language: z.enum(["en", "zh-Hans"]),
+  actions: z
+    .array(z.object({ id: z.string().regex(/^[a-z-]{1,40}$/), description: z.string().min(1).max(120) }))
+    .max(12),
+  /** Where they are in the call, in plain words — never record content. */
+  context: z.string().trim().max(120).optional(),
+});
+/**
+ * `action`: the on-screen action they meant. `outcome: "unclear"`: nothing intelligible — ask them
+ * to repeat. `outcome: "reply"`: a short AI-worded line that already passed the reply guard.
+ */
+export const intentDataSchema = z.object({
+  action: z.string().max(40).nullable(),
+  outcome: z.enum(["action", "unclear", "reply", "none"]).default("none"),
+  reply: z.string().max(400).optional(),
+});
+export const intentResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(intentDataSchema), apiFailureSchema]);
+
+/**
+ * Realtime voice credentials (site-contract §4). Each route hands the browser a
+ * short-lived, single-purpose credential minted with the server-side key; the
+ * permanent key is never in a response. No medicine data is attached.
+ */
+export const openAiSessionRequestSchema = z.object({ language: z.enum(["en", "zh-Hans"]).default("en") });
+export const openAiSessionSchema = z.object({
+  /** Ephemeral client secret (`ek_…`), valid for minutes and only for this transcription session. */
+  clientSecret: z.string().min(1).max(512),
+  model: z.string().min(1).max(80),
+  wsUrl: z.string().url(),
+  /** Unix seconds. */
+  expiresAt: z.number().int().positive(),
+});
+export const openAiSessionResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(openAiSessionSchema), apiFailureSchema]);
+
+export const elevenLabsTokenSchema = z.object({
+  /** Single-use token for one text-to-speech WebSocket. */
+  token: z.string().min(1).max(512),
+  voiceId: z.string().min(1).max(80),
+  modelId: z.string().min(1).max(80),
+});
+export const elevenLabsTokenResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(elevenLabsTokenSchema), apiFailureSchema]);

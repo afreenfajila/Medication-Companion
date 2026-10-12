@@ -156,6 +156,12 @@ export default function A4InvestigationDemoPage() {
       </div>
 
       <div className="mx-auto max-w-4xl px-4 py-8">
+        {/* content-model §17: nothing here may read as a real alert or a clinical assessment. */}
+        <p role="note" className="mb-6 rounded-lg border border-danger-800 bg-danger-100 p-4 text-base font-bold text-danger-800">
+          Design exploration only · Simulated · Not clinical. The severity tiers and confidence scores are unvalidated
+          and must not be read as clinical probabilities. No family member, pharmacist or emergency service is ever
+          contacted. This page is separate from the dose-change journey and does not control it.
+        </p>
         {/* Scenario selector */}
         <div className="mb-8 flex gap-4">
           {(Object.keys(DEMO_SCENARIOS) as ScenarioKey[]).map((key) => (

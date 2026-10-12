@@ -85,7 +85,8 @@ typed or read aloud by the person, and the callback succeeds.
     because it may already have gone.
   - If she taps **Get help** while a request is sending, the answer still lands, and coming back
     shows it.
-- **Voice:** spoken yes/no confirms a reading or answers the offer. Sending always needs a tap.
+- **Voice:** spoken yes/no confirms a reading or answers the offer. Sending is an explicit "send"
+  (said or typed) after the review; a plain "yes" never sends. There is no Send button.
 - **Language:** English and Simplified Chinese.
 
 ## What is simulated

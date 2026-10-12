@@ -1,5 +1,5 @@
 import { AiUnavailableError, extractLabelWithClaude } from "@/lib/ai/claude";
-import { fail, firstIssue, newRequestId, ok } from "@/lib/api/envelope";
+import { fail, isCrossOrigin, firstIssue, newRequestId, ok, readCapped } from "@/lib/api/envelope";
 import { rateLimit } from "@/lib/api/rate-limit";
 import { labelAnalysisSchema, labelAnalyzeFieldsSchema } from "@/lib/api/schemas";
 import { analyzeExtraction } from "@/lib/label/analyze";
@@ -19,10 +19,7 @@ const MAX_BODY_BYTES = MAX_IMAGE_BYTES + 64 * 1024; // image + multipart overhea
 export async function POST(request: Request): Promise<Response> {
   const requestId = newRequestId();
 
-  // Basic CSRF guard: a browser-sent cross-origin request is refused.
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (origin && host && new URL(origin).host !== host) {
+  if (isCrossOrigin(request)) {
     return fail(403, "forbidden_origin", "This request was not allowed.", "return_home", requestId);
   }
 
@@ -36,9 +33,20 @@ export async function POST(request: Request): Promise<Response> {
     return fail(413, "image_too_large", "That photo is over 5 MB. Please choose a smaller one.", "use_demo_label", requestId);
   }
 
+  // The declared length can be missing (chunked upload), so the cap is also enforced while reading.
+  let body: Uint8Array<ArrayBuffer> | null;
+  try {
+    body = await readCapped(request, MAX_BODY_BYTES);
+  } catch {
+    return fail(400, "invalid_request", "I couldn’t read that upload. Please try again.", "retry", requestId);
+  }
+  if (!body) {
+    return fail(413, "image_too_large", "That photo is over 5 MB. Please choose a smaller one.", "use_demo_label", requestId);
+  }
+
   let form: FormData;
   try {
-    form = await request.formData();
+    form = await new Response(body, { headers: { "content-type": request.headers.get("content-type") ?? "" } }).formData();
   } catch {
     return fail(400, "invalid_request", "I couldn’t read that upload. Please try again.", "retry", requestId);
   }

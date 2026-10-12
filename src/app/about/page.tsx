@@ -112,8 +112,14 @@ export default function AboutPage() {
             Simplified Chinese. It is never generated.
           </li>
           <li>
-            When it is configured, <strong>Gemini</strong> only reads approved on-screen wording
-            aloud. The server refuses any other text, so the voice cannot give medical advice.
+            When it is configured, <strong>ElevenLabs</strong> reads the companion&apos;s on-screen
+            words aloud, including your own words when they are read back to you (such as the label
+            wording you gave). It is only ever given text that is already on the screen and has
+            passed the app&apos;s checks, so the voice cannot give medical advice.
+          </li>
+          <li>
+            When it is configured, <strong>OpenAI</strong> turns what you say into text. It returns
+            words only: it does not answer, confirm anything, or see your record.
           </li>
           <li>Typing the name and choosing from your medicines work without any AI.</li>
         </ul>
@@ -131,9 +137,16 @@ export default function AboutPage() {
             request, and are not saved by default.
           </li>
           <li>
-            Voice input uses your browser’s speech recognition, which may send your voice to the
-            browser vendor’s speech service. Typing always works. The companion only listens and
-            speaks after you tap “Call with companion”, and stops when you end the call.
+            When the voice services are configured, your voice is streamed to OpenAI to be turned
+            into text while you are speaking, and the companion’s words are sent to ElevenLabs to be
+            spoken. The microphone stays open while the companion talks so that you can interrupt
+            it; during that time nothing is sent until a small check on your device decides that
+            you are talking, and the companion’s own voice is never sent back as yours. Without
+            those services, your browser’s own speech recognition is used, which may send your voice
+            to the browser vendor’s speech service (in Chrome, Google). Nothing you say is saved by
+            this app, but the providers’ terms apply to what they receive. Typing always works. The
+            companion only listens and speaks after you tap “Call with companion”, and stops when
+            you end the call.
           </li>
           <li>
             The activity list in the caregiver view is kept in your browser session only. It records

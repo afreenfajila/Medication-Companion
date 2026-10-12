@@ -3,7 +3,7 @@ import { resolveExplanation } from "@/lib/content/explanation";
 import { t as translate } from "@/lib/content/translations";
 import { createFakeSpeech } from "@/test/fake-speech";
 import { toConfirmMatch, toExplain, run, startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo, resolve } from "@/test/helpers";
-import { BrowserVoiceProvider, pickVoice } from "./browser-voice";
+import { BrowserVoiceProvider, TURN_END_MS, pickVoice } from "./browser-voice";
 import { interpretUtterance } from "./commands";
 import { VoiceError } from "./provider";
 import { speakableText } from "./speakable";
@@ -85,7 +85,7 @@ describe("BrowserVoiceProvider", () => {
     const rec = fake.recognitions[0];
     expect(rec.lang).toBe("zh-CN");
     expect(rec.interimResults).toBe(true);
-    expect(rec.continuous).toBe(false);
+    expect(rec.continuous).toBe(true); // a pause mid-sentence must not end the turn
     expect(listening).toHaveBeenLastCalledWith(true);
 
     rec.say("what is", false);
@@ -99,6 +99,46 @@ describe("BrowserVoiceProvider", () => {
 
     rec.stop();
     expect(listening).toHaveBeenLastCalledWith(false);
+  });
+
+  it("a pause mid-sentence doesn't end the turn: the whole sentence is sent once, after the pause", () => {
+    vi.useFakeTimers();
+    try {
+      const fake = createFakeSpeech();
+      const p = new BrowserVoiceProvider(fake.env);
+      const final = vi.fn();
+      p.onTranscript(final);
+      p.startListening("en");
+      const rec = fake.recognitions[0];
+      const result = (transcript: string) => Object.assign([{ transcript, confidence: 0.9 }], { isFinal: true });
+      // Continuous engine: results accumulate by index and the recognition keeps running.
+      rec.onresult?.({ resultIndex: 0, results: [result("I want to show you")] } as never);
+      vi.advanceTimersByTime(800); // a short pause: still her turn
+      rec.onresult?.({ resultIndex: 1, results: [result("I want to show you"), result("the image of the medicine I have")] } as never);
+      expect(final).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(TURN_END_MS);
+      expect(final).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledWith("I want to show you the image of the medicine I have", 0.9);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stopping (the companion speaks, or the call ends) drops words heard but not yet sent", () => {
+    vi.useFakeTimers();
+    try {
+      const fake = createFakeSpeech();
+      const p = new BrowserVoiceProvider(fake.env);
+      const final = vi.fn();
+      p.onTranscript(final);
+      p.startListening("en");
+      fake.recognitions[0].onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: "half a sent" }], { isFinal: true })] } as never);
+      p.stopListening();
+      vi.advanceTimersByTime(TURN_END_MS * 2);
+      expect(final).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not start a second recognition while one is running", () => {
