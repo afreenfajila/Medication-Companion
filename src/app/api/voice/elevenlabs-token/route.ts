@@ -13,7 +13,10 @@ export const CHECK_OK_TTL_MS = 10 * 60_000;
 export const CHECK_FAIL_TTL_MS = 60_000;
 
 type Outcome = "ok" | "voice_unavailable" | "model_unavailable" | "quota_exceeded" | "key_rejected";
-const checks = new Map<string, { outcome: Outcome; until: number }>();
+type Check = { outcome: Outcome; /** ElevenLabs' own error code, for the log (never the key or a body). */ providerCode: string };
+const checks = new Map<string, Check & { until: number }>();
+/** "Valid key, but not allowed to read this": not proof the voice can't be used for speech. */
+const MISSING_PERMISSION = /missing_permissions|insufficient_permissions|permission/;
 
 /** Test seam: forget cached voice/model checks. */
 export function resetVoiceCheckCache(): void {
@@ -34,22 +37,23 @@ async function errorCode(res: Response): Promise<string> {
  * A key without read permission can't be checked; that is not proof the voice
  * is unavailable, so the token is still minted and the socket will tell.
  */
-async function checkVoice(apiKey: string, voiceId: string, modelId: string): Promise<Outcome> {
+async function checkVoice(apiKey: string, voiceId: string, modelId: string): Promise<Check> {
   const key = `${voiceId}|${modelId}`;
   const cached = checks.get(key);
-  if (cached && cached.until > Date.now()) return cached.outcome;
+  if (cached && cached.until > Date.now()) return cached;
 
   const headers = { "xi-api-key": apiKey };
   let outcome: Outcome = "ok";
+  let providerCode = "";
   const voice = await fetch(`${API}/voices/${encodeURIComponent(voiceId)}`, { headers, signal: AbortSignal.timeout(6000) });
-  if (voice.status === 401) outcome = "key_rejected";
+  if (!voice.ok) providerCode = (await errorCode(voice)).replace(/[^a-z_]/gi, "").slice(0, 40);
+  // A key restricted to text-to-speech may not read voices: ElevenLabs answers 401 or 403
+  // "missing_permissions". That key can still speak, so the check is skipped, not failed.
+  if ((voice.status === 401 || voice.status === 403) && MISSING_PERMISSION.test(providerCode)) outcome = "ok";
+  else if (voice.status === 401) outcome = "key_rejected";
   else if (voice.status === 402) outcome = "quota_exceeded";
   else if ([400, 404, 422].includes(voice.status)) outcome = "voice_unavailable";
-  else if (voice.status === 403) {
-    const code = await errorCode(voice);
-    // A scoped key may simply lack voice-read permission: unverified, not unavailable.
-    if (/subscription_required|feature_not_available|paid_plan|voice/.test(code)) outcome = "voice_unavailable";
-  }
+  else if (voice.status === 403 && /subscription_required|feature_not_available|paid_plan|voice/.test(providerCode)) outcome = "voice_unavailable";
   if (outcome === "ok") {
     const models = await fetch(`${API}/models`, { headers, signal: AbortSignal.timeout(6000) });
     if (models.ok) {
@@ -58,8 +62,8 @@ async function checkVoice(apiKey: string, voiceId: string, modelId: string): Pro
       if (Array.isArray(list) && (!model || model.can_do_text_to_speech === false)) outcome = "model_unavailable";
     }
   }
-  checks.set(key, { outcome, until: Date.now() + (outcome === "ok" ? CHECK_OK_TTL_MS : CHECK_FAIL_TTL_MS) });
-  return outcome;
+  checks.set(key, { outcome, providerCode, until: Date.now() + (outcome === "ok" ? CHECK_OK_TTL_MS : CHECK_FAIL_TTL_MS) });
+  return { outcome, providerCode };
 }
 
 /**
@@ -97,9 +101,10 @@ export async function POST(request: Request): Promise<Response> {
   const unavailable = "The streaming voice isn’t available right now.";
 
   try {
-    const outcome = await checkVoice(apiKey, voiceId, modelId);
+    const { outcome, providerCode } = await checkVoice(apiKey, voiceId, modelId);
     if (outcome !== "ok") {
-      console.error(`[voice/elevenlabs-token] ${requestId} pre-flight ${outcome}`);
+      // e.g. "pre-flight key_rejected (invalid_api_key)": ElevenLabs' code says which value to fix.
+      console.error(`[voice/elevenlabs-token] ${requestId} pre-flight ${outcome}${providerCode ? ` (${providerCode})` : ""}`);
       const code = outcome === "key_rejected" ? "token_unavailable" : outcome;
       return fail(503, code, unavailable, "retry", requestId);
     }

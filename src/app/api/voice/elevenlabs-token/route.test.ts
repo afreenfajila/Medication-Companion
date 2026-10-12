@@ -114,6 +114,25 @@ describe("POST /api/voice/elevenlabs-token", () => {
     expect(await code(await POST(req()))).toBe("quota_exceeded");
   });
 
+  it("ElevenLabs answers 401 'missing_permissions' for a key that can't read voices: that key may still speak, so a token is minted", async () => {
+    provider({
+      voice: () => Response.json({ detail: { status: "missing_permissions", message: "The API key you used is missing the permission voices_read" } }, { status: 401 }),
+      models: () => Response.json({ detail: { status: "missing_permissions" } }, { status: 401 }),
+    });
+    expect((await POST(req())).status).toBe(200);
+  });
+
+  it("an invalid key is rejected before any token, and the log names ElevenLabs' code — never the key", async () => {
+    const logged: string[] = [];
+    vi.mocked(console.error).mockImplementation((...args: unknown[]) => void logged.push(args.join(" ")));
+    provider({ voice: () => Response.json({ detail: { status: "invalid_api_key", message: `bad ${PERMANENT_KEY}` } }, { status: 401 }) });
+    const res = await POST(req());
+    expect(await code(res)).toBe("token_unavailable");
+    expect(calls("single-use-token")).toBe(0);
+    expect(logged.join("\n")).toMatch(/pre-flight key_rejected \(invalid_api_key\)/);
+    expect(logged.join("\n")).not.toContain(PERMANENT_KEY);
+  });
+
   it("a key that may not read voices is not proof the voice is unavailable: the token is still minted", async () => {
     provider({
       voice: () => Response.json({ detail: { status: "missing_permissions" } }, { status: 403 }),
