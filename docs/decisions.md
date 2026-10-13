@@ -954,3 +954,21 @@ Owner direction: "User should always review before sending to any other party. D
 | **Reversed (owner decision):** no Send or Send-again buttons. After the review, an explicit, short "send" (said or typed: "send", "send it", "yes, send it", 发送) sends exactly the revision on screen; "try again"/"send again" re-sends after a failure | Owner direction. **Supersedes** the earlier rows "no spoken phrase submits the callback request" and "callback submission must remain a deliberate tap only", and amends CLAUDE.md §10 | **Safety trade-off:** a misheard "send" could share the summary. Mitigations: review first; a plain yes, a question, a hedge, a negative or a long sentence never sends; low-confidence transcripts are dropped before interpretation; the AI meaning-match is never offered "send"; the companion's playback is never transcribed and the echo guard still applies; the reducer only accepts the exact current revision | `conversation-first.test.ts`, `chat-and-callback.test.tsx`, dose-check journey |
 | "Don't send" (said, typed or the remaining text link) cancels with nothing sent; a hedge on the review also cancels | Safe default | — | same |
 
+## Dose statements are not dose questions (13 October 2026)
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| **Fixed:** the fixed dose-boundary reply ("I can't decide your dose for you…") answers only a dose *question* ("what should my dose be?", "how many should I take", "吃多少") — never a statement that mentions the dose ("Yes, that is my correct dosage…") | Owner report: confirming the dose got the boundary line and a pharmacist offer every time | A long "yes, …I'll take one tablet…" still doesn't count as "the label matches" (it describes a dose; treating it as a match could hide a difference): the step's own question is asked again, or Claude replies naturally | `explain-conversation.test.tsx` |
+
+## Help screen: a pharmacist or family, nothing tucked away (13 October 2026)
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| The non-urgent help screen offers "Ask a pharmacist to call me" and "Contact my family" (plus "Try another photo" first when a label retry is left), all as buttons; "More ways to get help", "Contact my clinic" and "Ask my trusted helper" are removed | Owner request: family and trusted helper are the same need; no hidden options | No clinic or trusted-helper button. Saying "call my clinic" or "ask my trusted helper" still works in words; the AI meaning-match is no longer offered the clinic. Urgent guidance is unchanged | classify, call-flow and journey tests |
+
+## A dose question gets the record's own words (13 October 2026)
+
+| Decision | Reason / evidence | Trade-off or assumption | Retest |
+|---|---|---|---|
+| "What's my dosage?" during the explanation is answered with exactly the explanation's wording: "Your current pharmacy record says: Take 1 tablet twice daily with meals." The "I can't decide your dose for you…" preamble and the pharmacist offer are dropped | Owner preference (screenshots: liked the plain record line, not the boundary line) | No explicit "I can't decide your dose" in this answer; the companion still never chooses a dose (it only quotes the confirmed record), "is it okay that I took…" questions still go to the safety path, and saying the dose changed still starts the dose-change check | `explain-conversation.test.tsx` |
+

@@ -113,7 +113,8 @@ describe("what the AI meaning-match may choose: never a yes to a gate", () => {
     expect(new Set(actions.map((a) => a.id)).size).toBe(actions.length); // ids are unique
   });
   it("the help screen offers its own options, and urgent guidance offers none", () => {
-    expect(spokenActions(safety).map((a) => a.id)).toEqual(expect.arrayContaining(["pharmacist-callback", "clinic", "family", "back"]));
+    expect(spokenActions(safety).map((a) => a.id)).toEqual(expect.arrayContaining(["pharmacist-callback", "family", "back"]));
+    expect(spokenActions(safety).map((a) => a.id)).not.toContain("clinic");
     expect(spokenActions({ ...safety, safetyReason: "urgent-risk" })).toEqual([]);
   });
 });

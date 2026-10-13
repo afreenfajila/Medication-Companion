@@ -288,15 +288,14 @@ describe("in-call flow", () => {
     expect(screen.queryByText("I’m not sure enough to explain this safely.")).toBeNull();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
     expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ask my trusted helper" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Contact my family" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try another photo" })).toBeInTheDocument();
-    // Only two filled/outlined buttons in view; the other help options are one tap away.
-    expect(screen.getByRole("button", { name: "Ask my trusted helper" }).closest("details")).not.toBeNull();
+    // Every option in view, nothing tucked away: no clinic, no trusted helper, no "More ways" link.
+    expect(screen.queryByRole("button", { name: /trusted helper|clinic/i })).toBeNull();
+    expect(screen.queryByText("More ways to get help")).toBeNull();
     const pinned = document.querySelector("[data-pinned]")!;
-    const inView = [...pinned.querySelectorAll('[data-variant="primary"], [data-variant="secondary"]')].filter(
-      (b) => !b.closest("details"),
-    );
-    expect(inView).toHaveLength(2);
+    expect(pinned.querySelector("details")).toBeNull();
+    expect(pinned.querySelectorAll('[data-variant="primary"], [data-variant="secondary"]')).toHaveLength(3);
 
     // A callback confirms first; when the service is down it says so plainly and never claims "sent".
     vi.stubGlobal(

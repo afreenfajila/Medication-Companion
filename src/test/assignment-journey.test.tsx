@@ -128,7 +128,7 @@ describe("4. no-match / unreadable blocks instructions — one retry, then human
 
     expect(screen.queryByRole("button", { name: "Try another photo" })).toBeNull();
     expect(screen.getByText(t("en", "retryUsed"))).toBeInTheDocument();
-    for (const name of ["Ask a pharmacist to call me", "Ask my trusted helper", "Contact my clinic"]) {
+    for (const name of ["Ask a pharmacist to call me", "Contact my family"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
     expect(screen.queryByText(INSTRUCTION)).toBeNull();

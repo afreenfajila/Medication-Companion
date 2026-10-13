@@ -96,9 +96,8 @@ export function SafetyScreen({
     canRetryLabel(session),
     mentionsSelfHarm(session.userText),
   );
-  // At most two buttons in view; the other human-help options wait one tap
-  // away behind "More ways to get help" (native <details>, no state).
-  const [main, second, ...more] = view.actions;
+  // Every option in view (at most three: another photo, a pharmacist, family). No "More ways" link.
+  const [main, ...rest] = view.actions;
 
   const run = (id: HelpActionId) => (id === "try-again" ? onTryAnother() : onHelp(id));
 
@@ -126,25 +125,11 @@ export function SafetyScreen({
             {label(main.labelKey)}
           </PrimaryButton>
         )}
-        {second && (
-          <SecondaryButton icon={ACTION_ICONS[second.id]} onClick={() => run(second.id)}>
-            {label(second.labelKey)}
+        {rest.map((a) => (
+          <SecondaryButton key={a.id} icon={ACTION_ICONS[a.id]} onClick={() => run(a.id)}>
+            {label(a.labelKey)}
           </SecondaryButton>
-        )}
-        {more.length > 0 && (
-          <details className="self-center text-center">
-            <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 text-base font-medium text-teal-800 underline underline-offset-4">
-              {t("moreHelpOptions")}
-            </summary>
-            <div className="flex flex-col items-center">
-              {more.map((a) => (
-                <TextAction key={a.id} icon={ACTION_ICONS[a.id]} onClick={() => run(a.id)}>
-                  {label(a.labelKey)}
-                </TextAction>
-              ))}
-            </div>
-          </details>
-        )}
+        ))}
 
         {!view.urgent && (
           <TextAction className="self-center" onClick={onReturn}>

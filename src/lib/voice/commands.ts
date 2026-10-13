@@ -133,8 +133,17 @@ const QUESTION = /^(what|when|how|why|where|which|who|whose|is|are|can|could|do|
  * Answered with the fixed boundary line and the record's own instruction — never a dose.
  * Tied to a dose word or "should I take", so "how much does it cost" is not caught.
  */
-const DOSE_QUESTION =
-  /\b(dose|doses|dosage|dosing)\b|\bhow (many|much)\b.*\b(take|tablets?|pills?|mg|milligrams?)\b|\bshould i (take|have)\b|剂量|用量|吃几|吃多少|服用多少|该吃多少/;
+const DOSE_WORD = /\b(dose|doses|dosage|dosing)\b|剂量|用量/;
+/** Asking (not stating): "how many…", "should I take…", "吃多少". */
+const DOSE_ASK = /\bhow (many|much)\b.*\b(take|tablets?|pills?|mg|milligrams?)\b|\bshould i (take|have)\b|吃几|吃多少|服用多少|该吃多少/;
+/**
+ * A question about what dose to take. Only a question counts — "what should my dose be?",
+ * "how many should I take" — never a statement like "yes, that is my correct dosage".
+ */
+function isDoseQuestion(n: string, raw: string): boolean {
+  const asked = QUESTION.test(n) || raw.includes("?") || raw.includes("？") || /多少|几/.test(n);
+  return (DOSE_WORD.test(n) && asked) || DOSE_ASK.test(n);
+}
 
 /** A question, as opposed to a command or an answer (used to choose honest wording). */
 export function isQuestion(text: string): boolean {
@@ -339,7 +348,7 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
       if (isRecordConflict(raw) || isDoseChange(raw)) return { kind: "message", text: raw };
       // "What should my dose be?" is answered, not ignored — and before "next" is looked
       // for, so "what should the next dosage be" never just skips ahead.
-      if (DOSE_QUESTION.test(n)) return { kind: "reply", key: "explainDoseQuestion" };
+      if (isDoseQuestion(n, raw)) return { kind: "reply", key: "explainDoseQuestion" };
       // "Can a pharmacist call me?" at any step: the pharmacist step, which asks before anything is sent.
       if (PHARMACIST_REQUEST.test(n) && !negative) {
         return { kind: "event", event: { type: "HELP_START", kind: "pharmacist-callback" } };

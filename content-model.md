@@ -664,7 +664,7 @@ capabilityGuide, offTopicWorld, offTopicSocial, medicineNameRetry. Safety, dose,
 escalation and outcome lines are not shortened; `spoken-copy.test.ts` pins what
 they must say and keeps every other line within 200 characters.
 
-Explanation conversation (12 October 2026; zh-Hans unreviewed): `explainDoseQuestion`
+Explanation conversation (12 October 2026; zh-Hans unreviewed; `explainDoseQuestion` simplified 13 October 2026 to "Your current pharmacy record says: {instruction}", the explanation's own wording): `explainDoseQuestion`
 (fixed dose boundary quoting the confirmed record's instruction and date, filled only from
 the record), `explainWhichOne` (asks back after a bare "yes" to an either/or question), and
 question variants `unclearExplainQuestion`, `unclearLabelCheckQuestion`,

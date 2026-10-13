@@ -32,24 +32,36 @@ const said = (text: string, step: 0 | 1 | 2) => {
 
 describe("questions during the explanation are answered", () => {
   it.each(["what should the next dosage be?", "What dose should I take now?", "how many tablets should I take", "我应该吃多少？", "剂量是多少"])(
-    "%j gets the dose boundary with the record's own words — never a skip ahead",
+    "%j is answered with the record's own instruction — never a skip ahead",
     (text) => {
       for (const step of [0, 1, 2] as const) expect(said(text, step)).toBe("explainDoseQuestion");
     },
   );
 
-  it("the dose answer quotes the confirmed record, chooses no dose, and is approved for the voice", () => {
+  it("the dose answer is exactly what the explanation shows — the record's own words, nothing chosen — and approved for the voice", () => {
     const view = resolveExplanation(toExplain(), "en")!;
     const line = fillRecordFacts(t("en", "explainDoseQuestion"), view, "en");
-    expect(line).toMatch(/^I can’t decide your dose for you\./);
-    expect(line).toContain(`“${view.explanation.instruction}”`);
-    expect(line).toMatch(/a pharmacist can check it with you/);
+    expect(line).toBe(`${view.explanation.instructionIntro} ${view.explanation.instruction}`);
+    expect(line).toBe("Your current pharmacy record says: Take 1 tablet twice daily with meals.");
+    expect(line).not.toMatch(/pharmacist/); // no hand-off added
     expect(isApprovedSpeech(line)).toBe(true);
+    const zhView = resolveExplanation(toExplain(), "zh-Hans")!;
+    expect(fillRecordFacts(t("zh-Hans", "explainDoseQuestion"), zhView, "zh-Hans")).toBe(`${zhView.explanation.instructionIntro}${zhView.explanation.instruction}`);
     expect(isApprovedSpeech(fillRecordFacts(t("zh-Hans", "explainDoseQuestion"), resolveExplanation(toExplain(), "zh-Hans")!, "zh-Hans"))).toBe(true);
+  });
+
+  it.each([
+    "Yes, that is my correct dosage. I will now take one tablet with the meal.",
+    "my dosage is the same as the label",
+    "the dose is fine",
+    "剂量没问题",
+  ])("a statement that mentions the dose (%j) is not a dose question: no boundary line, no hand-off", (text) => {
+    for (const step of [0, 1, 2] as const) expect(said(text, step)).not.toBe("explainDoseQuestion");
   });
 
   it("not every 'how much' is a dose question", () => {
     expect(said("how much does it cost?", 0)).not.toBe("explainDoseQuestion");
+    expect(said("这个多少钱？", 0)).not.toBe("explainDoseQuestion");
   });
 
   it("a clear question that fits nothing is not told it wasn't heard", () => {
@@ -133,7 +145,7 @@ describe("in the call", () => {
     render(<CompanionExperience />);
     const before = sessionStore.getSnapshot();
     type("what should the next dosage be?");
-    expect(screen.getByText(/^I can’t decide your dose for you\. Your pharmacy record, checked on .*, says: “Take 1 tablet twice daily with meals\.”/)).toBeInTheDocument();
+    expect(screen.getByText("Your current pharmacy record says: Take 1 tablet twice daily with meals.")).toBeInTheDocument();
     expect(screen.queryByText(/didn’t quite catch that/)).toBeNull();
     expect(sessionStore.getSnapshot().explainStep).toBe(before.explainStep);
     expect(sessionStore.getSnapshot().state).toBe("explain");

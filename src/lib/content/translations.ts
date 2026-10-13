@@ -132,9 +132,9 @@ const en = {
   unclearExplainLastQuestion:
     "That’s a good question, but I can only explain what your pharmacy record says. Would you like me to say it again, or help you contact a pharmacist?",
   explainWhichOne: "Happy to. Would you like me to say it again, or help you contact a pharmacist?",
-  // Fixed boundary wording (CLAUDE.md §7): never a dose, only the record's own words and a way on.
-  explainDoseQuestion:
-    "I can’t decide your dose for you. Your pharmacy record, checked on {verifiedDate}, says: “{instruction}” If your dose has changed, tell me, or a pharmacist can check it with you.",
+  // Answering "what's my dose?" exactly as the explanation shows it (owner preference, 13 October
+  // 2026): the confirmed record's own instruction, nothing chosen, no hand-off added.
+  explainDoseQuestion: "Your current pharmacy record says: {instruction}",
   unclearExplainLast:
     "Sorry, I didn’t follow that. That’s everything your record says. I can say it again, help you contact a pharmacist, or we can finish here.",
   unclearRecordConflict:
@@ -310,6 +310,7 @@ const en = {
   contactClinic: "Contact my clinic",
   askHelper: "Ask my trusted helper",
   letFamilyKnow: "Let my family know",
+  contactFamily: "Contact my family",
   moreHelpOptions: "More ways to get help",
   callbackConfirm:
     "I can ask BrightCare Pharmacy to call you on the number in your record. Shall I send the request?",
@@ -563,8 +564,7 @@ const zhHans: Copy = {
   unclearLabelCheckQuestion: "这是个好问题，不过我只能讲解您的药房记录。先确认一下：这和您药盒上的标签一致吗？",
   unclearExplainLastQuestion: "这是个好问题，不过我只能解释您药房记录上的内容。要我再说一遍，还是协助您联系药剂师？",
   explainWhichOne: "好的。要我再说一遍，还是协助您联系药剂师？",
-  explainDoseQuestion:
-    "我不能替您决定剂量。您的药房记录（{verifiedDate}确认）写着：“{instruction}” 如果您的剂量有变化，请告诉我，或者请药剂师和您一起核对。",
+  explainDoseQuestion: "您目前的药房记录显示：{instruction}",
   unclearExplainLast:
     "抱歉，我没听明白。这就是您记录中的全部内容。我可以再说一遍、协助您联系药剂师，或者我们就到这里。",
   unclearRecordConflict: "我没太听清楚。您可以说「药剂师」请人帮忙确认，或说「继续」。",
@@ -710,6 +710,7 @@ const zhHans: Copy = {
   contactClinic: "联系我的诊所",
   askHelper: "请我信任的人帮忙",
   letFamilyKnow: "告诉我的家人",
+  contactFamily: "联系我的家人",
   moreHelpOptions: "更多求助方式",
   callbackConfirm:
     "我可以请BrightCare药房按您记录上的号码给您回电。要我发送请求吗？",

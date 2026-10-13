@@ -356,7 +356,7 @@ conversation-first work, the realtime voice migration and the active-call contro
 |---|---|
 | `npm run typecheck` | Pass |
 | `npm run lint` | Pass |
-| `npm run test` | 50 files, 871 tests pass (no live provider calls; providers are faked) |
+| `npm run test` | 50 files, 877 tests pass (no live provider calls; providers are faked) |
 | `npm run build` | Pass; `/api/voice/openai-session` and `/api/voice/elevenlabs-token` are dynamic routes |
 | `npm run check:bundle` | Pass: 24 client files, no secrets, credential endpoints or the removed SDK |
 
