@@ -120,15 +120,28 @@ export const understandCapabilityResponseSchema = z.discriminatedUnion("ok", [
   apiFailureSchema,
 ]);
 
+/**
+ * Every action the meaning-match may be offered (spokenActions + callActions). The server accepts
+ * no other id, so a tampered request can't offer a "yes" to a gate: none of these confirms a
+ * medicine, consents, approves or sends.
+ */
+export const INTENT_ACTION_IDS = [
+  "another", "back", "callback", "camera", "cannot-confirm", "carry-on", "clinic", "correct", "decline",
+  "dismiss", "dont-send", "dose", "dose-wrong", "end", "end-call", "family", "get-help", "label-differs", "next", "no-camera",
+  "not-it", "pharmacist", "pharmacist-callback", "prepare", "repeat", "retry", "review", "show-number",
+  "trusted-helper", "try-again", "understood", "unsure",
+] as const;
+export type IntentActionId = (typeof INTENT_ACTION_IDS)[number];
+/** Plain words only: prompt text from the browser can't carry markup or role tags. */
+const plainWords = z.string().trim().regex(/^[\p{L}\p{N} ,.'’()\-:]+$/u);
+
 /** Which on-screen action the person meant (POST /api/companion/intent). Gates are never in `actions`. */
 export const intentRequestSchema = z.object({
   utterance: z.string().trim().min(1).max(300),
   language: z.enum(["en", "zh-Hans"]),
-  actions: z
-    .array(z.object({ id: z.string().regex(/^[a-z-]{1,40}$/), description: z.string().min(1).max(120) }))
-    .max(12),
+  actions: z.array(z.object({ id: z.enum(INTENT_ACTION_IDS), description: plainWords.min(1).max(120) })).max(12),
   /** Where they are in the call, in plain words — never record content. */
-  context: z.string().trim().max(120).optional(),
+  context: plainWords.max(120).optional(),
 });
 /**
  * `action`: the on-screen action they meant. `outcome: "unclear"`: nothing intelligible — ask them

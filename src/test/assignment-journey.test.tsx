@@ -76,7 +76,9 @@ describe("primary journey (deck): question → Show medicine → camera → poss
     expect(screen.getByText("随餐每日服用一片，每日两次。")).toBeInTheDocument();
     typeIn("下一步");
     typeIn("我明白了");
-    expect(screen.getByText(t("zh-Hans", "completeHeading"))).toBeInTheDocument();
+    // The wrap-up is a companion message in the chat, not a separate screen.
+    expect(screen.getByText(new RegExp(`^${t("zh-Hans", "completeHeading")}`))).toBeInTheDocument();
+    expect(document.querySelector("[data-pinned]")).toBeNull();
   });
 
   it("switches language by itself when the person uses Chinese, and back for English", () => {

@@ -74,7 +74,12 @@ Small utilities may include:
 
 ### One conversational decision at a time
 
-Use one continuous call with changing contextual panels.
+Use one continuous call. Each step is a message in that conversation
+(amended 13 October 2026): the label check, the comparison, the callback
+summary and its outcome are companion messages with short headings and
+dividers, not panels, sheets or pop-ups. A contextual panel remains only
+where a tap is needed: the opening route choice, camera permission and
+guidance, and the safety pathway.
 
 Do not create separate pages or mandatory Next buttons for
 routine conversational turns.
@@ -360,11 +365,23 @@ to disclose simulation.
 An active call contains (amended 12 October 2026 at the owner's direction,
 docs/decisions.md "Active-call controls"):
 
-1. Compact header: identity and trust badge.
-2. The companion orb and one short status line.
+1. Compact header: identity and the demo-record label
+   (“BrightCare Pharmacy record (fictional)”). The record's full
+   source and date sit in the record's own messages, so the header
+   never reads as a pharmacist having checked what is being said
+   (amended 13 October 2026).
+2. The companion orb (compact) and one short, accurate status line
+   (“Listening…”, “Speaking…”). Interruption is advertised only
+   while the mic really is open during playback.
 3. The conversation transcript, in order, every turn readable,
    newest brought into view only while the person is at the bottom.
-4. At most one contextual panel, only when the step has controls.
+   Consecutive messages from one speaker share a label. A small
+   “Latest message” control appears between the transcript and the
+   controls, never over the text, only when scrolled up.
+4. At most one contextual panel, only where a tap is needed (opening
+   route choice, camera, safety). The dose check, the callback review
+   and the outcome are messages in the transcript, with no buttons
+   (amended 13 October 2026).
 5. A compact text box only when typing is needed (muted, no speech
    input, a paused mic) or asked for (Get help → Type instead).
 6. Exactly three persistent controls: Get help, Mute/Unmute, End call.
@@ -572,45 +589,76 @@ Missing data must not look like successful agreement.
 
 Allow the user to inspect the recipient and exact sharing content.
 
-Heading:
-
-“Check before sharing”
+Amended 13 October 2026: the review is one companion message in the
+conversation, under the line “I’ve prepared a short summary. Please
+check it, then say or type “send” if it’s right.” Its rows are short
+headings separated by subtle dividers. It has no buttons and no
+heading of its own; the message stays in the transcript afterwards,
+above the outcome.
 
 ### Order
 
-1. Recipient.
-2. Reason for the request.
-3. Medicine.
-4. Current record instruction, source, and date.
-5. Confirmed label instruction.
-6. Callback contact.
+Row labels (amended 13 October 2026, shown in small uppercase):
+
+1. TO — the fictional recipient.
+2. REASON FOR CALLBACK — her own words or the default concern.
+3. MEDICINE — name and strength.
+4. PHARMACY RECORD — the record's exact instruction, quoted, with
+   “BrightCare Pharmacy (fictional) · date” beside it.
+5. LABEL WORDING YOU CONFIRMED — quoted, only when it was confirmed.
+   Otherwise the row reads LABEL WORDING: “Not confirmed — not
+   included in the request”.
+6. CALLBACK NUMBER — masked.
 7. Sharing boundary.
-8. Send, edit, and cancel.
-9. Simulation notice.
+8. “Please check these details. You can tell me what to change, say
+   “send the request,” or say “cancel.””
+9. “Demo only — no real pharmacy is contacted.”
 
-### Actions
+### Position
 
-Primary:
-“Send callback request”
+A new summary (and each updated version) is brought into view at its
+first line, not its last. Live words, status changes and playback do
+not move the view while it is being read. Her own scrolling always
+wins; her next turn brings the conversation on. “Latest message” stays
+outside the messages.
 
-Alternatives:
-- Change something.
-- Don’t send.
-- Read this to me.
+### Actions (amended 13 October 2026)
+
+None on screen. Everything is said or typed:
+- “send the request” sends exactly the reviewed revision. A plain
+  “yes”, or “send” inside a hedge or a condition (“if it’s right, send
+  it”, “I would send it”), is told how to send. A question (“what
+  happens if I say send?”) gets a fixed explanation. Quoted, negated,
+  later, or to-someone-else uses never send. Interim words are never
+  interpreted. A repeated approval sends nothing more.
+- “cancel” or “don’t send” cancels with nothing sent.
+- Corrections, checked before any “send” in the same sentence:
+  “change the number to …” (or the number alone), “change the reason
+  to …”, “the label says …”. Each makes a new version with approval
+  cleared, shown again as “I’ve updated the summary. Nothing has been
+  sent.” New label wording is first shown back to confirm, then
+  compared again. “Change …” with nothing usable asks what to change.
+  “Change the number, then send” changes nothing and sends nothing
+  until the number is given; then a fresh “send the request” is needed.
+- “What’s the number?” says the full callback number.
+- “repeat” reads the summary again without advancing anything.
 
 ### Contact detail
 
-- Mask by default.
-- Provide a labelled reveal/edit mechanism.
-- Let the user inspect the full fictional value.
-- Do not send a value that cannot be reviewed.
+- Masked (“•••• 0188”) in the written summary; its last four digits
+  are spoken. The full number is said when she asks for it.
+- Changed in words; the new number makes a new version to check.
 
 ### Sharing boundary
 
-Only display this claim if the payload follows it:
+Only display this claim if the payload follows it. The payload also
+carries the patient ID and reference numbers (record version, label
+revision, request ID), which are not rows, so the claim names them
+(amended 13 October 2026):
 
-“Only the details shown here are included.
-Your label photo and full conversation are not included.”
+“Only the details shown here are included, with your patient ID and
+reference numbers for the record and this request. Your label photo
+and full conversation are not included.”
 
 ### Editing
 
@@ -646,10 +694,10 @@ Supporting copy:
 
 “The difference in your medication instructions still needs checking.”
 
-Actions:
-- Review request.
-- Return to call.
-- End call.
+Ways on, in words (amended 13 October 2026): “back to the call” /
+“carry on” returns to the conversation and says what is still open;
+“that's all” / “nothing else” ends the call. The sent summary and the
+outcome stay readable in the transcript.
 
 A success checkmark may label submission only.
 Do not put it beside the medication dose.
@@ -667,11 +715,9 @@ Body:
 “The request could not be delivered. No one has been notified.
 Your summary is still available.”
 
-Actions:
-- Try again.
-- View fictional pharmacy contact.
-- Review summary.
-- End call.
+In words (amended 13 October 2026): “try again” / “send again” sends
+the same request once more; the fictional pharmacy contact is shown in
+the outcome message; the summary stays above it; “end the call” ends.
 
 ### Unknown outcome
 

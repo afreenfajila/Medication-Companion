@@ -1,13 +1,13 @@
 "use client";
 
+import { ArrowDown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CallFooter } from "@/components/ui/call-footer";
 import { CompanionOrb } from "@/components/ui/companion-orb";
 import { PhoneShell, ScreenBody } from "@/components/ui/shell";
 import { helpResponseSchema, understandCapabilityResponseSchema, understandResponseSchema } from "@/lib/api/schemas";
-import { fillRecordFacts, resolveExplanation } from "@/lib/content/explanation";
+import { resolveExplanation } from "@/lib/content/explanation";
 import { isUnderstandKey } from "@/lib/content/understand-guard";
-import { recordSource } from "@/lib/content/seed-record";
 import { DOSE_SCENARIOS, buildCallbackPayload, callbackRequestId } from "@/lib/dose-check/dose-check";
 import { getDoseCallbackService, type CallbackResult } from "@/lib/services/dose-callback";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
@@ -18,14 +18,10 @@ import { guardRequestedState, pathForState } from "@/lib/session/state-machine";
 import { speakableText } from "@/lib/voice/speakable";
 import { getVoiceCoordinator, useVoiceCapabilities } from "@/lib/voice/use-voice";
 import { AnalyzingScreen, CameraGuidanceScreen, CameraPermissionScreen, ShowMedicineChoice } from "./camera-screens";
-import { CallFeed } from "./call-feed";
-import { CompleteScreen } from "./complete-screen";
-import { DoseCheckPanel } from "./dose-check-panel";
-import { ExplainScreen } from "./explain-screen";
+import { CallFeed, useFollowLatest } from "./call-feed";
 import { ListeningActions, TypedInput, listeningAction } from "./listening-screen";
 import { SafetyScreen } from "./safety-screen";
 import { HelpSheet } from "./help-sheet";
-import { HelpReviewPanel } from "./help-review";
 import { DisclosureFooter, ScreenHeader } from "./screen-chrome";
 import { StartScreen } from "./start-screen";
 import { useCallFeed } from "./use-call-feed";
@@ -48,16 +44,18 @@ const UNDERSTAND_HISTORY_TURNS = 6;
  * The whole call — from "Call with companion" to "End call" — happens on this
  * one screen, laid out like a calm phone call:
  *
- *   compact header → orb + one status line → the conversation transcript (the
- *   screen's one scroller) → the current step's contextual controls, only when
- *   it has some → the text box, only when typing is needed or asked for →
- *   the three call controls: Get help · Mute · End call.
+ *   compact header → orb + one status line → the conversation (the screen's one
+ *   scroller) → the current step's controls, only for the few steps that need a
+ *   tap (camera, photo, the help options) → the text box, only when typing is
+ *   needed or asked for → the three call controls: Get help · Mute · End call.
  *
- * Everything else is contextual: camera, confirmation, label and callback
- * controls appear in their own steps; Repeat, Try again and Tap to talk appear
- * only for recovery; Repeat, typing, the interrupt setting and About are also in
- * the Get help sheet. Only the pre-call landing (`StartScreen`) is a different
- * layout, since a call cannot be "in progress" before it starts.
+ * Medicine confirmation, the label check, the comparison, "check before sending",
+ * submission progress and outcomes are all messages in the conversation, answered
+ * in words (said or typed) — never a separate screen, sheet or set of reply buttons.
+ * Repeat, Try again and Tap to talk appear only for recovery; Repeat, typing, the
+ * interrupt setting and About are also in the Get help sheet. Only the pre-call
+ * landing (`StartScreen`) is a different layout, since a call cannot be "in
+ * progress" before it starts.
  *
  * The URL never decides the state: `?state=` is compared to the authoritative
  * session state and rewritten to match, so `/companion?state=explain` without
@@ -165,20 +163,11 @@ export function CompanionExperience() {
     };
   }, [doseSubmitting, sessionId, doseScenario]);
 
-  // When the panel changes under the button that was just pressed (Send, Yes,
-  // Don't send…), that button disappears and keyboard focus would drop to the page.
-  // Only then is focus moved to the new panel; focus that's somewhere else stays put,
-  // and transcript updates never move it (PRD §12, design-standard §21).
-  const dose = session.doseCheck;
-  const panelKey = [
-    session.state,
-    session.helpFlow?.stage,
-    dose?.step,
-    dose?.labelRevision,
-    dose?.offer,
-    dose?.callback?.status,
-    dose?.callback?.revision,
-  ].join("|");
+  // When the panel changes under the button that was just pressed (Use camera, a help
+  // option…), that button disappears and keyboard focus would drop to the page. Only then
+  // is focus moved to the new panel; focus that's somewhere else stays put, and
+  // transcript updates never move it (PRD §12, design-standard §21).
+  const panelKey = `${session.state}|${session.helpFlow?.stage ?? ""}`;
   useEffect(() => {
     const active = document.activeElement;
     if (active && active !== document.body && active.isConnected) return;
@@ -398,6 +387,7 @@ export function CompanionExperience() {
     feedRef.current = feed;
   }, [feed]);
   const orbState = conversation.speaking ? "speaking" : conversation.listening ? "listening" : "idle";
+  const follow = useFollowLatest(scrollerRef);
 
   let pinnedActions: React.ReactNode = null;
   switch (session.state) {
@@ -450,36 +440,11 @@ export function CompanionExperience() {
       pinnedActions = null;
       break;
     case "explain":
-      // Defensive: the reducer cannot enter explain without a confirmed match.
-      pinnedActions = explanation && session.doseCheck ? (
-        <DoseCheckPanel
-          t={t}
-          language={language}
-          dose={session.doseCheck}
-          record={
-            session.doseCheck.step === "record-unavailable"
-              ? null
-              : {
-                  instruction: explanation.explanation.instruction,
-                  sourceName: recordSource.name,
-                  recordedAt: recordSource.verifiedAt,
-                }
-          }
-          onAction={(action) => dispatch({ type: "DOSE", action })}
-          onGetHelp={() => dispatch({ type: "GET_HELP" })}
-          onRepeat={() => dispatch({ type: "REPEAT" })}
-          onEnd={() => dispatch({ type: "END_CALL" })}
-        />
-      ) : explanation ? (
-        <ExplainScreen
-          t={t}
-          step={session.explainStep}
-          recordConflict={session.recordConflict}
-          onConflictChoice={(choice) => dispatch({ type: "RECORD_CONFLICT_CHOICE", choice })}
-          sourceLine={fillRecordFacts(t("recordCheckedOn"), explanation, language)}
-          onLabelCheck={(matches) => dispatch({ type: "LABEL_CHECK", matches })}
-        />
-      ) : null;
+      // The explanation, the label check, the record-conflict question and the whole dose-change
+      // check (record, box, difference, summary to check, outcome) are messages in the
+      // conversation, answered in words. The gates are unchanged: every answer goes through the
+      // same interpreter and reducer as speech (commands.ts, state-machine.ts).
+      pinnedActions = null;
       break;
     case "safety":
       pinnedActions = (
@@ -492,30 +457,16 @@ export function CompanionExperience() {
         />
       );
       break;
-    case "complete":
-      pinnedActions = <CompleteScreen t={t} onAnother={() => dispatch({ type: "NEW_MEDICINE" })} />;
-      break;
+    case "complete": // the wrap-up is a line in the conversation ("another medicine" / "that's all")
     case "start":
     default:
       pinnedActions = null;
   }
-  // A help request sits on top of whichever step offered it, until it is done —
-  // except urgent guidance, which always stays visible, with the request's status below it.
-  // A help request in progress (owner decision, 12 October 2026): its question and status are
-  // lines in the conversation, answered in words — no card, no buttons. Only a clear yes sends
-  // (HELP_CONFIRM, reducer-checked). Urgent guidance always stays on screen.
+  // A help request in progress (owner decision, 12 October 2026): its question, "check before
+  // sending" and its status are messages in the conversation, answered in words — no card, no
+  // buttons. Only a clear yes confirms and only an explicit "send" sends (reducer-checked).
+  // Urgent guidance always stays on screen, with the request's status below it.
   if (session.helpFlow && session.safetyReason !== "urgent-risk") pinnedActions = null;
-  // …except "check before sending": what goes to another party is shown, then sent on an explicit "send".
-  if (session.helpFlow?.stage === "review") {
-    pinnedActions = (
-      <HelpReviewPanel
-        t={t}
-        kind={session.helpFlow.kind}
-        reason={session.helpFlow.reason}
-        onCancel={() => dispatch({ type: "HELP_CONFIRM", granted: false })}
-      />
-    );
-  }
 
   // The listening step shows at most one contextual action; without one there is no panel.
   const hasPinned =
@@ -528,7 +479,7 @@ export function CompanionExperience() {
         <ScreenHeader t={t} language={language} compact={inCall} />
         {inCall && (
           // The calm companion area: the orb and one short status line. Not part of the scroller.
-          <div className="flex shrink-0 flex-col items-center gap-1 px-4 pb-2">
+          <div className="flex shrink-0 flex-col items-center gap-0.5 px-4 pb-1">
             <CompanionOrb size="xs" state={orbState} />
             {speechInput ? (
               <VoiceBar view={conversation} t={t} onRepeat={() => dispatch({ type: "REPEAT" })} />
@@ -568,14 +519,30 @@ export function CompanionExperience() {
                   interim={conversation.interim}
                   thinking={companionThinking || voiceHeld}
                   hideRecord={session.state === "safety"}
-                  scrollerRef={scrollerRef}
-                  onJumpToLatest={() => mainRef.current?.focus({ preventScroll: true })}
+                  atBottom={follow.atBottom}
+                  placedRef={follow.placed}
                   t={t}
                 />
               </div>
             )}
           </main>
         </ScreenBody>
+        {inCall && follow.scrolledUp && (
+          // Re-reading earlier turns: a small way back down, outside the messages so it never covers them.
+          <div className="flex shrink-0 justify-center border-t border-line bg-canvas">
+            <button
+              type="button"
+              onClick={() => {
+                follow.jump();
+                mainRef.current?.focus({ preventScroll: true });
+              }}
+              className="inline-flex min-h-11 items-center gap-1.5 px-3 text-[15px] font-bold text-teal-800 underline underline-offset-4 hover:text-navy-900"
+            >
+              <ArrowDown className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{t("latestMessage")}</span>
+            </button>
+          </div>
+        )}
         {/* Controls never wait for the voice: only the transcript line does. */}
         {hasPinned && (
           // The current step's own controls, only while it has some. Capped and scrollable:

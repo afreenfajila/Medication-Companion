@@ -203,19 +203,17 @@ describe("in-call flow", () => {
     expect(screen.getByLabelText("说出来，或在这里输入")).toBeInTheDocument();
   });
 
-  it("beside the instruction: shows the dated source and asks to compare with the label; 'It looks different' reaches safety", () => {
+  it("beside the instruction: says the dated source and asks to compare with the label, in words; 'it looks different' reaches safety", () => {
     sessionStore.setForTest(run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain()));
     render(<CompanionExperience />);
     expect(screen.getByText("Take 1 tablet twice daily with meals.")).toBeInTheDocument();
-    expect(screen.getByText("BrightCare Pharmacy · checked 21 September 2026")).toBeInTheDocument();
-    const check = screen.getByRole("group", { name: "Does this match what’s printed on your label?" });
-    expect(within(check).getByRole("button", { name: "Yes, it matches" })).toBeInTheDocument();
-    // Neither answer looks like the default: no filled "yes" to agree with without looking.
-    expect(primaryButtons(check)).toHaveLength(0);
-    // The pinned step scrolls on its own rather than being clipped or pushing the call controls away.
-    expect(document.querySelector("[data-pinned]")).toHaveClass("overflow-y-auto", "max-h-[60%]");
+    expect(screen.getByText("BrightCare Pharmacy · checked 21 September 2026.")).toBeInTheDocument();
+    expect(screen.getByText("Does this match what’s printed on your label?")).toBeInTheDocument();
+    // Answered in words: no buttons to agree with without looking, and no panel.
+    expect(screen.queryByRole("button", { name: /yes, it matches|it looks different/i })).toBeNull();
+    expect(document.querySelector("[data-pinned]")).toBeNull();
 
-    fireEvent.click(within(check).getByRole("button", { name: "It looks different" }));
+    send("it looks different");
     expect(screen.getByText(/When the label and the record don’t agree, a pharmacist is the best person to look/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
     // "Incorrect output" leads to a person — not another photo.
@@ -307,9 +305,10 @@ describe("in-call flow", () => {
     expect(screen.queryByRole("button", { name: /yes, send the request/i })).toBeNull(); // answered in words
     send("yes, please send it");
     await flush();
-    // "Check before sending": what goes; then an explicit "send" sends it.
-    expect(screen.getByRole("heading", { name: "Check before sharing" })).toBeInTheDocument();
+    // "Check before sending": what goes, inside the companion's message; then an explicit "send" sends it.
+    expect(screen.getByText(/^Here is the request I’d send to BrightCare Pharmacy\./)).toBeInTheDocument();
     expect(screen.getByText("Please call me back")).toBeInTheDocument();
+    expect(document.querySelector("[data-transcript] button")).toBeNull();
     expect(screen.queryByText(/I couldn’t send that just now/)).toBeNull(); // the "yes" sent nothing
     send("send it");
     await flush();

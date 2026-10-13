@@ -76,7 +76,7 @@ describe("the medicine confirmation is a conversation", () => {
     expect(decision("yes, I think so, maybe")).toBe("unsure");
     expect(decision("is it?")).toBe("unclear"); // a question is never a yes
     // The AI meaning-match can never say yes for her.
-    expect(spokenActions(ctx).some((a) => a.event.type === "CONFIRM_MATCH" && a.event.decision === "confirmed")).toBe(false);
+    expect(spokenActions(ctx).some((a) => a.event?.type === "CONFIRM_MATCH" && a.event.decision === "confirmed")).toBe(false);
   });
 
   it("typed 'yes' opens the record; typed 'not sure' does not", () => {

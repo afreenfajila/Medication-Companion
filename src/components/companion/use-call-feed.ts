@@ -5,7 +5,8 @@ import { fillRecordFacts, type ExplanationView } from "@/lib/content/explanation
 import type { Session } from "@/lib/session/state-machine";
 import type { AssistantTurn } from "@/lib/voice/coordinator";
 import { helpLine } from "@/lib/content/help-lines";
-import { confirmLine, doseCheckLine } from "@/lib/voice/speakable";
+import { confirmLine } from "@/lib/voice/speakable";
+import { doseMessage, helpReviewSections, type FeedSection } from "./chat-sections";
 import type { T } from "./screen-chrome";
 
 export type FeedMessage = {
@@ -14,6 +15,8 @@ export type FeedMessage = {
   lines: string[];
   /** Record content (the explanation, or a conflict reply quoting it): hidden while escalated. */
   record?: boolean;
+  /** Structured content under the lines (a comparison, a request to check): part of the same message. */
+  sections?: FeedSection[];
 };
 
 type Seen = {
@@ -26,6 +29,7 @@ type Seen = {
   noticeTurn: number;
   confirmSig: string;
   helpSig: string;
+  completeSig: string;
   userLineId: number;
   /** The current step's line, shown in its panel and not yet in the chat. */
   pendingStep: { sig: string; line: string } | null;
@@ -34,7 +38,7 @@ type Seen = {
 };
 
 function initialSeen(callCount: number): Seen {
-  return { callCount, assistantSig: "", userSig: "", inExplain: false, explainSig: "", conflictSig: "", noticeTurn: 0, confirmSig: "", helpSig: "", userLineId: 0, pendingStep: null, flushedStepSig: "" };
+  return { callCount, assistantSig: "", userSig: "", inExplain: false, explainSig: "", conflictSig: "", noticeTurn: 0, confirmSig: "", helpSig: "", completeSig: "", userLineId: 0, pendingStep: null, flushedStepSig: "" };
 }
 
 function explainStepLines(step: 0 | 1 | 2, e: ExplanationView["explanation"]): string[] {
@@ -53,9 +57,11 @@ function explainStepLines(step: 0 | 1 | 2, e: ExplanationView["explanation"]): s
  *  - the record explanation, revealed one chunk at a time as `explainStep`
  *    advances (this is genuinely long-form content worth scrolling back to).
  *
- * Camera/confirm/safety/complete are not duplicated here — they show their own
- * rich card in the pinned action area below the feed while they're current;
- * this keeps the transcript readable rather than repeating every UI heading.
+ * The dose-change check, a request to check before sending, and the wrap-up are
+ * messages here too, with their structured content (record, label, difference,
+ * summary) inside the message. Only the steps that still need a tap (camera,
+ * photo, the help options) keep a panel below the feed; their line moves into
+ * the chat as soon as the conversation moves on.
  * The feed clears when a new call starts and otherwise never rewrites history.
  *
  * `listeningLine` is what to actually show for a `listening`-state reply: the
@@ -94,16 +100,17 @@ export function useCallFeed(
       idRef.current += 1;
       additions.push({ id: `f${idRef.current}`, speaker, lines });
     };
-    const pushRecord = (...lines: string[]) => {
+    const pushRecord = (lines: string[], sections?: FeedSection[]) => {
       idRef.current += 1;
-      additions.push({ id: `f${idRef.current}`, speaker: "companion", lines, record: true });
+      additions.push({ id: `f${idRef.current}`, speaker: "companion", lines, record: true, sections });
     };
 
     // The companion's line on the steps that show it in their own panel (camera, photo
-    // reading, help screen, wrap-up). While the panel shows it, the chat doesn't repeat
-    // it; as soon as the conversation moves on — she answers, a remark is said, or the
-    // step changes — it goes into the chat in its place, so the history is complete.
-    const ownStep = session.state === "listening" || session.state === "explain" || session.state === "confirm-match" || session.state === "start";
+    // reading, help screen). While the panel shows it, the chat doesn't repeat it; as
+    // soon as the conversation moves on — she answers, a remark is said, or the step
+    // changes — it goes into the chat in its place, so the history is complete.
+    const ownStep =
+      session.state === "listening" || session.state === "explain" || session.state === "confirm-match" || session.state === "complete" || session.state === "start";
     const helpSpeaks = session.helpFlow !== null && session.safetyReason !== "urgent-risk";
     const stepNow = session.callActive && !ownStep && !helpSpeaks && stepLine && !held ? { sig: `${session.state}|${stepLine}`, line: stepLine } : null;
     const flushStep = () => {
@@ -158,10 +165,28 @@ export function useCallFeed(
       const helpSig = `${f.kind}:${f.stage}:${f.reference ?? ""}:${f.contactName ?? ""}:${session.language}`;
       if (helpSig !== seen.current.helpSig) {
         seen.current.helpSig = helpSig;
-        push("companion", helpLine(t, f));
+        // "Check before sending": what goes to the other party, inside the same message.
+        idRef.current += 1;
+        additions.push({
+          id: `f${idRef.current}`,
+          speaker: "companion",
+          lines: [helpLine(t, f)],
+          sections: f.stage === "review" ? helpReviewSections(t, f) : undefined,
+        });
       }
     } else if (!session.helpFlow) {
       seen.current.helpSig = "";
+    }
+
+    // The wrap-up ("Thank you for checking…"): a line in the conversation, answered in words.
+    if (session.state === "complete" && stepLine && !held) {
+      const completeSig = `${session.language}:${stepLine}`;
+      if (completeSig !== seen.current.completeSig) {
+        seen.current.completeSig = completeSig;
+        push("companion", stepLine);
+      }
+    } else if (session.state !== "complete") {
+      seen.current.completeSig = "";
     }
 
     // "I found a possible match… Is this the medicine you have?": the confirmation is part of
@@ -182,23 +207,28 @@ export function useCallFeed(
       // Language is part of the signature: switching language while reading a
       // step re-says that step in the new language (content-only, per
       // design-standard — it never resets which step or whether it's confirmed).
-      // Dose check: one line per step (keyed by its text), instead of the step-by-step explanation.
-      const doseLine = session.doseCheck ? doseCheckLine(session, t, explanation) : null;
-      const explainSig = session.doseCheck ? `dose:${doseLine}` : `${session.explainStep}:${session.language}`;
+      // Dose check: one message per step (keyed by what it says), with the record, the label, the
+      // difference or the summary to check inside it — instead of the step-by-step explanation.
+      const dose = session.doseCheck ? doseMessage(session, t, explanation) : null;
+      const explainSig = session.doseCheck ? `dose:${dose?.key ?? ""}` : `${session.explainStep}:${session.language}`;
       if (session.doseCheck) {
-        if (doseLine && explainSig !== seen.current.explainSig) {
+        if (dose && explainSig !== seen.current.explainSig) {
           seen.current.explainSig = explainSig;
-          pushRecord(doseLine);
+          pushRecord(dose.lines, dose.sections);
         }
       } else if (explainSig !== seen.current.explainSig) {
         seen.current.explainSig = explainSig;
-        pushRecord(...explainStepLines(session.explainStep, explanation.explanation));
+        // Beside the instruction, the record's source and date and the label question are said —
+        // and, with no panel for them now, shown here in the same words.
+        const besideInstruction =
+          session.explainStep === 1 ? [`${fillRecordFacts(t("recordCheckedOn"), explanation, session.language)}.`, t("labelCheckPrompt")] : [];
+        pushRecord([...explainStepLines(session.explainStep, explanation.explanation), ...besideInstruction]);
       }
       // "My doctor said…" is answered from the record, once per turn and language.
       const conflictSig = `${session.turnCount}:${session.language}`;
       if (session.recordConflict && conflictSig !== seen.current.conflictSig) {
         seen.current.conflictSig = conflictSig;
-        pushRecord(fillRecordFacts(t("recordConflict"), explanation, session.language));
+        pushRecord([fillRecordFacts(t("recordConflict"), explanation, session.language)]);
       }
     } else if (session.state !== "explain") {
       seen.current.inExplain = false;

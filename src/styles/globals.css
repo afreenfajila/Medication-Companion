@@ -68,7 +68,7 @@ body {
   flex: none;
 }
 .orb--xs {
-  --orb-size: 64px;
+  --orb-size: 52px;
 }
 .orb--sm {
   --orb-size: 112px;

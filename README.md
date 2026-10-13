@@ -131,6 +131,13 @@ Details: `docs/a4-dose-change-demo.md`.
 10. Approve or cancel simulated sharing.
 11. Inspect the request outcome.
 
+Every step from 5 on is answered in words, said or typed, in the one conversation:
+"yes" / "no" / "change the wording" to the reading, "pharmacist" to the difference,
+"yes please" to the offer, then "send the request" or "cancel" to the summary (or a
+correction, such as "change the number to 0000 0199"); "try again",
+"back to the call" and "that's all" afterwards. There are no panels or buttons for these
+steps (13 October 2026).
+
 A visible notice must explain that no real request is sent.
 
 ### Deterministic scenarios
@@ -356,7 +363,7 @@ conversation-first work, the realtime voice migration and the active-call contro
 |---|---|
 | `npm run typecheck` | Pass |
 | `npm run lint` | Pass |
-| `npm run test` | 50 files, 877 tests pass (no live provider calls; providers are faked) |
+| `npm run test` | 50 files, 905 tests pass (no live provider calls; providers are faked) |
 | `npm run build` | Pass; `/api/voice/openai-session` and `/api/voice/elevenlabs-token` are dynamic routes |
 | `npm run check:bundle` | Pass: 24 client files, no secrets, credential endpoints or the removed SDK |
 

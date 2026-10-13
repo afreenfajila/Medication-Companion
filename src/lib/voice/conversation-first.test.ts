@@ -39,20 +39,47 @@ describe("gate answers in natural sentences — but a question is never a yes", 
 });
 
 describe("the reviewed callback summary: cancelled or sent in words, only by an explicit 'send'", () => {
+  const draft = {
+    callbackContact: "0000 0188",
+    concernSummary: "My medicine label and current record show different instructions.",
+    confirmedLabel: { instructionText: "Take 2 tablets twice daily with meals", labelRevision: 1 },
+  };
   const review = (status: "reviewing" | "failed" | "unknown"): CommandContext => ({
     ...base,
     state: "explain",
-    doseCheck: { step: "compared", callback: { status, revision: 3 } } as unknown as CommandContext["doseCheck"],
+    doseCheck: { step: "compared", callback: { status, revision: 3, draft } } as unknown as CommandContext["doseCheck"],
   });
-  it("'don't send' cancels; a question does nothing", () => {
+  const save = (changes: Partial<{ callbackContact: string; concernSummary: string; labelInstruction: string }>) => ({
+    type: "DOSE",
+    action: {
+      kind: "save",
+      changes: { callbackContact: draft.callbackContact, concernSummary: draft.concernSummary, labelInstruction: draft.confirmedLabel.instructionText, ...changes },
+    },
+  });
+  it("'don't send' and 'cancel' cancel; a question about sending is answered and sends nothing", () => {
     expect(eventOf("don't send it", review("reviewing"))).toEqual({ type: "DOSE", action: { kind: "dont-send" } });
-    expect(eventOf("should I send it?", review("reviewing"))).toBe("unclear");
+    expect(eventOf("cancel", review("reviewing"))).toEqual({ type: "DOSE", action: { kind: "dont-send" } });
+    expect(eventOf("cancel it please", review("reviewing"))).toEqual({ type: "DOSE", action: { kind: "dont-send" } });
+    for (const words of ["should I send it?", "What happens if I say send?"]) {
+      expect(interpretUtterance(words, review("reviewing")), words).toEqual({ kind: "reply", key: "doseSendExplained" });
+    }
     // After an unknown outcome the request can't be cancelled in words either.
     expect(eventOf("don't send it", review("unknown"))).toBe("unclear");
   });
   it("an explicit 'send' (said or typed) sends exactly the reviewed revision (owner decision, 12 October 2026)", () => {
     for (const status of ["reviewing", "failed", "unknown"] as const) {
-      for (const words of ["send", "send it", "yes, send it", "submit it", "send the request", "send it again", "发送", "提交"]) {
+      for (const words of [
+        "send",
+        "send it",
+        "yes, send it",
+        "submit it",
+        "send the request",
+        "send it again",
+        "okay, let's, let's continue and send it",
+        "I want to send the summary",
+        "发送",
+        "提交",
+      ]) {
         expect(eventOf(words, review(status)), `${words} / ${status}`).toEqual({ type: "DOSE", action: { kind: "send", revision: 3 } });
       }
     }
@@ -61,12 +88,22 @@ describe("the reviewed callback summary: cancelled or sent in words, only by an 
   });
 
   it("nothing else sends: a plain yes asks for 'send'; questions, hedges, negatives and long sentences don't send", () => {
-    expect(interpretUtterance("yes", review("reviewing"))).toEqual({ kind: "reply", key: "helpSayToSend" });
+    expect(interpretUtterance("yes", review("reviewing"))).toEqual({ kind: "reply", key: "doseSayToSend" });
+    // "Send" inside a hedge or a condition is told how to send, in fixed words — never left to the AI.
+    for (const words of ["maybe send it", "if it's right, send it", "I would send it"]) {
+      expect(interpretUtterance(words, review("reviewing")), words).toEqual({ kind: "reply", key: "doseSayToSend" });
+    }
     for (const words of [
       "should I send it?",
+      "What happens if I say send?",
       "can you send it",
       "maybe send it",
       "don't send it yet",
+      "if it's right, send it",
+      "I would send it",
+      "send it later",
+      "send it to my daughter",
+      'my daughter said "send it"',
       "I was going to send my daughter a message about the weather later today",
     ]) {
       const r = eventOf(words, review("reviewing"));
@@ -74,9 +111,42 @@ describe("the reviewed callback summary: cancelled or sent in words, only by an 
     }
   });
 
+  it("the offered phrase works typed with its own quotation marks", () => {
+    expect(eventOf("“send the request”", review("reviewing"))).toEqual({ type: "DOSE", action: { kind: "send", revision: 3 } });
+  });
+
+  it("a correction is applied before any 'send' in the same breath, and never sends", () => {
+    // "Change the number, then send": the new number makes a new version to check; nothing is sent.
+    expect(eventOf("change the number to 0000 0199, then send", review("reviewing"))).toEqual(save({ callbackContact: "0000 0199" }));
+    expect(eventOf("change the number, then send", review("reviewing"))).toBe("reply");
+    expect(interpretUtterance("change the number, then send", review("reviewing"))).toEqual({ kind: "reply", key: "doseAskNumber" });
+    // Asked for the number, she just says it.
+    expect(eventOf("0000 0199", review("reviewing"))).toEqual(save({ callbackContact: "0000 0199" }));
+    expect(interpretUtterance("change the number to 12", review("reviewing"))).toEqual({ kind: "reply", key: "doseAskNumber" });
+    expect(eventOf("change the reason to I would like to ask about the new amount", review("reviewing"))).toEqual(
+      save({ concernSummary: "I would like to ask about the new amount" }),
+    );
+    expect(eventOf("the label says Take 1 tablet twice daily with meals", review("reviewing"))).toEqual(
+      save({ labelInstruction: "Take 1 tablet twice daily with meals" }),
+    );
+    expect(interpretUtterance("change the wording", review("reviewing"))).toEqual({ kind: "reply", key: "doseAskWording" });
+    expect(interpretUtterance("change something and send it", review("reviewing"))).toEqual({ kind: "reply", key: "doseWhatToChange" });
+    expect(interpretUtterance("what's the number?", review("reviewing"))).toEqual({ kind: "reply", key: "doseNumberIs" });
+  });
+
+  it("a label correction waiting for its yes is confirmed by 'yes', even with a summary open", () => {
+    const ctx: CommandContext = {
+      ...base,
+      state: "explain",
+      doseCheck: { step: "label", reading: "Take 1 tablet twice daily with meals", labelRevision: 2, callback: { status: "reviewing", revision: 3, draft } } as unknown as CommandContext["doseCheck"],
+    };
+    expect(eventOf("yes", ctx)).toEqual({ type: "DOSE", action: { kind: "confirm-label", revision: 2 } });
+    expect(eventOf("send the request", ctx)).not.toEqual({ type: "DOSE", action: { kind: "send", revision: 3 } });
+  });
+
   it("the AI meaning-match is never offered 'send'", () => {
     for (const status of ["reviewing", "failed", "unknown"] as const) {
-      expect(spokenActions(review(status)).some((a) => a.event.type === "DOSE" && a.event.action.kind === "send")).toBe(false);
+      expect(spokenActions(review(status)).some((a) => a.event?.type === "DOSE" && a.event.action.kind === "send")).toBe(false);
     }
   });
 });
@@ -109,7 +179,7 @@ describe("what the AI meaning-match may choose: never a yes to a gate", () => {
   ];
   it.each(contexts.map((c, i) => [i, c] as const))("context %i", (_i, ctx) => {
     const actions = spokenActions(ctx);
-    for (const a of actions) expect(isGateYes(a.event), a.id).toBe(false);
+    for (const a of actions) if (a.event) expect(isGateYes(a.event), a.id).toBe(false);
     expect(new Set(actions.map((a) => a.id)).size).toBe(actions.length); // ids are unique
   });
   it("the help screen offers its own options, and urgent guidance offers none", () => {

@@ -1,3 +1,4 @@
+import { triesToInstruct } from "@/lib/ai/input-guard";
 import type { CopyKey } from "@/lib/content/translations";
 import { unsupportedMedicalPatterns, urgentPatterns } from "@/lib/safety/classify";
 import type { ContextualActionId, UiLanguage } from "@/types/content";
@@ -81,7 +82,10 @@ const MATCH_CLAIM_PATTERNS: readonly RegExp[] = [
 ];
 
 // The reply is plain text read aloud and shown in a card — no markup, links or tool-ish output.
-const FORMAT_PATTERNS: readonly RegExp[] = [/https?:|www\./i, /[<>*#`[\]{}|]/];
+const FORMAT_PATTERNS: readonly RegExp[] = [/https?:|www\./i, /[<>*#`[\]{}|@]/];
+
+// A reply that talks about the model itself or its instructions has left the call's scope.
+const SELF_REFERENCE = /\b(system prompt|language model|as an ai|my (instructions|programming|guidelines))\b|语言模型|系统提示|我的指令/i;
 
 // Tone contract rule 6 (CLAUDE.md § Assignment 3, A): nobody is at fault, and we
 // never tell her what to do. Applies to fixed copy too (see content.test.ts).
@@ -132,6 +136,7 @@ export function isSafeCompanionReply(text: string, language?: UiLanguage): boole
   if (DOSING_PATTERNS.some((p) => p.test(reply))) return false;
   if (MATCH_CLAIM_PATTERNS.some((p) => p.test(reply))) return false;
   if (FORMAT_PATTERNS.some((p) => p.test(reply))) return false;
+  if (SELF_REFERENCE.test(reply) || triesToInstruct(reply)) return false;
   if (usesBlameWords(reply)) return false;
   if (ADVICE_PATTERNS.some((p) => p.test(reply))) return false;
   if (language) {

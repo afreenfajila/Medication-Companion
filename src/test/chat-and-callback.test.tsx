@@ -64,14 +64,16 @@ describe("a pharmacist callback: asked in words, checked, then sent by an explic
     await flush();
     expect(posts.filter((p) => p.url === "/api/help/request")).toHaveLength(0); // nothing sent by "yes"
 
-    const review = screen.getByRole("region", { name: "Check before sharing" });
+    // The request to check is inside the companion's message: no panel, no buttons.
+    const review = document.querySelector("[data-transcript] [data-sections]")!;
     expect(review).toHaveTextContent("BrightCare Pharmacy — fictional demo");
     expect(review).toHaveTextContent("Please call me back");
     expect(review).toHaveTextContent(t("en", "helpReasonGeneral")); // the reason code that is sent, in words
-    expect(review).not.toHaveTextContent("0000 0188"); // masked until asked
-    fireEvent.click(screen.getByRole("button", { name: "Show number" }));
-    expect(review).toHaveTextContent("0000 0188");
-    expect(chat().at(-1)).toBe(`companion: ${t("en", "callbackReview")}`); // and said, in the chat
+    expect(review).toHaveTextContent("•••• 0188");
+    expect(review).not.toHaveTextContent("0000 0188"); // masked
+    expect(review.querySelector("button")).toBeNull();
+    expect(screen.queryByRole("region", { name: /check before sharing/i })).toBeNull();
+    expect(chat().at(-1)).toContain(`companion: ${t("en", "callbackReview")}`); // and said, in the chat
 
     expect(screen.queryByRole("button", { name: /send callback request/i })).toBeNull(); // no Send button
     // A plain yes or a question doesn't send ("maybe send it" is a hedge: it cancels, sending nothing).

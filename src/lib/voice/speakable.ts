@@ -138,15 +138,18 @@ export function doseCheckLine(
     if (cb.status === "unknown") return join(t("doseUnknown"), t("doseUnknownBody"));
     // Reviewing/editing: the summary read aloud (the callback number stays masked, so it isn't).
     const r = cb.draft;
+    const last4 = r.callbackContact.replace(/\D/g, "").slice(-4);
     return join(
-      t("doseReviewIntro"),
+      t(cb.updated ? "doseReviewUpdated" : "doseReviewIntro"),
       `${t("doseTo")}: ${t("doseRecipient")}.`,
-      `${t("doseReason")}: ${r.concernSummary}`,
+      `${t("doseReasonRow")}: ${r.concernSummary}`,
       `${t("doseMedicine")}: ${r.medicine.displayName} ${r.medicine.strengthText}.`,
       `${t("doseRecordRow")}: ${r.currentRecord ? `${r.currentRecord.instructionText} (${source}).` : `${t("doseNotAvailable")}.`}`,
-      `${t("doseLabelRow")}: ${r.confirmedLabel ? r.confirmedLabel.instructionText : `${t("doseNotConfirmed")}.`}`,
+      r.confirmedLabel ? `${t("doseLabelRow")}: ${r.confirmedLabel.instructionText}` : `${t("doseLabelWordingRow")}: ${t("doseLabelNotIncluded")}.`,
+      t("doseNumberEnding").replace("{last4}", last4),
       t("doseShareNotice"),
-      t("dosePrototypeNotice"),
+      t("doseReviewPrompt"),
+      t("doseDemoNotice"),
     );
   }
   // A correction waiting for confirmation comes before the summary it will update.

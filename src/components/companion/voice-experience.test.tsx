@@ -124,7 +124,7 @@ describe("the call starts voice automatically — no separate button", () => {
     act(() => vi.advanceTimersByTime(400));
 
     expect(fake.recognitions).toHaveLength(1); // opened without another tap
-    expect(screen.getByText(/listening… please speak now/i)).toBeInTheDocument();
+    expect(screen.getByText(/^listening…$/i)).toBeInTheDocument();
   });
 
   it("there is no separate voice-call toggle or labelled mic button anywhere on screen", () => {
@@ -160,7 +160,7 @@ describe("the call starts voice automatically — no separate button", () => {
         view={{ ...idleView, status: { kind: "speaking", callId: 1, turnId: 1, adapter: "elevenlabs", audioStarted: true, micOpen: true }, speaking: true, duplex: true }}
       />,
     );
-    expect(screen.getByText(/speaking… I’m still listening/i)).toBeInTheDocument();
+    expect(screen.getByText(/^speaking… you can talk any time\./i)).toBeInTheDocument();
     // The interrupt setting lives in the Get help sheet, not in the call view.
     expect(screen.queryByRole("button")).toBeNull();
   });
@@ -580,7 +580,7 @@ describe("hands-free conversation — recovery and control", () => {
     expect(fake.recognitions[0].started).toBe(false);
     expect(muteButton()).toHaveAccessibleName("Unmute");
     // Said in words, in the polite status line, and typing opens in its place.
-    expect(screen.getByText(/^Muted\. The companion can’t hear you/)).toBeInTheDocument();
+    expect(screen.getByText(/^Muted\. Type below, or tap Unmute\./)).toBeInTheDocument();
     expect(screen.getByLabelText(/type it here/i)).toBeInTheDocument();
     tick();
     expect(fake.recognitions).toHaveLength(1); // stayed off — no new recognition opened
@@ -784,9 +784,12 @@ describe("one visible line for every spoken line", () => {
     act(() => fake.recognitions.at(-1)!.say("I have chest pain", true, 0.3));
     const notice = "Sorry, I didn’t quite catch that. Could you say it again? Typing it works well too.";
     expect(fake.utterances.at(-1)!.text).toBe(notice);
-    // It is a companion card in the feed (not only a status caption).
-    const label = screen.getAllByText(/companion says/i).at(-1)!;
-    expect(label.parentElement?.textContent).toContain(notice);
+    // It is a companion card in the feed (not only a status caption) — and, following the
+    // greeting with no user turn between, it shares the greeting's "Companion says" label.
+    const cards = document.querySelectorAll('[data-speaker="companion"]');
+    expect(cards[cards.length - 1]).toHaveTextContent(notice);
+    expect(cards[cards.length - 1]).not.toHaveTextContent(/companion says/i);
+    expect(screen.getAllByText(/companion says/i)).toHaveLength(1);
   });
 
   it("without any voice, the same notices still appear as text and typing keeps working", () => {
@@ -821,16 +824,23 @@ describe("the reviewed callback is sent by an explicit spoken or typed 'send'", 
     const fake = install();
     toReview();
     render(<CompanionExperience />);
-    fireEvent.click(screen.getByRole("button", { name: "Yes, that is what the label says" }));
-    fireEvent.click(screen.getByRole("button", { name: "Ask for a pharmacist callback" }));
-    fireEvent.click(screen.getByRole("button", { name: "Yes, prepare a summary" }));
-    expect(screen.getByRole("heading", { name: "Check before sharing" })).toBeInTheDocument();
+    // Each step is said, not tapped: the reading, the pharmacist, the summary.
+    for (const words of ["yes", "ask a pharmacist", "yes please"]) {
+      finishSpeaking(fake);
+      act(() => fake.recognitions.at(-1)!.say(words, true));
+    }
+    expect(screen.getByText("I’ve prepared a short summary for the pharmacist.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send callback request" })).toBeNull();
     finishSpeaking(fake);
 
     act(() => fake.recognitions.at(-1)!.say("yes", true));
     expect(sessionStore.getSnapshot().doseCheck?.callback?.status).toBe("reviewing");
-    expect(screen.getByText("Nothing has been sent yet. If it’s right, say or type “send”.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing has been sent yet. If it’s right, say “send the request.” To change something, tell me what.")).toBeInTheDocument();
+    finishSpeaking(fake);
+
+    // Live (interim) words never send — only the final transcript is interpreted.
+    act(() => fake.recognitions.at(-1)!.say("send the request", false));
+    expect(sessionStore.getSnapshot().doseCheck?.callback?.status).toBe("reviewing");
     finishSpeaking(fake);
 
     act(() => fake.recognitions.at(-1)!.say("yes, send it", true));
@@ -842,10 +852,11 @@ describe("the reviewed callback is sent by an explicit spoken or typed 'send'", 
     const fake = install();
     toReview();
     render(<CompanionExperience />);
-    fireEvent.click(screen.getByRole("button", { name: "Yes, that is what the label says" }));
-    fireEvent.click(screen.getByRole("button", { name: "Ask for a pharmacist callback" }));
-    fireEvent.click(screen.getByRole("button", { name: "Yes, prepare a summary" }));
-    expect(screen.getByRole("heading", { name: "Check before sharing" })).toBeInTheDocument();
+    for (const words of ["yes", "ask a pharmacist", "yes please"]) {
+      finishSpeaking(fake);
+      act(() => fake.recognitions.at(-1)!.say(words, true));
+    }
+    expect(screen.getByText("I’ve prepared a short summary for the pharmacist.")).toBeInTheDocument();
     finishSpeaking(fake);
 
     act(() => fake.recognitions.at(-1)!.say("don't send it", true));

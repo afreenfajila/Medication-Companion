@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CompanionExperience } from "@/components/companion/companion-experience";
 import { unclearGuidanceKey } from "@/components/companion/use-conversation";
@@ -31,7 +31,17 @@ const said = (text: string, step: 0 | 1 | 2) => {
 };
 
 describe("questions during the explanation are answered", () => {
-  it.each(["what should the next dosage be?", "What dose should I take now?", "how many tablets should I take", "我应该吃多少？", "剂量是多少"])(
+  it.each([
+    "what should the next dosage be?",
+    "What dose should I take now?",
+    "how many tablets should I take",
+    "我应该吃多少？",
+    "剂量是多少",
+    "i want to know the dosage",
+    "tell me my dose",
+    "I need to check the dosage",
+    "我想知道剂量",
+  ])(
     "%j is answered with the record's own instruction — never a skip ahead",
     (text) => {
       for (const step of [0, 1, 2] as const) expect(said(text, step)).toBe("explainDoseQuestion");
@@ -78,6 +88,125 @@ describe("questions during the explanation are answered", () => {
       expect(t("en", key), key).not.toMatch(/[“”"]/);
       expect(t("zh-Hans", key), key).not.toMatch(/[「」]/);
     }
+  });
+});
+
+describe("'the dose isn't right' opens the label-vs-record check", () => {
+  it.each([
+    "the dosage is not right",
+    "that dose isn't right",
+    "the dose is wrong",
+    "wrong dose",
+    "that's not my dose",
+    "I actually take a different amount",
+    "the amount looks different",
+    "剂量不对",
+    "不是我的剂量",
+  ])("%j", (text) => {
+    expect(said(text, 0)).toBe("message");
+    const s = reduceSession(toExplain(), { type: "USER_MESSAGE", text, via: "typed" }, CTX);
+    expect(s.doseCheck).not.toBeNull();
+  });
+  it.each(["the dose is right", "yes, that is my correct dosage", "what's my dose?"])("%j does not", (text) => {
+    expect(reduceSession(toExplain(), { type: "USER_MESSAGE", text, via: "typed" }, CTX).doseCheck).toBeNull();
+  });
+  it.each(["I took the wrong dose", "I took 2 instead of 1, the dose is wrong", "what if I take the wrong dose", "我吃错了剂量"])(
+    "%j is a dose already taken (or about to be): the safety route, never the comparison",
+    (text) => {
+      const s = reduceSession(toExplain(), { type: "USER_MESSAGE", text, via: "typed" }, CTX);
+      expect(s.state).toBe("safety");
+      expect(s.doseCheck).toBeNull();
+    },
+  );
+  it("'I take it twice a day' is not a safety worry", () => {
+    expect(reduceSession(toExplain(), { type: "USER_MESSAGE", text: "I take it twice a day", via: "typed" }, CTX).state).toBe("explain");
+  });
+  it("the event only works on a confirmed explanation", () => {
+    expect(reduceSession(toExplain(), { type: "START_DOSE_CHECK" }, CTX).doseCheck).not.toBeNull();
+    const listening = run([{ type: "CALL_START" }]);
+    expect(reduceSession(listening, { type: "START_DOSE_CHECK" }, CTX)).toBe(listening);
+  });
+});
+
+describe("asking for a pharmacist callback before any medicine is checked", () => {
+  const listening: CommandContext = { ...explain(0), state: "listening", candidateId: null };
+  const said3 = (text: string) => {
+    const r = interpretUtterance(text, listening);
+    return r.kind === "event" ? r.event.type : r.kind;
+  };
+  it.each([
+    "Can you help me to draft a message to pharmacies for callback?",
+    "can the pharmacist call me back",
+    "I'd like to contact my pharmacy",
+    "please ask a pharmacist to ring me",
+    "请药剂师给我回电",
+  ])("%j opens the pharmacist step (confirm, then review, then 'send')", (text) => {
+    expect(said3(text)).toBe("HELP_START");
+    const s = reduceSession(run([{ type: "CALL_START" }]), { type: "HELP_START", kind: "pharmacist-callback" }, CTX);
+    expect(s.helpFlow).toMatchObject({ kind: "pharmacist-callback", stage: "confirm" });
+  });
+  it.each(["what does my pharmacy record say", "my pharmacist changed my dose", "I don't want to call the pharmacy"])("%j does not", (text) => {
+    expect(said3(text)).not.toBe("HELP_START");
+  });
+  it("on screen: the companion asks the pharmacist question; nothing is sent", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: true, data: { enabled: false }, requestId: "r" }))));
+    sessionStore.setForTest(run([{ type: "CALL_START" }]));
+    render(<CompanionExperience />);
+    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "Can you help me to draft a message to pharmacies for callback?" } });
+    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    expect(screen.getByText(t("en", "callbackConfirm"))).toBeInTheDocument();
+    expect(sessionStore.getSnapshot().helpFlow?.stage).toBe("confirm");
+    expect(vi.mocked(fetch).mock.calls.some(([u]) => u === "/api/help/request")).toBe(false);
+    vi.unstubAllGlobals();
+  });
+  it("the AI meaning-match can choose it on this step too", () => {
+    expect(spokenActions(listening).map((a) => a.id)).toContain("pharmacist");
+  });
+});
+
+describe("ending the call in words", () => {
+  const at = (over: Partial<CommandContext>): CommandContext => ({ ...explain(1), ...over });
+  const said2 = (text: string, ctx: CommandContext) => {
+    const r = interpretUtterance(text, ctx);
+    return r.kind === "event" ? r.event.type : r.kind;
+  };
+  it.each(["No, that's all for now.", "no thanks", "nothing else", "that's everything", "I'm good", "没有了", "no"])(
+    "'Anything else I can help with?' → %j ends the call (no loop back to the explanation)",
+    (text) => {
+      expect(said2(text, at({ helpStage: "sent" }))).toBe("END_CALL");
+      expect(said2(text, at({ state: "complete" }))).toBe("END_CALL");
+    },
+  );
+  it("'yes' / 'carry on' after a request still goes back to where she was", () => {
+    expect(said2("yes please", at({ helpStage: "sent" }))).toBe("HELP_DISMISS");
+    expect(said2("carry on", at({ helpStage: "sent" }))).toBe("HELP_DISMISS");
+  });
+  it.each(["That's all, let's end it here.", "let's end the call", "end it now", "we're done here", "finish the call", "goodbye", "就到这里"])(
+    "%j ends the call from any step",
+    (text) => {
+      for (const step of [0, 1, 2] as const) expect(said2(text, explain(step))).toBe("END_CALL");
+      expect(said2(text, { ...explain(0), state: "listening" })).toBe("END_CALL");
+    },
+  );
+  it("the AI meaning-match may also end the call when she says she needs nothing else", () => {
+    expect(spokenActions(at({ helpStage: "sent" })).map((a) => a.id)).toContain("end");
+  });
+});
+
+describe("'Does this match what's printed on your label?' is answered in words", () => {
+  const label = (text: string) => {
+    const r = interpretUtterance(text, explain(1));
+    return r.kind === "event" && r.event.type === "LABEL_CHECK" ? (r.event.matches ? "matches" : "differs") : r.kind;
+  };
+  it.each(["yes, it matches", "yes", "it's the same", "my label says the same thing", "No, my label and the dosage you mentioned seem to be the same", "一样"])(
+    "%j: the label matches",
+    (text) => expect(label(text)).toBe("matches"),
+  );
+  it.each(["it looks different", "no", "it's different", "doesn't match", "不一样"])("%j: the label looks different (a person helps)", (text) =>
+    expect(label(text)).toBe("differs"),
+  );
+  it("a description of a dose isn't taken as 'it matches' (it could hide a difference): asked again instead", () => {
+    expect(label("it says take two tablets in the morning")).not.toBe("matches");
   });
 });
 
@@ -224,6 +353,99 @@ describe("when the fixed phrases don't match: Claude works out the meaning", () 
     expect(await screen.findByText(line)).toBeInTheDocument();
     expect(sessionStore.getSnapshot().explainStep).toBe(before.explainStep);
     expect(sessionStore.getSnapshot().helpFlow).toBeNull();
+  });
+
+  it("asking for the dose in any wording: Claude can only pick the fixed record line, never write a dose", async () => {
+    const calls = stubIntent({ outcome: "action", action: "dose" });
+    sessionStore.setForTest(toExplain());
+    render(<CompanionExperience />);
+    await settle();
+    type("uh I'm asking for those each, the amount");
+    expect(await screen.findByText("Your current pharmacy record says: Take 1 tablet twice daily with meals.")).toBeInTheDocument();
+    expect(calls[0].actions.map((a) => a.id)).toContain("dose");
+    expect(sessionStore.getSnapshot().explainStep).toBe(0);
+  });
+
+  it("'that dose isn't right' in any wording: Claude can open the label-vs-record check (nothing decided)", async () => {
+    stubIntent({ outcome: "action", action: "dose-wrong" });
+    sessionStore.setForTest(toExplain());
+    render(<CompanionExperience />);
+    await settle();
+    type("hmm, I don't think that's how many I'm meant to have");
+    await settle();
+    expect(sessionStore.getSnapshot().doseCheck).not.toBeNull();
+    expect(sessionStore.getSnapshot().state).toBe("explain");
+  });
+
+  it("a new call starts with a clean chat: the last call's lines are never replayed into it", async () => {
+    stubIntent({ outcome: "unclear" });
+    sessionStore.setForTest(toExplain());
+    render(<CompanionExperience />);
+    await settle();
+    type("hmm well I suppose it might be sort of");
+    expect(await screen.findByText(t("en", "didntCatch"))).toBeInTheDocument();
+    act(() => sessionStore.setForTest(run([{ type: "END_CALL" }, { type: "CALL_START" }], sessionStore.getSnapshot())));
+    await settle();
+    expect(sessionStore.getSnapshot().state).toBe("listening");
+    expect(screen.queryByText(t("en", "didntCatch"))).toBeNull();
+    expect(screen.queryByText("hmm well I suppose it might be sort of")).toBeNull();
+  });
+
+  it("a sentence is understood before anything is done: a keyword inside it doesn't steer the call", async () => {
+    const line = "It’s good to take it slowly. Would you like to hear the next part, or go back?";
+    const calls = stubIntent({ outcome: "reply", reply: line });
+    sessionStore.setForTest(toExplain());
+    render(<CompanionExperience />);
+    await settle();
+    type("I'm not ready for the next part yet, I was just thinking");
+    expect(await screen.findByText(line)).toBeInTheDocument();
+    expect(calls).toHaveLength(1);
+    expect(sessionStore.getSnapshot().explainStep).toBe(0); // "next" in the sentence didn't move her on
+    expect(calls[0].actions.map((a) => a.id)).toEqual(expect.arrayContaining(["next", "repeat", "end-call", "get-help"]));
+  });
+
+  it("a short command still acts at once, without asking Claude", async () => {
+    const calls = stubIntent({ outcome: "unclear" });
+    sessionStore.setForTest(toExplain());
+    render(<CompanionExperience />);
+    await settle();
+    type("next part please");
+    expect(sessionStore.getSnapshot().explainStep).toBe(1);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("a decision only she can make is never put to Claude, however long the sentence", async () => {
+    const calls = stubIntent({ outcome: "reply", reply: "Shall we carry on?" });
+    sessionStore.setForTest(atStep1());
+    render(<CompanionExperience />);
+    await settle();
+    type("yes, it matches, the label says exactly the same thing as you just read");
+    expect(sessionStore.getSnapshot().explainStep).toBe(2);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("no loop: a second miss on the same question gets one plain question, not the same words again", async () => {
+    stubIntent({ outcome: "unclear" });
+    sessionStore.setForTest(atStep1());
+    render(<CompanionExperience />);
+    await settle();
+    type("hmm well I suppose it might be sort of");
+    expect(await screen.findByText(t("en", "didntCatch"))).toBeInTheDocument();
+    type("blorp the thing with the stuff");
+    const plain = t("en", "crispYesNo").replace("{question}", t("en", "labelCheckPrompt"));
+    expect(await screen.findByText(plain)).toBeInTheDocument();
+    expect(screen.getAllByText(t("en", "didntCatch"))).toHaveLength(1);
+  });
+
+  it("no loop off a decision either: the second miss gets different words and a way out", async () => {
+    stubIntent({ outcome: "unclear" });
+    sessionStore.setForTest(toExplain());
+    render(<CompanionExperience />);
+    await settle();
+    type("hmm well I suppose it might be sort of");
+    expect(await screen.findByText(t("en", "didntCatch"))).toBeInTheDocument();
+    type("blorp the thing with the stuff");
+    expect(await screen.findByText(t("en", "stillNotSure"))).toBeInTheDocument();
   });
 
   it("a reply that fails the guard is never shown, even if it reaches the browser: the fixed line instead", async () => {

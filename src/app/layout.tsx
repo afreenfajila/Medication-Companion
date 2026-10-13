@@ -23,6 +23,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#FAF9F6",
+  // The on-screen keyboard shrinks the layout (Chrome/Android), so the typed box and the end of the
+  // conversation stay above it. iOS keeps its own visual-viewport behaviour.
+  interactiveWidget: "resizes-content",
 };
 
 export default async function RootLayout({

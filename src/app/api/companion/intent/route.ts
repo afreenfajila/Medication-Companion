@@ -1,4 +1,5 @@
 import { AiUnavailableError } from "@/lib/ai/claude";
+import { prepareForModel } from "@/lib/ai/input-guard";
 import { chooseIntent } from "@/lib/ai/intent";
 import { fail, firstIssue, isCrossOrigin, newRequestId, ok } from "@/lib/api/envelope";
 import { rateLimit } from "@/lib/api/rate-limit";
@@ -40,8 +41,22 @@ export async function POST(request: Request): Promise<Response> {
 
   // Belt and braces: safety wording is handled before this is ever asked, and never by a model.
   if (classifySafety(utterance).level !== "none" || actions.length === 0) return none();
+  // Checked before Claude sees anything: cleaned and masked, or not sent at all.
+  const said = prepareForModel(utterance);
+  const where = context === undefined ? undefined : prepareForModel(context);
+  const offered = actions.map((a) => ({ id: a.id, meaning: prepareForModel(a.description) }));
+  const refused = [said, where, ...offered.map((a) => a.meaning)].find((c) => c && !c.ok);
+  if (refused && !refused.ok) {
+    console.error(`[companion/intent] ${requestId} input refused: ${refused.reason}`);
+    return none();
+  }
   try {
-    const result = await chooseIntent({ utterance, language, actions, context });
+    const result = await chooseIntent({
+      utterance: said.ok ? said.text : "",
+      language,
+      actions: offered.map((a) => ({ id: a.id, description: a.meaning.ok ? a.meaning.text : "" })),
+      context: where?.ok ? where.text : undefined,
+    });
     if (result.outcome === "action") return ok(intentDataSchema.parse({ action: result.action, outcome: "action" }), requestId);
     if (result.outcome === "unclear") return ok(intentDataSchema.parse({ action: null, outcome: "unclear" }), requestId);
     if (result.outcome === "reply" && isSafeCompanionReply(result.reply, language)) {

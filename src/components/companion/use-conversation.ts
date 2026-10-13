@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { dispatch, sessionStore } from "@/lib/session/session-store";
-import type { Session } from "@/lib/session/state-machine";
+import type { Session, SessionEvent } from "@/lib/session/state-machine";
 import { intentResponseSchema } from "@/lib/api/schemas";
 import { isSafeCompanionReply } from "@/lib/content/understand-guard";
 import { canRetryLabel } from "@/lib/session/state-machine";
 import { runCapture } from "@/lib/voice/actions";
 import { fillRecordFacts, resolveExplanation } from "@/lib/content/explanation";
-import { interpretUtterance, isQuestion, spokenActions, type CommandContext, type SpokenAction } from "@/lib/voice/commands";
+import { callActions, interpretUtterance, isBrief, isGateAnswer, isQuestion, spokenActions, type CommandContext, type SpokenAction } from "@/lib/voice/commands";
+import { helpLine } from "@/lib/content/help-lines";
 import type { AssistantTurn, VoiceStatus } from "@/lib/voice/coordinator";
 import { detectInputLanguage } from "@/lib/voice/detect-language";
 import { isLikelySelfEcho } from "@/lib/voice/echo";
@@ -73,6 +74,21 @@ export function unclearGuidanceKey(
   return UNCLEAR_GUIDANCE[session.state] ?? "voiceDidntCatch";
 }
 
+/**
+ * The plain version of a decision's question, for a second miss: one clear question, with
+ * "not sure" always an answer (never nudging towards yes). Null when the step isn't a decision.
+ */
+export function plainQuestion(s: Session, t: (key: CopyKey) => string): string | null {
+  const ask = (question: string) => t("crispYesNo").replace("{question}", question);
+  if (s.helpFlow?.stage === "confirm") return ask(helpLine(t, s.helpFlow));
+  if (s.helpFlow?.stage === "review") return t("reviewSayToSend");
+  if (s.helpFlow) return null;
+  if (s.state === "confirm-match" && s.candidate) return ask(t("confirmQuestion"));
+  if (s.state === "explain" && !s.doseCheck && !s.recordConflict && s.explainStep === 1) return ask(t("labelCheckPrompt"));
+  if (s.state === "explain" && !s.doseCheck && !s.recordConflict && s.explainStep === 2) return t("explainWhichOne");
+  return null;
+}
+
 /** Identifies the decision on screen, so an answer that arrives after it changed is ignored. */
 function screenSignature(s: Session): string {
   const d = s.doseCheck;
@@ -87,9 +103,12 @@ type IntentAnswer =
 
 /** Where the person is in the call, in plain words, for the meaning-match. Never record content. */
 export function screenContext(s: Pick<Session, "state" | "explainStep" | "doseCheck" | "helpFlow">): string {
-  if (s.helpFlow) return "being asked about a help request";
+  // At a review the person alone sends, by saying "send": the AI must say so, never that it can't send.
+  const review = "checking a summary before it is sent: it is sent only when they say send the request, so tell them that";
+  if (s.helpFlow) return s.helpFlow.stage === "review" ? review : "being asked about a help request";
   switch (s.state) {
     case "explain":
+      if (s.doseCheck?.callback?.status === "reviewing") return review;
       return s.doseCheck ? "comparing their medicine label with their pharmacy record" : `hearing their pharmacy record explained, part ${s.explainStep + 1} of 3`;
     case "camera-permission":
       return "choosing how to show their medicine label";
@@ -254,6 +273,8 @@ export function useVoiceConversation(opts: {
   // remembered only long enough for the follow-up turn ("500 milligrams") to
   // complete it — see commands.ts's camera-guidance case.
   const pendingSpokenName = useRef<string | null>(null);
+  /** The screen the last "didn't follow" line was said on: a second miss there gets different words. */
+  const lastFallback = useRef<string | null>(null);
   // Every call starts unmuted and listening (the coordinator resets its own gate too).
   const [seenCall, setSeenCall] = useState(session.callCount);
   if (seenCall !== session.callCount) {
@@ -265,6 +286,9 @@ export function useVoiceConversation(opts: {
     setVoiceNotice(null);
     setLastSessionLine(null);
     setUserLines([]);
+    // The last call's notices too: the chat starts again for a new call, so anything still held
+    // here would be replayed into it as if just said.
+    setNotices([]);
   }
   useEffect(() => {
     if (session.state !== "camera-guidance") pendingSpokenName.current = null;
@@ -332,7 +356,8 @@ export function useVoiceConversation(opts: {
     const sayNotice = (key: CopyKey) => {
       // In the language they just used. Record facts ({instruction}, {verifiedDate}) only
       // ever come from the confirmed record; without one, a line that needs them isn't said.
-      const line = translate(s.language, key);
+      // The callback number is only ever the one in the summary on screen.
+      const line = translate(s.language, key).replace("{callbackNumber}", s.doseCheck?.callback?.draft.callbackContact ?? "");
       const needsRecord = /\{(instruction|verifiedDate)\}/.test(line);
       const explanation = needsRecord ? resolveExplanation(s, s.language) : null;
       if (needsRecord && !explanation) return; // record facts only ever come from a confirmed record
@@ -380,9 +405,29 @@ export function useVoiceConversation(opts: {
       return;
     }
     showHerWords(); // an answer or command ("yes", "next", "use the camera"): still her turn in the chat
-    if (intent.kind === "event") {
+
+    // "Didn't follow" — but never the same words twice in a row on the same screen. The second
+    // time, a decision gets one plain question; anything else gets different words and a way out.
+    const sayFallback = (first: CopyKey, at: Session) => {
+      const sig = screenSignature(at);
+      if (lastFallback.current !== sig) {
+        lastFallback.current = sig;
+        return sayNotice(first);
+      }
+      lastFallback.current = null;
+      const plain = plainQuestion(at, (k) => translate(at.language, k));
+      if (plain) return void coordinator.speak(plain, at.language, { source: "notice" });
+      sayNotice("stillNotSure");
+    };
+    const act = (event: SessionEvent) => {
       pendingSpokenName.current = null;
-      dispatch(intent.event);
+      lastFallback.current = null;
+      dispatch(event);
+    };
+
+    // A decision only she can make, or a short clear command: act at once on the fixed rules.
+    if (intent.kind === "event" && (isGateAnswer(intent.event) || isBrief(text))) {
+      act(intent.event);
     } else if (intent.kind === "ui") {
       runCapture();
     } else if (intent.kind === "need-strength") {
@@ -392,10 +437,14 @@ export function useVoiceConversation(opts: {
       pendingSpokenName.current = null;
       sayNotice(intent.key);
     } else {
-      // Not one of the fixed phrases: ask which on-screen action they meant, by meaning.
-      // Gates are never in this list (see spokenActions), so a guess can't say yes for her.
-      const actions = latest.current.aiIntent ? spokenActions(ctx) : [];
-      if (actions.length === 0) return sayNotice(unclearGuidanceKey(s, question));
+      // A sentence (or words the fixed phrases don't know): work out what she meant before doing
+      // anything. The step's actions plus the call's own (repeat, end, help), in any order; never a
+      // gate. If the AI is off or can't tell, the fixed rules' reading (if any) is used, then guidance.
+      const rulesSaid = intent.kind === "event" ? intent.event : null;
+      const fallback = (at: Session) => (rulesSaid ? act(rulesSaid) : sayFallback(unclearGuidanceKey(at, question), at));
+      const own = latest.current.aiIntent ? spokenActions(ctx) : [];
+      const actions = own.length > 0 || latest.current.aiIntent ? [...own, ...callActions(ctx).filter((g) => !own.some((a) => a.event?.type === g.event?.type))] : [];
+      if (!latest.current.aiIntent || actions.length === 0) return fallback(s);
       const asked = screenSignature(s);
       void requestIntent(text, s, actions).then((answer) => {
         const now = latest.current.session;
@@ -403,14 +452,19 @@ export function useVoiceConversation(opts: {
         if (answer.outcome === "action") {
           // Matched by id, never by position: the person may ask for any action, in any order.
           const chosen = actions.find((a) => a.id === answer.action);
-          if (chosen) return dispatch(chosen.event);
+          if (chosen?.say) {
+            lastFallback.current = null;
+            return sayNotice(chosen.say); // a fixed line (e.g. the record's own instruction), never AI words
+          }
+          if (chosen?.event) return act(chosen.event);
         }
-        if (answer.outcome === "unclear") return sayNotice("didntCatch"); // gibberish or cut off: ask again
+        if (answer.outcome === "unclear") return sayFallback("didntCatch", now); // gibberish or cut off
         if (answer.outcome === "reply") {
           // Understood, but not an action here: a natural, guarded reply (visible, then voiced).
+          lastFallback.current = null;
           return void coordinator.speak(answer.reply, now.language, { source: "notice" });
         }
-        sayNotice(unclearGuidanceKey(now, question));
+        fallback(now);
       });
     }
   }, [coordinator]);

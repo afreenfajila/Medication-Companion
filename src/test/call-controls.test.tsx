@@ -84,13 +84,13 @@ describe("persistent call controls", () => {
     expect(muteButton()).toHaveAccessibleName("Unmute");
     expect(muteButton()).toHaveTextContent("Unmute"); // name = visible label
     expect(muteButton()).not.toHaveAttribute("aria-pressed");
-    expect(status()).toHaveTextContent(/^Muted\. The companion can’t hear you/);
+    expect(status()).toHaveTextContent(/^Muted\. Type below, or tap Unmute\./);
 
     fireEvent.click(muteButton());
     expect(muteButton()).toHaveAccessibleName("Mute");
     expect(status()).toHaveTextContent("Unmuted. I can hear you again."); // said once…
     tick(); // …until the mic opens and the status moves on
-    expect(status()).toHaveTextContent(/I’m listening/);
+    expect(status()).toHaveTextContent(/^Listening…$/);
     fireEvent.click(muteButton()); // and back to muted, to check typing below
     expect(screen.getByLabelText(/type it here/i)).toBeInTheDocument();
     // Captions keep working while muted: a typed question still gets its visible reply.
@@ -288,16 +288,19 @@ describe("the Get help sheet", () => {
     ]);
     sessionStore.setForTest(run([{ type: "CONFIRM_MATCH", candidateId: s.candidate!.candidateId, decision: "confirmed" }], s));
     render(<CompanionExperience />);
-    fireEvent.click(screen.getByRole("button", { name: "Yes, that is what the label says" }));
-    fireEvent.click(screen.getByRole("button", { name: "Ask for a pharmacist callback" }));
-    fireEvent.click(screen.getByRole("button", { name: "Yes, prepare a summary" }));
+    // Said or typed, never tapped: the reading, the pharmacist, the summary.
+    for (const words of ["yes", "ask a pharmacist", "yes please"]) {
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: words } });
+      fireEvent.submit(screen.getByRole("textbox").closest("form")!);
+    }
   }
+  const reviewIntro = "I’ve prepared a short summary for the pharmacist.";
 
   it("opening and closing it sends nothing and changes nothing — not even a reviewed callback's approval", () => {
     const fetchFn = vi.fn(async () => Promise.reject(new Error("offline")));
     vi.stubGlobal("fetch", fetchFn);
     toCallbackReview();
-    expect(screen.getByRole("heading", { name: "Check before sharing" })).toBeInTheDocument();
+    expect(screen.getByText(reviewIntro)).toBeInTheDocument();
     const before = sessionStore.getSnapshot();
     const calls = fetchFn.mock.calls.length;
 
@@ -354,9 +357,11 @@ describe("the Get help sheet", () => {
     setVoiceProvider(null);
     toCallbackReview();
     expect(screen.queryByRole("button", { name: /send callback request|send again/i })).toBeNull();
-    expect(screen.getByText("If it’s right, say or type “send”. If not, say “don’t send”.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Change something" }));
-    expect(screen.queryByText("If it’s right, say or type “send”. If not, say “don’t send”.")).toBeNull(); // editing: not sendable
+    expect(screen.getByText("Please check these details. You can tell me what to change, say “send the request,” or say “cancel.”")).toBeInTheDocument();
+    // The summary is a message in the conversation, not a panel with its own buttons.
+    expect(document.querySelector("[data-pinned]")).toBeNull();
+    expect(document.querySelector("[data-transcript] button")).toBeNull();
+    expect(buttonNames().filter((n) => n !== "Send")).toEqual(["Get help", "Mute", "End call"]); // "Send" is the typed input's submit
   });
 });
 
@@ -404,9 +409,16 @@ describe("the transcript", () => {
     act(() => fake.recognitions.at(-1)!.say("What is this for?", true));
     expect(scrollIntoView).not.toHaveBeenCalled(); // their place is kept
 
+    // The control sits outside the messages, never over the text.
+    expect(screen.getByRole("button", { name: "Latest message" }).closest("[data-transcript]")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Latest message" }));
-    expect(scrollIntoView).toHaveBeenCalled();
+    expect(scroller.scrollTop).toBe(2000); // taken to the end
     expect(screen.queryByRole("button", { name: "Latest message" })).toBeNull();
+    // Back at the bottom, the conversation follows new turns again.
+    act(() => fake.utterances.at(-1)?.onend?.());
+    tick();
+    act(() => fake.recognitions.at(-1)!.say("What is it for?", true));
+    expect(scrollIntoView).toHaveBeenCalled();
     // @ts-expect-error restore jsdom's missing method
     delete Element.prototype.scrollIntoView;
   });

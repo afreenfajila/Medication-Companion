@@ -94,6 +94,8 @@ export type CallbackState = {
   revision: number;
   /** The version "Send" authorised. Cleared by any later change. */
   approvedRevision: number | null;
+  /** The summary was changed after it was first shown (said as "I've updated the summary"). */
+  updated?: boolean;
   reference?: string;
 };
 
@@ -231,6 +233,8 @@ export type SessionEvent =
   /** "Does this match what's printed on your label?", asked beside the instruction. */
   | { type: "LABEL_CHECK"; matches: boolean }
   | { type: "UNDERSTOOD" }
+  /** "That dose isn't right", in any wording (the meaning-match): opens the label-vs-record check. */
+  | { type: "START_DOSE_CHECK" }
   | { type: "NEW_MEDICINE" }
   | { type: "GET_HELP" }
   | { type: "TRY_ANOTHER_LABEL" }
@@ -665,6 +669,7 @@ function settleComparison(
         status: "reviewing",
         revision: changed ? cb.revision + 1 : cb.revision,
         approvedRevision: changed ? null : cb.approvedRevision,
+        updated: changed || cb.updated,
       };
     } else {
       notice = "conflict-cleared";
@@ -809,7 +814,8 @@ function reduceDose(s: Session, action: DoseAction, ctx: ReduceContext): Session
     case "cancel-edit":
       return cb?.status === "editing" ? setCb({ status: "reviewing" }) : s;
     case "save": {
-      if (cb?.status !== "editing") return s;
+      // From the review too: a correction said in the conversation ("change the number to…").
+      if (cb?.status !== "editing" && cb?.status !== "reviewing") return s;
       const callbackContact = action.changes.callbackContact.trim();
       const concernSummary = action.changes.concernSummary.trim().slice(0, 200);
       const labelInstruction = action.changes.labelInstruction.trim().slice(0, 200);
@@ -824,6 +830,7 @@ function reduceDose(s: Session, action: DoseAction, ctx: ReduceContext): Session
         status: "reviewing",
         revision: changed ? cb.revision + 1 : cb.revision,
         approvedRevision: changed ? null : cb.approvedRevision,
+        updated: changed || cb.updated,
       };
       // New label wording is a correction: shown back as a new revision to confirm,
       // then compared again. The summary waits for that, unapproved.
@@ -1402,6 +1409,18 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       return enterSafety(answered, ctx, "label-differs", { candidate: null, matchStatus: null });
     }
 
+    case "START_DOSE_CHECK": {
+      // The same start as a dose-change message on the explanation; it decides nothing, only compares.
+      if (s.state !== "explain" || !isMatchConfirmed(s) || s.doseCheck) return s;
+      return enterDoseRecord(
+        withAudit({ ...s, recordConflict: false, doseCheck: newDoseCheck() }, ctx, {
+          eventType: "dose-check-started",
+          summary: "Person said the dose isn't right; label-vs-record check started",
+        }),
+        ctx,
+      );
+    }
+
     case "UNDERSTOOD": {
       if (s.state !== "explain" || !isMatchConfirmed(s) || s.doseCheck) return s;
       return withAudit({ ...s, state: "complete", recordConflict: false }, ctx, {
@@ -1506,14 +1525,17 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       // opens the same confirm step (nothing is requested without a clear yes there).
       const fromExplain =
         s.state === "explain" && isMatchConfirmed(s) && !s.doseCheck && event.kind === "pharmacist-callback";
-      if (!s.callActive || s.helpFlow || !(fromSafety || fromWellbeing || fromExplain)) return s;
+      // "Can a pharmacist call me back?" at the start of the call (or after "another medicine"):
+      // the same confirm → review → "send" as from the help screen.
+      const fromListening = s.state === "listening" && event.kind === "pharmacist-callback";
+      if (!s.callActive || s.helpFlow || !(fromSafety || fromWellbeing || fromExplain || fromListening)) return s;
       return {
         ...s,
         recordConflict: fromExplain ? false : s.recordConflict,
         helpFlow: {
           kind: event.kind,
           stage: event.kind === "clinic" ? "info" : "confirm",
-          reason: fromExplain && !s.recordConflict ? "help-requested" : helpReasonFor(s),
+          reason: (fromExplain && !s.recordConflict) || fromListening ? "help-requested" : helpReasonFor(s),
         },
       };
     }

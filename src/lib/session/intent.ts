@@ -73,9 +73,17 @@ export function isRecordConflict(text: string): boolean {
 // anything clinical; it opens the label-vs-record comparison.
 const DOSE_CHANGE =
   /\b(doctor|clinic|gp|pharmacist|specialist|hospital)\b.{0,40}\b(changed?|increased|reduced|lowered|raised|adjusted)\b|\btold me to take (less|more|fewer)\b|\bmy (dose|dosage) (is|has|was) (different|changed)\b|\b(box|label|packet|bottle|pack)\b.{0,40}\b(old|still says|different|doesn'?t match|does not match)\b|\b(box|label)\b.{0,40}\bbut\b.{0,30}\b(told|prescribed)\b|\b(old|new) (amount|dose|dosage|instructions?)\b|医生.{0,8}(换|改|调整|加|减)|(盒子|标签|药盒|包装).{0,12}(旧|不一样|不同)|(旧|新)的?(药量|剂量|用量)/i;
+/**
+ * "The dosage is not right", "that's not my dose": she disputes the record's dose. Opens the same
+ * comparison, but kept apart from DOSE_CHANGE so it never overrides the safety classifier — "I took
+ * the wrong dose" is about a dose already taken, and goes to the safety route.
+ */
+const DOSE_DISPUTE =
+  /\b(dose|dosage|amount)\b.{0,15}\b(is not|isn'?t|not|is wrong|looks wrong|seems wrong|is different|looks different|is off)\b|\b(wrong|incorrect|different) (dose|dosage|amount)\b|\bnot (the |my )?(right |correct )?(dose|dosage|amount)\b|\bi (actually |really )?take (a )?(different|another) (dose|amount)\b|(剂量|药量|用量).{0,4}(不对|错了|不一样|不是)|不是(这个|我的)(剂量|药量)/i;
 
 export function isDoseChange(text: string): boolean {
-  return DOSE_CHANGE.test(text.replace(/[’‘]/g, "'"));
+  const t = text.replace(/[’‘]/g, "'");
+  return DOSE_CHANGE.test(t) || DOSE_DISPUTE.test(t);
 }
 
 /**
