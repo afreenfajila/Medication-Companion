@@ -10,6 +10,10 @@ import { guardRequestedState, type Session } from "@/lib/session/state-machine";
 import { speakableText } from "@/lib/voice/speakable";
 import { askUnknown, chooseShowMedicine, chooseCamera, grantCamera, resolve, run, startCall, submitDemo, toConfirmMatch, toExplain } from "./helpers";
 
+
+/** The confirmation is said and shown in the conversation (no panel): a possible match, from the fictional record. */
+const POSSIBLE_MATCH = /^I found a possible match on your BrightCare Pharmacy record \(fictional\): Metformin, 500 mg, tablet\./;
+
 // One test per claim in the Assignment 02 concept deck, in deck order.
 
 beforeEach(() => {
@@ -19,8 +23,8 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 const send = (text: string) => {
-  fireEvent.change(screen.getByLabelText(/type your question/i), { target: { value: text } });
-  fireEvent.submit(screen.getByLabelText(/type your question/i).closest("form")!);
+  fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
+  fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
 };
 const typeIn = (text: string) => {
   const box = screen.getByRole("textbox");
@@ -61,18 +65,20 @@ describe("primary journey (deck): question → Show medicine → camera → poss
     click("Metformin 500 mg"); // jsdom has no camera → demo/sample/typed fallback
     act(() => void vi.advanceTimersByTime(1000));
 
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument(); // possible match, not certain
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument(); // possible match, not certain
     expect(screen.queryByText(INSTRUCTION)).toBeNull();
-    click(/yes, this is my medicine/i);
+    send("yes, this is my medicine"); // confirmed in words: there is no confirmation panel
     // Moving on is said or typed — only the language switch is a button.
     expect(screen.queryByRole("button", { name: /^(next|back|i understand)$/i })).toBeNull();
     typeIn("next");
     expect(screen.getByText("Take 1 tablet twice daily with meals.")).toBeInTheDocument();
-    click("中文");
+    typeIn("中文"); // said or typed: there is no language button inside the call
     expect(screen.getByText("随餐每日服用一片，每日两次。")).toBeInTheDocument();
     typeIn("下一步");
     typeIn("我明白了");
-    expect(screen.getByText(t("zh-Hans", "completeHeading"))).toBeInTheDocument();
+    // The wrap-up is a companion message in the chat, not a separate screen.
+    expect(screen.getByText(new RegExp(`^${t("zh-Hans", "completeHeading")}`))).toBeInTheDocument();
+    expect(document.querySelector("[data-pinned]")).toBeNull();
   });
 
   it("switches language by itself when the person uses Chinese, and back for English", () => {
@@ -114,17 +120,17 @@ describe("4. no-match / unreadable blocks instructions — one retry, then human
     click("Choose from my medicines");
     click("Metformin 500 mg");
     act(() => void vi.advanceTimersByTime(1000));
-    click("No, try again");
+    send("no, that's not it");
 
     click("Try another photo"); // the one retry
     click("Choose from my medicines");
     click("Metformin 500 mg");
     act(() => void vi.advanceTimersByTime(1000));
-    click("No, try again");
+    send("no, that's not it");
 
     expect(screen.queryByRole("button", { name: "Try another photo" })).toBeNull();
     expect(screen.getByText(t("en", "retryUsed"))).toBeInTheDocument();
-    for (const name of ["Ask a pharmacist to call me", "Ask my trusted helper", "Contact my clinic"]) {
+    for (const name of ["Ask a pharmacist to call me", "Contact my family"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
     expect(screen.queryByText(INSTRUCTION)).toBeNull();

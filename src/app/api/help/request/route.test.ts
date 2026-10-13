@@ -22,7 +22,7 @@ describe("POST /api/help/request", () => {
     expect(body.ok).toBe(true);
     if (body.ok) {
       expect(body.data.reference).toMatch(/^BC-\d{6}$/);
-      expect(body.data.expectedWindow).toBe("within 1 working day");
+      expect(body.data).not.toHaveProperty("expectedWindow"); // never a callback-time promise
     }
   });
 

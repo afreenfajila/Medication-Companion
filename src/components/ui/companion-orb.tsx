@@ -27,13 +27,14 @@ export function CompanionOrb({
   className,
 }: {
   state?: OrbState;
-  size?: "lg" | "sm";
+  /** "xs": the in-call orb, small enough to leave the transcript most of the screen. */
+  size?: "lg" | "sm" | "xs";
   className?: string;
 }) {
   const Icon = ICONS[state];
   return (
     <div
-      className={cn("orb", size === "sm" && "orb--sm", className)}
+      className={cn("orb", size === "sm" && "orb--sm", size === "xs" && "orb--xs", className)}
       data-state={state}
       aria-hidden="true"
     >

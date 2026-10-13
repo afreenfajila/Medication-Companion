@@ -2,16 +2,22 @@ import { Info, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 
-/** Light-teal pill naming the record's source and when it was checked. */
-export function TrustBadge({ label, className }: { label: string; className?: string }) {
+/**
+ * Light-teal pill naming the record's source and when it was checked. `plain` is the
+ * in-call demo-record label: an information mark, not a check, so nothing in the header
+ * reads as pharmacist verification of what is being said.
+ */
+export function TrustBadge({ label, className, plain = false }: { label: string; className?: string; plain?: boolean }) {
+  const Icon = plain ? Info : ShieldCheck;
   return (
     <p
       className={cn(
         "inline-flex max-w-full items-center gap-1.5 rounded-pill bg-teal-100 px-3 py-1.5 text-[13px] font-medium leading-tight text-navy-900",
+        plain && "py-1 text-[12px]",
         className,
       )}
     >
-      <ShieldCheck className="h-4 w-4 shrink-0 text-teal-800" aria-hidden="true" />
+      <Icon className="h-4 w-4 shrink-0 text-teal-800" aria-hidden="true" />
       <span>{label}</span>
     </p>
   );

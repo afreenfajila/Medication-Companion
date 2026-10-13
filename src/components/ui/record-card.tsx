@@ -8,6 +8,9 @@ export type RecordCardLabels = {
   strength: string;
   form: string;
   formValue: string;
+  /** Where the possible match comes from (fictional record provenance). */
+  record?: string;
+  recordValue?: string;
 };
 
 /**
@@ -17,7 +20,7 @@ export type RecordCardLabels = {
  */
 export function RecordSourceLine({ children }: { children: string }) {
   return (
-    <p className="flex items-center gap-2 text-[14px] font-medium text-navy-700">
+    <p className="flex items-center gap-2 text-base font-medium text-navy-700">
       <ShieldCheck className="h-4 w-4 shrink-0 text-teal-800" aria-hidden="true" />
       <span>{children}</span>
     </p>
@@ -41,6 +44,7 @@ export function RecordCard({
     [labels.medicine, candidate.medicineName],
     [labels.strength, candidate.strength],
     [labels.form, labels.formValue],
+    ...(labels.record && labels.recordValue ? [[labels.record, labels.recordValue] as [string, string]] : []),
   ];
   return (
     <section

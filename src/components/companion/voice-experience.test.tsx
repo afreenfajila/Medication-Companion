@@ -1,13 +1,18 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t as translate } from "@/lib/content/translations";
 import { sessionStore } from "@/lib/session/session-store";
 import { BrowserVoiceProvider } from "@/lib/voice/browser-voice";
-import { type GeminiSpeechPlayer, setGeminiSpeechPlayer } from "@/lib/voice/gemini-speech-player";
-import { setVoiceProvider } from "@/lib/voice/use-voice";
+import { setVoiceAdaptersForTest, setVoiceProvider } from "@/lib/voice/use-voice";
+import { FakeSpeechAdapter, flush } from "@/test/fake-audio";
 import { createFakeSpeech } from "@/test/fake-speech";
-import { CompanionExperience } from "./companion-experience";
+import { chooseCamera, chooseShowMedicine, grantCamera, resolve, run, startCall as startCallEvent, submitDemo, toConfirmMatch } from "@/test/helpers";
+import { CompanionExperience, VOICE_HOLD_MAX_MS } from "./companion-experience";
 import { VoiceBar } from "./voice-bar";
+
+
+/** The confirmation is said and shown in the conversation (no panel): a possible match, from the fictional record. */
+const POSSIBLE_MATCH = /^I found a possible match on your BrightCare Pharmacy record \(fictional\): Metformin, 500 mg, tablet\./;
 
 function install(opts?: Parameters<typeof createFakeSpeech>[0]) {
   const fake = createFakeSpeech(opts);
@@ -49,8 +54,44 @@ function finishSpeaking(fake: ReturnType<typeof createFakeSpeech>) {
   tick();
 }
 
-/** The small icon-only mute control: accessible name is the dynamic "Mic on"/"Mic off" text. */
-const micButton = () => screen.getByRole("button", { name: /mic on|mic off/i });
+/** The Mute/Unmute call control. */
+const muteButton = () => screen.getByRole("button", { name: /^(mute|unmute)$/i });
+/** Opens the Get help sheet and picks one of its choices. */
+const fromHelpSheet = (choice: RegExp) => {
+  fireEvent.click(screen.getByRole("button", { name: /^get help$/i }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: choice }));
+};
+
+/** A VoiceBar view with the browser engines, nothing happening. */
+const idleView: React.ComponentProps<typeof VoiceBar>["view"] = {
+  status: { kind: "idle", callId: 1 },
+  listening: false,
+  speaking: false,
+  interim: "",
+  micOn: true,
+  muted: false,
+  paused: false,
+  voiceStopped: false,
+  justUnmuted: false,
+  voiceNotice: null,
+  voiceOutput: true,
+  voiceKnown: true,
+  lastSessionLine: null,
+  userLines: [],
+  toggleMute: () => undefined,
+  resume: () => undefined,
+  hasInput: true,
+  realtimeInput: false,
+  pushToTalk: false,
+  duplex: false,
+  autoInterrupt: true,
+  toggleAutoInterrupt: () => undefined,
+  notice: null,
+  notices: [],
+  lastLine: null,
+  talk: () => undefined,
+  submitText: () => undefined,
+};
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -58,6 +99,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   setVoiceProvider(null);
+  setVoiceAdaptersForTest(null);
   vi.useRealTimers();
 });
 
@@ -82,7 +124,7 @@ describe("the call starts voice automatically — no separate button", () => {
     act(() => vi.advanceTimersByTime(400));
 
     expect(fake.recognitions).toHaveLength(1); // opened without another tap
-    expect(screen.getByText(/listening… please speak now/i)).toBeInTheDocument();
+    expect(screen.getByText(/^listening…$/i)).toBeInTheDocument();
   });
 
   it("there is no separate voice-call toggle or labelled mic button anywhere on screen", () => {
@@ -97,19 +139,41 @@ describe("the call starts voice automatically — no separate button", () => {
   it("the call status discloses where speech may go before anything is happening", () => {
     render(
       <VoiceBar
+        onRepeat={() => undefined}
         t={(key) => translate("en", key)}
-        view={{
-          listening: false,
-          speaking: false,
-          interim: "",
-          micOn: true,
-          notice: null,
-          toggleMic: () => undefined,
-          submitText: () => undefined,
-        }}
+        view={{ ...idleView, status: { kind: "idle", callId: 1 } }}
       />,
     );
     expect(screen.getByText(/may send your voice to its own speech service/i)).toBeInTheDocument();
+  });
+
+  it("with the realtime engines, the status names where the voice goes (OpenAI to hear, ElevenLabs to speak)", () => {
+    render(<VoiceBar onRepeat={() => undefined} t={(key) => translate("en", key)} view={{ ...idleView, realtimeInput: true }} />);
+    expect(screen.getByText(/sent to OpenAI to be turned into text.*ElevenLabs to be spoken/i)).toBeInTheDocument();
+  });
+
+  it("while the companion speaks in full duplex, the status says it is still listening — and the status line holds no controls", () => {
+    render(
+      <VoiceBar
+        onRepeat={() => undefined}
+        t={(key) => translate("en", key)}
+        view={{ ...idleView, status: { kind: "speaking", callId: 1, turnId: 1, adapter: "elevenlabs", audioStarted: true, micOpen: true }, speaking: true, duplex: true }}
+      />,
+    );
+    expect(screen.getByText(/^speaking… you can talk any time\./i)).toBeInTheDocument();
+    // The interrupt setting lives in the Get help sheet, not in the call view.
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("before any audio the status is 'preparing voice', never 'speaking'; after an interruption it says 'go ahead'", () => {
+    const { rerender } = render(
+      <VoiceBar onRepeat={() => undefined} t={(key) => translate("en", key)} view={{ ...idleView, status: { kind: "speaking", callId: 1, turnId: 1, adapter: "elevenlabs", audioStarted: false, micOpen: false } }} />,
+    );
+    expect(screen.getByText(/^preparing voice…$/i)).toBeInTheDocument();
+    rerender(<VoiceBar onRepeat={() => undefined} t={(key) => translate("en", key)} view={{ ...idleView, status: { kind: "listening", callId: 1, turnId: 2, afterInterrupt: true }, listening: true }} />);
+    expect(screen.getByText(/^I heard you — go ahead\.$/i)).toBeInTheDocument();
+    rerender(<VoiceBar onRepeat={() => undefined} t={(key) => translate("en", key)} view={{ ...idleView, status: { kind: "processing", callId: 1, turnId: 2 } }} />);
+    expect(screen.getByText(/^checking what I heard…$/i)).toBeInTheDocument();
   });
 
   it("no voice bar at all when the browser has no speech recognition — typing still works", () => {
@@ -118,12 +182,12 @@ describe("the call starts voice automatically — no separate button", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     // Synthesis-only: the greeting is still spoken (no recognition needed for that)...
     expect(fake.utterances[0].text).toBe("Hello, I’m an AI guide. What would you like to know today?");
-    // ...but there is no mic status/mute control, since there is nothing to listen with.
-    expect(screen.queryByRole("button", { name: /mic on|mic off/i })).toBeNull();
+    // ...but Mute has nothing to mute, and the text box is open from the start.
+    expect(muteButton()).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/type your question/i), { target: { value: "hello" } });
-    fireEvent.submit(screen.getByLabelText(/type your question/i).closest("form")!);
-    expect(screen.getByRole("button", { name: /ask about my schedule/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "hello" } });
+    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
   });
 
   it("no speech at all when the browser has neither recognition nor synthesis — the call still works by typing", () => {
@@ -131,7 +195,8 @@ describe("the call starts voice automatically — no separate button", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     expect(fake.utterances).toHaveLength(0);
-    expect(screen.queryByRole("button", { name: /mic on|mic off/i })).toBeNull();
+    expect(muteButton()).toBeDisabled();
+    expect(screen.getByLabelText(/type it here/i)).toBeInTheDocument();
     expect(screen.getByText("Hello, I’m an AI guide. What would you like to know today?")).toBeInTheDocument();
   });
 });
@@ -233,7 +298,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     expect(screen.getByText(/what strength does the label say/i)).toBeInTheDocument();
     respond(fake, "500 milligrams");
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
   });
 
   it("an off-topic question (the weather) is acknowledged, then redirected to the two supported actions", () => {
@@ -247,7 +312,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     expect(screen.getByText(/I’d enjoy talking about that/)).toBeInTheDocument();
     expect(screen.getByText(/Would you like to show me a medicine label/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /ask about my schedule/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull(); // asked in words, not a second button
   });
 
   it.each([
@@ -311,7 +376,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     finishSpeaking(fake); // let the "possible match" heading finish before answering
 
     respond(fake, "yes, that's right");
@@ -360,7 +425,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     // so the re-prompt never nudges toward confirming.
     expect(screen.getByText(/didn’t quite catch that/i)).toBeInTheDocument();
     expect(screen.getByText(/say “yes”, “no”, or “I’m not sure”/i)).toBeInTheDocument();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument(); // unchanged
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument(); // unchanged
   });
 
   it("after a confirmed match, an unrecognised question names the next step instead of stalling", () => {
@@ -380,9 +445,9 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     respond(fake, "yes that is my medicine");
 
     act(() => fake.recognitions.at(-1)!.say("so what am I meant to do now", true));
-    expect(screen.getByText(/say “next” to hear the rest/i)).toBeInTheDocument();
+    expect(screen.getByText(/I can carry on with your record, go back a step, or say it again/i)).toBeInTheDocument();
     // Guidance only — it moves nothing and opens nothing: still on the first step.
-    expect(screen.getByLabelText(translate("en", "explainHintNext"))).toBeInTheDocument();
+    expect(sessionStore.getSnapshot().explainStep).toBe(0); // still on the first step
     expect(screen.queryByText("Take 1 tablet twice daily with meals.")).toBeNull();
   });
 
@@ -424,7 +489,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     respond(fake, "It's Metformin, 500 milligrams");
     act(() => vi.advanceTimersByTime(1000)); // the brief "checking" beat before a result
 
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
   });
 
   it("a medicine name with no strength yet is asked for the strength, then completes on the next turn", () => {
@@ -442,7 +507,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
 
     respond(fake, "500 milligrams");
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
   });
 
   it("a wrong name and strength said together is a safe no-match, not a guess", () => {
@@ -485,8 +550,8 @@ describe("hands-free conversation — recovery and control", () => {
     act(() => fake.recognitions[0].fail("not-allowed"));
     expect(screen.getByText(/microphone is off/i)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/type your question/i), { target: { value: "What is this for?" } });
-    fireEvent.submit(screen.getByLabelText(/type your question/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "What is this for?" } });
+    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
     expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
   });
 
@@ -503,23 +568,28 @@ describe("hands-free conversation — recovery and control", () => {
     expect(screen.getByText(/still here/i)).toBeInTheDocument();
   });
 
-  it("the small mic icon mutes and resumes the conversation on demand", () => {
+  it("Mute stops listening and says so; Unmute resumes the same call", () => {
     const fake = install();
     render(<CompanionExperience />);
     startCall(fake);
+    const call = sessionStore.getSnapshot().callCount;
     expect(fake.recognitions[0].started).toBe(true);
-    expect(micButton()).toHaveAttribute("aria-pressed", "true");
+    expect(muteButton()).toHaveAccessibleName("Mute");
 
-    fireEvent.click(micButton());
+    fireEvent.click(muteButton());
     expect(fake.recognitions[0].started).toBe(false);
-    expect(micButton()).toHaveAttribute("aria-pressed", "false");
+    expect(muteButton()).toHaveAccessibleName("Unmute");
+    // Said in words, in the polite status line, and typing opens in its place.
+    expect(screen.getByText(/^Muted\. Type below, or tap Unmute\./)).toBeInTheDocument();
+    expect(screen.getByLabelText(/type it here/i)).toBeInTheDocument();
     tick();
     expect(fake.recognitions).toHaveLength(1); // stayed off — no new recognition opened
 
-    fireEvent.click(micButton());
-    expect(micButton()).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(muteButton());
+    expect(muteButton()).toHaveAccessibleName("Mute");
     tick();
     expect(fake.recognitions.length).toBeGreaterThan(1);
+    expect(sessionStore.getSnapshot().callCount).toBe(call); // the same call, not a new one
   });
 
   it("ending the call stops the mic and speech, and the next call starts the same automatic way", () => {
@@ -530,49 +600,267 @@ describe("hands-free conversation — recovery and control", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /end call/i }));
     expect(fake.recognitions[0].started).toBe(false);
-    expect(screen.queryByRole("button", { name: /mic on|mic off/i })).toBeNull(); // VoiceBar not shown
+    expect(screen.queryByRole("button", { name: /^(mute|unmute)$/i })).toBeNull(); // call controls gone
 
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     expect(fake.utterances).toHaveLength(2); // the greeting is spoken again, automatically
   });
 });
 
-describe("words and voice arrive together", () => {
+describe("words and voice arrive together — one voice for the whole call", () => {
   const GREETING = "Hello, I’m an AI guide. What would you like to know today?";
-  function installSlowGemini() {
-    let start: (ok: boolean) => void = () => undefined;
-    const player = {
-      speak: vi.fn(() => new Promise<boolean>((r) => (start = r))),
-      stop: vi.fn(),
-      onSpeakingChange: () => () => undefined,
+  /**
+   * A controllable streaming voice (the ElevenLabs adapter's shape) for the next
+   * call: audio starts, ends or fails only when the test says so. With it installed
+   * the call first "connects" (a microtask), so tests settle that before asserting.
+   */
+  function installStreamingVoice() {
+    const speech = new FakeSpeechAdapter();
+    setVoiceAdaptersForTest({ speech: () => speech });
+    return {
+      get speaks() {
+        return speech.requests;
+      },
+      get interrupts() {
+        return speech.interrupts;
+      },
+      /** The engines answer and the call is connected. */
+      connect: () => act(async () => flush()),
+      start: () => act(async () => speech.started()),
+      failBeforeAudio: () => act(async () => speech.failBeforeAudio()),
+      finish: () => act(() => speech.ended()),
+      breakMidLine: () => act(() => speech.breakMidLine()),
     };
-    setGeminiSpeechPlayer(player as unknown as GeminiSpeechPlayer);
-    return { player, start: (ok: boolean) => start(ok) };
   }
-  afterEach(() => setGeminiSpeechPlayer(null));
 
-  it("holds the companion's words behind a connecting indicator until its voice starts", async () => {
+  // PRD EN-05 (amended 12 October 2026): the words appear as the voice starts, never later than the cap.
+  it("shows the companion's words as its voice starts — 'thinking' until then, and the same string is what is voiced", async () => {
     install();
-    const gemini = installSlowGemini();
+    const voice = installStreamingVoice();
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
 
+    expect(screen.queryByText(GREETING)).not.toBeInTheDocument(); // not before the voice
+    expect(screen.getByText(translate("en", "companionThinking"))).toBeInTheDocument(); // but something is happening
+    expect(screen.getByText(/getting the call ready/i)).toBeInTheDocument();
+    expect(voice.speaks).toEqual([]);
+    await voice.connect();
+    expect(voice.speaks.map((s) => s.text)).toEqual([GREETING]); // the same string is what is voiced
+    expect(screen.getByText(/^preparing voice…$/i)).toBeInTheDocument();
     expect(screen.queryByText(GREETING)).not.toBeInTheDocument();
-    expect(screen.getByText(translate("en", "companionThinking"))).toBeInTheDocument();
+    expect(document.querySelector("[data-announcer]")).toHaveTextContent(""); // nor announced early
 
-    await act(async () => gemini.start(true));
-    expect(screen.getByText(GREETING)).toBeInTheDocument();
+    await voice.start();
+    expect(screen.getByText(/^speaking…$/i)).toBeInTheDocument(); // only once audio is actually playing
+    expect(screen.getAllByText(GREETING)).toHaveLength(1); // appears with the voice, once
+    expect(document.querySelector("[data-announcer]")).toHaveTextContent(GREETING);
   });
 
-  it("if the voice is slow, switches to the browser voice and shows the words together", async () => {
-    const fake = install();
-    installSlowGemini();
+  it("a slow voice never hides the words: they appear after the cap even if audio hasn't started", async () => {
+    install();
+    const voice = installStreamingVoice();
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
-    expect(fake.utterances).toHaveLength(0);
-
-    await act(async () => vi.advanceTimersByTime(6000));
-    expect(fake.utterances.at(-1)?.text).toBe(GREETING);
+    await voice.connect();
+    await act(async () => vi.advanceTimersByTime(VOICE_HOLD_MAX_MS - 100));
+    expect(screen.queryByText(GREETING)).not.toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTime(200));
     expect(screen.getByText(GREETING)).toBeInTheDocument();
+    await voice.start();
+    expect(screen.getAllByText(GREETING)).toHaveLength(1); // not added again when the voice catches up
+  });
+
+  it("a slow streaming voice is waited for — the browser voice does not take over after six seconds", async () => {
+    const fake = install();
+    const voice = installStreamingVoice();
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    await voice.connect();
+    await act(async () => vi.advanceTimersByTime(6500));
+    expect(screen.getByText(GREETING)).toBeInTheDocument(); // shown after the cap, while the voice still prepares
+    expect(fake.utterances).toHaveLength(0);
+    expect(fake.recognitions).toHaveLength(0); // and the mic stays shut while the line is pending
+  });
+
+  it("if the streaming voice fails before any audio, the browser says the same words, stays the voice for the call, and the status says so", async () => {
+    const fake = install();
+    const voice = installStreamingVoice();
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    await voice.connect();
+    await voice.failBeforeAudio();
+    expect(fake.utterances.map((u) => u.text)).toEqual([GREETING]);
+    expect(screen.getByText(/your browser’s own voice is reading the words/i)).toBeInTheDocument();
+
+    finishSpeaking(fake);
+    respond(fake, "What is this for?");
+    expect(voice.speaks).toHaveLength(1); // the streaming voice was not tried again
+    expect(fake.utterances).toHaveLength(2); // the browser said the reply, the same words as on screen
+    expect(screen.getByText(fake.utterances[1].text)).toBeInTheDocument();
+  });
+
+  it("if the streaming voice fails after audio started, the line stops: no browser voice finishes it, the words stay, Repeat says it again", async () => {
+    const fake = install();
+    const voice = installStreamingVoice();
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    await voice.connect();
+    await voice.start();
+    voice.breakMidLine();
+
+    expect(fake.utterances).toHaveLength(0);
+    expect(screen.getByText(GREETING)).toBeInTheDocument();
+    expect(screen.getByText(/the voice stopped/i)).toBeInTheDocument(); // the status says so in words
+    tick(); // the mic reopens: the call is not stuck
+    expect(fake.recognitions).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /repeat/i }));
+    expect(voice.speaks.at(-1)).toMatchObject({ text: GREETING, slow: true }); // same voice, the whole line, slower
+    expect(fake.utterances).toHaveLength(0);
+  });
+
+  it("the companion's voice cannot alternate within one call", async () => {
+    const fake = install();
+    const voice = installStreamingVoice();
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    await voice.connect();
+    await voice.start();
+    voice.finish();
+    tick();
+    act(() => fake.recognitions.at(-1)!.say("What is this for?", true));
+    await voice.start();
+    voice.finish();
+    tick();
+    act(() => fake.recognitions.at(-1)!.say("yes", true));
+    expect(voice.speaks).toHaveLength(3);
+    expect(fake.utterances).toHaveLength(0);
+  });
+
+  it("typing while the companion speaks interrupts it and is handled as the next turn", async () => {
+    const fake = install();
+    const voice = installStreamingVoice();
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    await voice.connect();
+    await voice.start();
+    fromHelpSheet(/type instead/i);
+    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "What is this for?" } });
+    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    expect(voice.interrupts).toEqual([voice.speaks[0].identity]); // the greeting stops
+    expect(voice.speaks).toHaveLength(2); // the reply is the next line, in the same voice
+    await voice.start(); // its words appear as it is said
+    expect(screen.getByText(voice.speaks[1].text)).toBeInTheDocument();
+    expect(fake.utterances).toHaveLength(0);
+  });
+});
+
+describe("one visible line for every spoken line", () => {
+  it("Repeat says the complete line that is on screen again, and adds nothing to the transcript", () => {
+    const fake = install();
+    render(<CompanionExperience />);
+    startCall(fake);
+    respond(fake, "What is this for?");
+    const shown = fake.utterances.at(-1)!.text;
+    expect(screen.getByText(shown)).toBeInTheDocument();
+    const before = sessionStore.getSnapshot();
+
+    // Repeat is not a standing control in a healthy call; it is one tap away in Get help.
+    expect(screen.queryByRole("button", { name: /repeat/i })).toBeNull();
+    fromHelpSheet(/repeat/i);
+    expect(fake.utterances.at(-1)!.text).toBe(shown); // the whole line, unchanged
+    expect(fake.utterances.at(-1)!.rate).toBeLessThan(fake.utterances.at(-2)!.rate); // slowly
+    // The transcript shows the repeat (existing feed behaviour) with the identical words; nothing advanced.
+    expect(screen.getAllByText(shown).length).toBeGreaterThanOrEqual(1);
+    const after = sessionStore.getSnapshot();
+    expect({ ...after, repeatCount: before.repeatCount, audit: before.audit }).toEqual(before);
+    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+  });
+
+  it("a voice notice is a visible companion turn in the transcript, with exactly the words that are spoken", () => {
+    const fake = install();
+    render(<CompanionExperience />);
+    startCall(fake);
+    act(() => fake.recognitions.at(-1)!.say("I have chest pain", true, 0.3));
+    const notice = "Sorry, I didn’t quite catch that. Could you say it again? Typing it works well too.";
+    expect(fake.utterances.at(-1)!.text).toBe(notice);
+    // It is a companion card in the feed (not only a status caption) — and, following the
+    // greeting with no user turn between, it shares the greeting's "Companion says" label.
+    const cards = document.querySelectorAll('[data-speaker="companion"]');
+    expect(cards[cards.length - 1]).toHaveTextContent(notice);
+    expect(cards[cards.length - 1]).not.toHaveTextContent(/companion says/i);
+    expect(screen.getAllByText(/companion says/i)).toHaveLength(1);
+  });
+
+  it("without any voice, the same notices still appear as text and typing keeps working", () => {
+    install({ recognition: false, synthesis: false });
+    sessionStore.setForTest(toConfirmMatch());
+    render(<CompanionExperience />);
+    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "asdkjhasd blorp" } });
+    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    expect(screen.getByText(/say “yes”, “no”, or “I’m not sure”/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "yes" } });
+    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    expect(screen.getByText("Here is what your record says.")).toBeInTheDocument();
+  });
+});
+
+describe("the reviewed callback is sent by an explicit spoken or typed 'send'", () => {
+  function toReview() {
+    const s = run([
+      { type: "SET_DOSE_SCENARIO", scenario: "conflict-sent" },
+      startCallEvent,
+      { type: "USER_MESSAGE", text: "My doctor changed my medicine, but this box still says the old amount. How many should I take now?", via: "typed" },
+      chooseShowMedicine,
+      chooseCamera,
+      grantCamera,
+      submitDemo(),
+      resolve,
+    ]);
+    sessionStore.setForTest(run([{ type: "CONFIRM_MATCH", candidateId: s.candidate!.candidateId, decision: "confirmed" }], s));
+  }
+
+  it("after the review, a plain 'yes' sends nothing; an explicit spoken 'send it' submits that exact summary", () => {
+    const fake = install();
+    toReview();
+    render(<CompanionExperience />);
+    // Each step is said, not tapped: the reading, the pharmacist, the summary.
+    for (const words of ["yes", "ask a pharmacist", "yes please"]) {
+      finishSpeaking(fake);
+      act(() => fake.recognitions.at(-1)!.say(words, true));
+    }
+    expect(screen.getByText("I’ve prepared a short summary for the pharmacist.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send callback request" })).toBeNull();
+    finishSpeaking(fake);
+
+    act(() => fake.recognitions.at(-1)!.say("yes", true));
+    expect(sessionStore.getSnapshot().doseCheck?.callback?.status).toBe("reviewing");
+    expect(screen.getByText("Nothing has been sent yet. If it’s right, say “send the request.” To change something, tell me what.")).toBeInTheDocument();
+    finishSpeaking(fake);
+
+    // Live (interim) words never send — only the final transcript is interpreted.
+    act(() => fake.recognitions.at(-1)!.say("send the request", false));
+    expect(sessionStore.getSnapshot().doseCheck?.callback?.status).toBe("reviewing");
+    finishSpeaking(fake);
+
+    act(() => fake.recognitions.at(-1)!.say("yes, send it", true));
+    expect(sessionStore.getSnapshot().doseCheck?.callback?.status).toBe("submitting");
+    expect(sessionStore.getSnapshot().doseCheck?.callback?.approvedRevision).toBe(sessionStore.getSnapshot().doseCheck?.callback?.revision);
+  });
+
+  it("'don't send' said aloud cancels the reviewed summary with nothing sent", () => {
+    const fake = install();
+    toReview();
+    render(<CompanionExperience />);
+    for (const words of ["yes", "ask a pharmacist", "yes please"]) {
+      finishSpeaking(fake);
+      act(() => fake.recognitions.at(-1)!.say(words, true));
+    }
+    expect(screen.getByText("I’ve prepared a short summary for the pharmacist.")).toBeInTheDocument();
+    finishSpeaking(fake);
+
+    act(() => fake.recognitions.at(-1)!.say("don't send it", true));
+    expect(sessionStore.getSnapshot().doseCheck?.callback?.status).toBe("cancelled");
+    expect(screen.queryByText("Demo: callback request submitted.")).toBeNull();
   });
 });

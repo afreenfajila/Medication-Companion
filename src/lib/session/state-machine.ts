@@ -1,6 +1,23 @@
-import type { CopyKey } from "@/lib/content/translations";
+import { t as translate, type CopyKey } from "@/lib/content/translations";
 import type { LabelAnalysis } from "@/lib/api/schemas";
-import { metforminRecord, recordMedicines } from "@/lib/content/seed-record";
+import { resolveExplanation } from "@/lib/content/explanation";
+import { metforminRecord, metforminRecordVersion, patient, recordMedicines, recordSource } from "@/lib/content/seed-record";
+import {
+  CALLBACK_RECIPIENT,
+  DEFAULT_CALLBACK_NUMBER,
+  DOSE_SCENARIOS,
+  callbackRequestId,
+  compareInstructions,
+  isPlausibleNumber,
+  looksLikeLabelWording,
+  parseInstruction,
+  type CallbackDraft,
+  type CallbackReason,
+  type Comparison,
+  type DoseScenario,
+  type InstructionField,
+  type LabelSource,
+} from "@/lib/dose-check/dose-check";
 import { candidateDisplayFor, candidateIdFor, matchLabelInput } from "@/lib/matching/match-record";
 import type { HelpReason } from "@/lib/services/reasons";
 import type { StudyCondition } from "@/lib/study/study-mode";
@@ -15,7 +32,7 @@ import type {
   SafetyReason,
   UiLanguage,
 } from "@/types/content";
-import { routeMessage } from "./intent";
+import { namesRecordMedicine, routeMessage } from "./intent";
 
 // Explicit, pure session state machine. Every transition is guarded: an event
 // that is not legal in the current state returns the SAME session object
@@ -24,12 +41,85 @@ import { routeMessage } from "./intent";
 export type HelpKind = "pharmacist-callback" | "family" | "trusted-helper" | "clinic";
 export type HelpFlow = {
   kind: HelpKind;
-  stage: "confirm" | "sending" | "sent" | "failed" | "info";
+  /** Anything sent to another party goes confirm → review ("check before sending") → sending, on an explicit "send". */
+  stage: "confirm" | "review" | "sending" | "sent" | "failed" | "info";
   reason: HelpReason;
   /** From the service on success: the callback reference, or who was told. */
   reference?: string;
   contactName?: string;
 };
+
+/**
+ * The dose-change check (Assignment 4), layered on the call like `helpFlow`.
+ * "identify" runs in `listening`/camera/confirm; every later step lives inside
+ * `explain`, which is unreachable without a confirmed medicine. It compares the
+ * box with the record and can prepare a pharmacist callback. It never resolves
+ * the dose: medication status stays "unresolved" whatever happens.
+ */
+export type DoseCheck = {
+  step: "identify" | "label" | "compared" | "record-unavailable";
+  /**
+   * Label wording waiting to be confirmed (a simulated camera reading, or
+   * words typed or heard in the call). Never compared until confirmed.
+   */
+  reading: string | null;
+  /** Where the current wording came from, shown beside it. */
+  labelSource: LabelSource | null;
+  /** Bumped whenever the label wording changes; a confirmation applies to one revision only. */
+  labelRevision: number;
+  /** What the person confirmed their box says. Kept apart from the record's own wording. */
+  labelText: string | null;
+  confirmedLabelRevision: number | null;
+  /** The last comparison, tied to the record version and label revision it used. */
+  comparison: ComparedResult | null;
+  /** "I can prepare a summary..." is on screen. */
+  offer: boolean;
+  callback: CallbackState | null;
+  notice: "nothing-shared" | "conflict-cleared" | null;
+};
+
+/** A comparison, stamped with exactly what was compared (site-contract §9, invariant 4). */
+export type ComparedResult = Comparison & { recordVersion: string; labelRevision: number | null };
+
+export type CallbackState = {
+  /**
+   * "failed": the service definitively did not deliver. "unknown": no definite
+   * answer (timeout, error) — it may have gone through, so neither is claimed.
+   */
+  status: "reviewing" | "editing" | "submitting" | "submitted" | "failed" | "unknown" | "cancelled";
+  /** Unique per prepared summary, so two requests in one call never share a request ID. */
+  draftId: string;
+  draft: CallbackDraft;
+  /** Bumped by any change to the draft: a new version needs a fresh review and has a new request ID. */
+  revision: number;
+  /** The version "Send" authorised. Cleared by any later change. */
+  approvedRevision: number | null;
+  /** The summary was changed after it was first shown (said as "I've updated the summary"). */
+  updated?: boolean;
+  reference?: string;
+};
+
+export type DoseAction =
+  /** New label wording, typed into the panel: shown back for confirmation, never trusted as-is. */
+  | { kind: "enter-label"; text: string }
+  /** "Yes, that is what the label says" — for the revision on screen only. */
+  | { kind: "confirm-label"; revision: number }
+  | { kind: "reject-reading" }
+  /** "I can't confirm it": nothing can be compared; no conflict is established. */
+  | { kind: "cannot-confirm" }
+  | { kind: "review-details" }
+  | { kind: "offer-callback" }
+  | { kind: "accept-offer" }
+  | { kind: "decline-offer" }
+  | { kind: "edit" }
+  | { kind: "cancel-edit" }
+  | { kind: "save"; changes: { callbackContact: string; concernSummary: string; labelInstruction: string } }
+  | { kind: "send"; revision: number }
+  /** Back to the conversation; the medication question is said to stay unresolved. */
+  | { kind: "return-to-call" }
+  | { kind: "result"; requestId: string; outcome: "submitted" | "failed" | "unknown"; reference?: string }
+  | { kind: "dont-send" }
+  | { kind: "review-summary" };
 
 export type CameraMode = "preview" | "fallback";
 export type CameraIssue = "denied" | "unavailable";
@@ -102,6 +192,14 @@ export type Session = {
   studyCondition: StudyCondition | null;
   /** Label retries used for the current medicine. One retry, then human help only. */
   labelRetries: number;
+  doseCheck: DoseCheck | null;
+  /**
+   * The page reloaded mid-call (site-contract §10): the call is gone and is not
+   * rebuilt. Said once on the start screen; cleared by the next call.
+   */
+  previousCallInterrupted: boolean;
+  /** Reviewer demo page only: the fictional scenario behind the dose check. Null on /companion. */
+  doseScenario: DoseScenario | null;
   audit: AuditEvent[];
   auditSeq: number;
 };
@@ -135,6 +233,8 @@ export type SessionEvent =
   /** "Does this match what's printed on your label?", asked beside the instruction. */
   | { type: "LABEL_CHECK"; matches: boolean }
   | { type: "UNDERSTOOD" }
+  /** "That dose isn't right", in any wording (the meaning-match): opens the label-vs-record check. */
+  | { type: "START_DOSE_CHECK" }
   | { type: "NEW_MEDICINE" }
   | { type: "GET_HELP" }
   | { type: "TRY_ANOTHER_LABEL" }
@@ -142,6 +242,8 @@ export type SessionEvent =
   /** Opens a help flow: the confirm/consent step, or the clinic's number. */
   | { type: "HELP_START"; kind: HelpKind }
   | { type: "HELP_CONFIRM"; granted: boolean }
+  /** "Send", said or typed, after the review. Never offered to the AI meaning-match. */
+  | { type: "HELP_SEND" }
   /** The service's answer to a confirmed request (dispatched by the client after the API call). */
   | { type: "HELP_RESULT"; ok: boolean; reference?: string; contactName?: string }
   | { type: "HELP_RETRY" }
@@ -149,6 +251,10 @@ export type SessionEvent =
   | { type: "HELP_DISMISS" }
   | { type: "REPEAT" }
   | { type: "END_CALL" }
+  /** Dose-change check steps (Assignment 4). */
+  | { type: "DOSE"; action: DoseAction }
+  /** Reviewer controls only: pick a scenario; ends any call so it starts clean. */
+  | { type: "SET_DOSE_SCENARIO"; scenario: DoseScenario | null }
   /**
    * The understanding pass's advisory result for one turn: which of the two
    * in-call doors to offer, and whether it asked a name check. The reply TEXT
@@ -203,6 +309,9 @@ export function createInitialSession(): Session {
     helpFlow: null,
     studyCondition: null,
     labelRetries: 0,
+    doseCheck: null,
+    doseScenario: null,
+    previousCallInterrupted: false,
     audit: [],
     auditSeq: 0,
   };
@@ -296,6 +405,11 @@ function closeHelp(s: Session, ctx: ReduceContext, resume: boolean): Session {
   return closed;
 }
 
+/** A help request already sent can't be taken back, so an interruption must not hide its outcome. */
+function keepSending(flow: HelpFlow | null): HelpFlow | null {
+  return flow?.stage === "sending" ? flow : null;
+}
+
 function enterSafety(
   s: Session,
   ctx: ReduceContext,
@@ -311,10 +425,16 @@ function enterSafety(
     state: "safety",
     safetyReason: reason,
     contextualActions: [],
-    helpFlow: null,
+    // A request already on its way stays, so its outcome is still shown; anything else closes.
+    helpFlow: keepSending(s.helpFlow),
     recordConflict: false,
   };
-  return withAudit(next, ctx, {
+  // The dose check pauses here; its confirmed context is kept for "Carry on".
+  const paused: AuditInput[] =
+    s.doseCheck && s.state === "explain"
+      ? [{ eventType: "support-interruption", summary: "Dose-change check paused for support; context kept", actor: "system" }]
+      : [];
+  return withAudit(next, ctx, ...paused, {
     eventType: urgent ? "urgent-safety-triggered" : "help-requested",
     summary: urgent
       ? "Urgent-risk wording detected; urgent safety message shown"
@@ -378,6 +498,399 @@ function applyRoute(
   );
 }
 
+// ---- Dose-change check ------------------------------------------------------
+
+const ACTIVE_DRAFT: ReadonlyArray<CallbackState["status"]> = ["reviewing", "editing", "failed"];
+const ALL_FIELDS: InstructionField[] = ["amount", "perDay", "timing"];
+
+function labelCorrected(labelRevision: number): AuditInput {
+  return { eventType: "label-corrected", summary: "Label wording changed; it needs confirming again", details: { labelRevision } };
+}
+
+function newDoseCheck(): DoseCheck {
+  return {
+    step: "identify",
+    reading: null,
+    labelSource: null,
+    labelRevision: 0,
+    labelText: null,
+    confirmedLabelRevision: null,
+    comparison: null,
+    offer: false,
+    callback: null,
+    notice: null,
+  };
+}
+
+/**
+ * New wording on screen: a new revision, waiting for confirmation. The earlier
+ * confirmation and the comparison built on it no longer apply (site-contract §8).
+ */
+function withReading(d: DoseCheck, text: string, source: LabelSource): DoseCheck {
+  return {
+    ...d,
+    step: "label",
+    reading: text.trim().slice(0, 200),
+    labelSource: source,
+    labelRevision: d.labelRevision + 1,
+    labelText: null,
+    confirmedLabelRevision: null,
+    comparison: null,
+  };
+}
+
+/**
+ * Compared on the record's structured English wording; the person's label as they confirmed it.
+ * Always the real fixture: study-mode's deliberately wrong explanation never reaches the dose check.
+ */
+function compareWithRecord(s: Session, labelText: string, labelRevision: number): ComparedResult {
+  const view = resolveExplanation(s, "en");
+  return {
+    ...compareInstructions(parseInstruction(view?.explanation.instruction), parseInstruction(labelText)),
+    recordVersion: metforminRecordVersion,
+    labelRevision,
+  };
+}
+
+/** The truthful reason for help, from what was (or couldn't be) compared. Null when nothing differs. */
+function callbackReasonFor(d: DoseCheck): CallbackReason | null {
+  if (d.step === "record-unavailable") return "record-unavailable";
+  if (d.comparison?.outcome === "conflict") return "instruction-discrepancy";
+  if (d.comparison?.outcome === "insufficient") return "comparison-incomplete";
+  return null;
+}
+
+const CONCERN_KEY: Record<CallbackReason, CopyKey> = {
+  "instruction-discrepancy": "doseConcernDefault",
+  "comparison-incomplete": "doseConcernIncomplete",
+  "record-unavailable": "doseConcernUnavailable",
+};
+
+/**
+ * Record facts come from the confirmed record only; the person can't edit them.
+ * Whatever wasn't available or confirmed is left out (null), never filled in.
+ */
+function newDraft(s: Session, d: DoseCheck, reason: CallbackReason): CallbackDraft | null {
+  const view = resolveExplanation(s, s.language);
+  if (!view || !s.candidate) return null;
+  return {
+    recipientId: CALLBACK_RECIPIENT.recipientId,
+    patientId: patient.id,
+    medicine: {
+      medicineId: metforminRecord.id,
+      displayName: metforminRecord.identity.genericName,
+      strengthText: metforminRecord.identity.strength,
+    },
+    reason,
+    concernSummary: translate(s.language, CONCERN_KEY[reason]),
+    currentRecord:
+      reason === "record-unavailable"
+        ? null
+        : {
+            instructionText: view.explanation.instruction,
+            sourceName: recordSource.name,
+            recordedAt: recordSource.verifiedAt,
+            recordVersion: metforminRecordVersion,
+          },
+    confirmedLabel:
+      d.labelText !== null && d.confirmedLabelRevision !== null
+        ? { instructionText: d.labelText, labelRevision: d.confirmedLabelRevision }
+        : null,
+    callbackContact: DEFAULT_CALLBACK_NUMBER,
+    simulated: true,
+  };
+}
+
+/** The medicine is confirmed: show the record (or say it can't be reached) and ask about the box. */
+function enterDoseRecord(s: Session, ctx: ReduceContext): Session {
+  const scenario = s.doseScenario ? DOSE_SCENARIOS[s.doseScenario] : null;
+  const available = scenario?.recordAvailable ?? true;
+  const base: DoseCheck = { ...(s.doseCheck ?? newDoseCheck()), step: available ? "label" : "record-unavailable" };
+  // A reviewer scenario's reading stands in for the camera: still only a reading to confirm.
+  const doseCheck = available && scenario?.labelReading ? withReading(base, scenario.labelReading, "fixture") : base;
+  const next: Session = {
+    ...s,
+    state: "explain",
+    explainStep: 0,
+    contextualActions: [],
+    safetyReason: null,
+    recordConflict: false,
+    doseCheck,
+  };
+  return withAudit(
+    next,
+    ctx,
+    available
+      ? {
+          eventType: "explanation-viewed",
+          summary: "Current record shown for comparison with the box label",
+          actor: "system",
+          validationStatus: "passed",
+          details: { language: s.language, doseCheck: true, recordVersion: metforminRecordVersion },
+        }
+      : {
+          eventType: "service-fallback-used",
+          summary: "Pharmacy record unavailable; nothing compared, human help offered",
+          actor: "system",
+          route: "local-fallback",
+          validationStatus: "blocked",
+        },
+  );
+}
+
+/**
+ * Settles a comparison. A callback draft still being reviewed follows a new
+ * conflict (a fresh version that needs a fresh review) or, if the difference is
+ * gone, is set aside: there is nothing left to ask about.
+ */
+function settleComparison(
+  s: Session,
+  ctx: ReduceContext,
+  d: DoseCheck,
+  comparison: ComparedResult,
+  label: { text: string; revision: number } | null,
+): Session {
+  const cb = d.callback;
+  let callback: CallbackState | null = null;
+  let notice: DoseCheck["notice"] = null;
+  const newReason = callbackReasonFor({ ...d, step: "compared", comparison });
+  if (cb && ACTIVE_DRAFT.includes(cb.status)) {
+    // The summary only follows a correction that keeps the same reason. Otherwise
+    // it no longer says what is true, and is set aside; a new one can be asked for.
+    if (newReason === cb.draft.reason) {
+      const draft: CallbackDraft = {
+        ...cb.draft,
+        confirmedLabel: label ? { instructionText: label.text, labelRevision: label.revision } : null,
+      };
+      const changed = JSON.stringify(draft) !== JSON.stringify(cb.draft);
+      callback = {
+        ...cb,
+        draft,
+        status: "reviewing",
+        revision: changed ? cb.revision + 1 : cb.revision,
+        approvedRevision: changed ? null : cb.approvedRevision,
+        updated: changed || cb.updated,
+      };
+    } else {
+      notice = "conflict-cleared";
+    }
+  }
+  return withAudit(
+    {
+      ...s,
+      doseCheck: {
+        ...d,
+        step: "compared",
+        reading: null,
+        labelText: label?.text ?? null,
+        confirmedLabelRevision: label?.revision ?? null,
+        comparison,
+        offer: false,
+        callback,
+        notice,
+      },
+    },
+    ctx,
+    ...(label
+      ? [{ eventType: "label-confirmed" as const, summary: "Label wording confirmed by the person (not clinical verification)", details: { labelRevision: label.revision } }]
+      : []),
+    {
+      eventType: "comparison-completed",
+      summary: `Box label compared with the record: ${comparison.outcome}`,
+      actor: "system",
+      validationStatus: comparison.outcome === "match" ? "passed" : "blocked",
+      // Outcome, field names and versions only, never the wording.
+      details: {
+        outcome: comparison.outcome,
+        fields:
+          comparison.outcome === "conflict"
+            ? comparison.differing.join(",")
+            : comparison.outcome === "insufficient"
+              ? comparison.missing.join(",")
+              : null,
+        recordVersion: comparison.recordVersion,
+        labelRevision: comparison.labelRevision,
+        draftSetAside: notice === "conflict-cleared",
+      },
+    },
+  );
+}
+
+function reduceDose(s: Session, action: DoseAction, ctx: ReduceContext): Session {
+  const d = s.doseCheck;
+  if (!d || !s.callActive) return s;
+  const cb = d.callback;
+  const set = (patch: Partial<DoseCheck>): Session => ({ ...s, doseCheck: { ...d, ...patch } });
+  const setCb = (patch: Partial<CallbackState>): Session => (cb ? set({ callback: { ...cb, ...patch } }) : s);
+  const noLiveDraft = !cb || cb.status === "cancelled";
+
+  // The service's answer lands even if she stepped away to the help screen meanwhile:
+  // dropping it there left the request stuck on "Sending…" when she came back.
+  // Late answers for an ended call, an edited draft, or a finished request are dropped.
+  if (action.kind === "result") {
+    if (cb?.status !== "submitting" || action.requestId !== callbackRequestId(cb.draftId, cb.revision)) return s;
+    if (action.outcome === "failed") {
+      return withAudit(setCb({ status: "failed" }), ctx, {
+        eventType: "callback-failed",
+        summary: "Callback request not delivered (simulated); no one notified, details kept",
+        actor: "system",
+        route: "local-fallback",
+        validationStatus: "blocked",
+        details: { draftRevision: cb.revision, simulated: true },
+      });
+    }
+    if (action.outcome === "unknown") {
+      return withAudit(setCb({ status: "unknown" }), ctx, {
+        eventType: "callback-outcome-unknown",
+        summary: "Callback request outcome could not be confirmed (simulated); details kept",
+        actor: "system",
+        route: "local-fallback",
+        validationStatus: "not-applicable",
+        details: { draftRevision: cb.revision, simulated: true },
+      });
+    }
+    return withAudit(setCb({ status: "submitted", reference: action.reference }), ctx, {
+      eventType: "callback-submitted",
+      summary: `Pharmacist callback request submitted (simulated, ${action.reference ?? "no reference"}); medication still unresolved`,
+      details: { draftRevision: cb.revision, reason: cb.draft.reason, simulated: true, reference: action.reference ?? null },
+    });
+  }
+
+  // Every other step needs the confirmed medicine, on the call itself.
+  if (s.state !== "explain" || !isMatchConfirmed(s)) return s;
+  // Nothing about the label can change while a request is out, or after it went.
+  const labelLocked = cb !== null && !ACTIVE_DRAFT.includes(cb.status) && cb.status !== "cancelled";
+
+  switch (action.kind) {
+    case "enter-label": {
+      const text = action.text.trim();
+      if (d.step !== "label" || !text || labelLocked) return s;
+      const next = set(withReading(d, text, "typed"));
+      return d.labelRevision > 0 ? withAudit(next, ctx, labelCorrected(d.labelRevision + 1)) : next;
+    }
+    case "confirm-label": {
+      // Only the exact wording on screen: a stale tap for an older revision does nothing.
+      if (d.step !== "label" || !d.reading || action.revision !== d.labelRevision || labelLocked) return s;
+      const text = d.reading;
+      return settleComparison(s, ctx, d, compareWithRecord(s, text, d.labelRevision), { text, revision: d.labelRevision });
+    }
+    case "reject-reading":
+      return d.step === "label" && d.reading ? set({ reading: null }) : s;
+    case "cannot-confirm":
+      // Missing information never becomes agreement, and never a conflict either.
+      if (d.step !== "label" || labelLocked) return s;
+      return settleComparison(
+        s,
+        ctx,
+        d,
+        { outcome: "insufficient", missing: ALL_FIELDS, recordVersion: metforminRecordVersion, labelRevision: null },
+        null,
+      );
+    case "review-details":
+      if (d.step !== "compared" || !noLiveDraft) return s;
+      return set({ step: "label", reading: d.labelText, offer: false, notice: null, callback: null });
+    case "offer-callback":
+      // A conflict, an incomplete comparison, or an unreachable record — never a match.
+      if ((d.step !== "compared" && d.step !== "record-unavailable") || !callbackReasonFor(d) || !noLiveDraft) return s;
+      return set({ offer: true, notice: null });
+    case "decline-offer":
+      return d.offer ? set({ offer: false, notice: "nothing-shared" }) : s;
+    case "accept-offer": {
+      const reason = callbackReasonFor(d);
+      if (!d.offer || !reason) return s;
+      const draft = newDraft(s, d, reason);
+      if (!draft) return s;
+      const revision = (cb?.revision ?? 0) + 1;
+      // ponytail: the audit sequence is already unique and monotonic for this session, so it doubles as the draft number.
+      const draftId = `${s.sessionId}-d${s.auditSeq + 1}`;
+      return withAudit(
+        set({ offer: false, notice: null, callback: { status: "reviewing", draftId, draft, revision, approvedRevision: null } }),
+        ctx,
+        { eventType: "callback-draft-created", summary: "Callback summary prepared for review", details: { reason, draftRevision: revision, simulated: true } },
+      );
+    }
+    case "edit":
+      return cb && (cb.status === "reviewing" || cb.status === "failed") ? setCb({ status: "editing" }) : s;
+    case "cancel-edit":
+      return cb?.status === "editing" ? setCb({ status: "reviewing" }) : s;
+    case "save": {
+      // From the review too: a correction said in the conversation ("change the number to…").
+      if (cb?.status !== "editing" && cb?.status !== "reviewing") return s;
+      const callbackContact = action.changes.callbackContact.trim();
+      const concernSummary = action.changes.concernSummary.trim().slice(0, 200);
+      const labelInstruction = action.changes.labelInstruction.trim().slice(0, 200);
+      if (!isPlausibleNumber(callbackContact) || !concernSummary) return s;
+      if (cb.draft.confirmedLabel && !labelInstruction) return s;
+      // The record is not in `changes`: nothing the person types can overwrite it.
+      const draft: CallbackDraft = { ...cb.draft, callbackContact, concernSummary };
+      const changed = JSON.stringify(draft) !== JSON.stringify(cb.draft);
+      const callback: CallbackState = {
+        ...cb,
+        draft,
+        status: "reviewing",
+        revision: changed ? cb.revision + 1 : cb.revision,
+        approvedRevision: changed ? null : cb.approvedRevision,
+        updated: changed || cb.updated,
+      };
+      // New label wording is a correction: shown back as a new revision to confirm,
+      // then compared again. The summary waits for that, unapproved.
+      const edited: AuditInput[] = changed
+        ? [{ eventType: "callback-draft-edited", summary: "Callback summary changed; it needs a fresh review", details: { draftRevision: callback.revision } }]
+        : [];
+      if (cb.draft.confirmedLabel && labelInstruction !== cb.draft.confirmedLabel.instructionText) {
+        return withAudit(
+          set({ ...withReading(d, labelInstruction, "typed"), callback: { ...callback, approvedRevision: null } }),
+          ctx,
+          ...edited,
+          labelCorrected(d.labelRevision + 1),
+        );
+      }
+      return withAudit(set({ callback }), ctx, ...edited);
+    }
+    case "send":
+      // Send authorises exactly the version on screen; a stale or repeated tap does nothing.
+      // From "unknown", trying again reuses the same request ID, so it can't make a second request.
+      if (!cb || !["reviewing", "failed", "unknown"].includes(cb.status) || action.revision !== cb.revision) return s;
+      if (d.step === "label") return s; // a label correction is still waiting to be confirmed
+      return withAudit(
+        setCb({ status: "submitting", approvedRevision: cb.revision }),
+        ctx,
+        { eventType: "callback-approved", summary: "Send pressed for the reviewed summary", details: { draftRevision: cb.revision, simulated: true } },
+        ...(cb.status === "reviewing"
+          ? []
+          : [{ eventType: "callback-retried" as const, summary: "Same request tried again", details: { draftRevision: cb.revision, simulated: true } }]),
+      );
+    case "return-to-call":
+      // Back to the conversation. The difference is not resolved, and the companion says so.
+      if (cb?.status === "submitting" || (d.step !== "compared" && d.step !== "record-unavailable")) return s;
+      {
+        // Say only what is true: a difference, an incomplete check, or (after a match) nothing open.
+        const reason = callbackReasonFor(d);
+        const back: Session = {
+          ...s,
+          state: "listening",
+          doseCheck: null,
+          assistantKey: !reason ? "doseBackToCallMatch" : reason === "instruction-discrepancy" ? "doseBackToCall" : "doseBackToCallIncomplete",
+          contextualActions: [],
+          replyTo: null,
+        };
+        return reason
+          ? withAudit(back, ctx, { eventType: "dose-check-left-unresolved", summary: "Back to the call; the medication question is still unresolved" })
+          : back;
+      }
+    case "dont-send":
+      if (!cb || !ACTIVE_DRAFT.includes(cb.status)) return s;
+      return withAudit(
+        // A label correction still waiting for confirmation stays on screen to finish.
+        set({ callback: { ...cb, status: "cancelled" }, notice: "nothing-shared" }),
+        ctx,
+        { eventType: "callback-cancelled", summary: "“Don’t send”: nothing shared", details: { draftRevision: cb.revision, simulated: true } },
+      );
+    case "review-summary":
+      return cb?.status === "failed" ? setCb({ status: "reviewing" }) : s;
+  }
+}
+
 // ---- Reducer ----------------------------------------------------------------
 
 export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContext): Session {
@@ -432,6 +945,8 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           explainStep: 0,
           helpFlow: null,
           labelRetries: 0,
+          doseCheck: null,
+          previousCallInterrupted: false,
         },
         ctx,
         { eventType: "call-started", summary: "Call started", details: { callCount } },
@@ -456,12 +971,22 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         replyTo: null,
         nameCheckPending: false,
         offTopicStreak: routed.intent === "off-topic" ? s.offTopicStreak + 1 : 0,
-        helpFlow: null, // moving on without answering a help question is a "not now"
+        helpFlow: keepSending(s.helpFlow), // moving on without answering a help question is a "not now"
       };
 
       // Urgent-risk overrides the normal path from ANY active-call state.
       if (routed.intent === "urgent-risk") {
         return enterSafety(heard, ctx, "urgent-risk");
+      }
+
+      // Reading the box aloud ("Take half a tablet… avoid alcohol") on the label step is
+      // label wording to confirm, not her own medical question. Questions and anything
+      // about herself ("I took two by mistake") still go to safety.
+      const readingLabel =
+        s.state === "explain" && isMatchConfirmed(s) && s.doseCheck?.step === "label" && looksLikeLabelWording(text);
+      if (readingLabel && s.doseCheck) {
+        const read: Session = { ...heard, doseCheck: withReading(s.doseCheck, text, event.via === "typed" ? "typed" : "speech-transcript") };
+        return s.doseCheck.labelRevision > 0 ? withAudit(read, ctx, labelCorrected(s.doseCheck.labelRevision + 1)) : read;
       }
 
       // Unsupported medical questions and human-help requests also leave the normal path
@@ -481,6 +1006,24 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           { intent: routed.intent },
         );
       }
+      if (s.state === "explain" && isMatchConfirmed(s)) {
+        // In the dose check, words said on the "what does your box say?" step are a
+        // reading to confirm, never a confirmed label on their own.
+        if (s.doseCheck) {
+          if (s.doseCheck.step !== "label") return s;
+          const read: Session = { ...heard, doseCheck: withReading(s.doseCheck, text, event.via === "typed" ? "typed" : "speech-transcript") };
+          return s.doseCheck.labelRevision > 0 ? withAudit(read, ctx, labelCorrected(s.doseCheck.labelRevision + 1)) : read;
+        }
+        if (routed.intent === "dose-change") {
+          return enterDoseRecord(
+            withAudit({ ...heard, doseCheck: newDoseCheck() }, ctx, {
+              eventType: "dose-check-started",
+              summary: "Person said their medicine changed; label-vs-record check started",
+            }),
+            ctx,
+          );
+        }
+      }
       // "My doctor said…": stay on the explanation and answer from the record itself.
       // The record is never changed, hidden or softened, and no model is asked.
       if (routed.intent === "record-conflict" && s.state === "explain" && isMatchConfirmed(s)) {
@@ -495,6 +1038,25 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       const base: Session = heard;
       if (routed.safetyReason) {
         return enterSafety(base, ctx, routed.safetyReason, {}, { intent: routed.intent });
+      }
+      // "My doctor changed it, but the box says the old amount": compare, never resolve.
+      if (routed.intent === "dose-change") {
+        const started = withAudit({ ...base, doseCheck: newDoseCheck() }, ctx, {
+          eventType: "dose-check-started",
+          summary: "Person said their medicine changed; label-vs-record check started",
+        });
+        if (isMatchConfirmed(s)) return enterDoseRecord(started, ctx);
+        // Named already: straight to "is this the medicine?", still only a possible match.
+        if (namesRecordMedicine(text)) {
+          const display = candidateDisplayFor(metforminRecord);
+          return withAudit({ ...started, state: "confirm-match", candidate: display, matchStatus: "possible" }, ctx, {
+            eventType: "candidate-presented",
+            summary: `Possible match from the name said: ${display.medicineName}`,
+            route: "typed-input",
+            validationStatus: "passed",
+          });
+        }
+        return { ...started, assistantKey: routed.assistantKey, contextualActions: routed.contextualActions, replyTo: null };
       }
       // "I want to show the medicine" / "my schedule": saying it is the choice.
       if (routed.route) return applyRoute(base, ctx, routed.route, "message");
@@ -784,7 +1346,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           summary: "User confirmed the possible match",
           validationStatus: "passed",
         });
-        return enterExplain(confirmed, ctx, 0);
+        return confirmed.doseCheck ? enterDoseRecord(confirmed, ctx) : enterExplain(confirmed, ctx, 0);
       }
       const denied = withAudit(s, ctx, {
         eventType: "candidate-denied",
@@ -795,6 +1357,18 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         validationStatus: "blocked",
         details: { decision: event.decision },
       });
+      // Dose check: "No, that's not it" goes straight back to identifying the medicine (once).
+      if (s.doseCheck && event.decision === "denied" && canRetryLabel(s)) {
+        return {
+          ...denied,
+          state: "camera-permission",
+          showMethod: "choose",
+          labelRouteSelected: true,
+          candidate: null,
+          matchStatus: null,
+          labelRetries: s.labelRetries + 1,
+        };
+      }
       return enterSafety(denied, ctx, "user-unsure", {
         candidate: null,
         matchStatus: event.decision,
@@ -802,7 +1376,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
     }
 
     case "EXPLAIN_STEP": {
-      if (s.state !== "explain" || !isMatchConfirmed(s)) return s;
+      if (s.state !== "explain" || !isMatchConfirmed(s) || s.doseCheck) return s;
       const step = Math.min(2, Math.max(0, s.explainStep + (event.direction === "next" ? 1 : -1)));
       if (step === s.explainStep) return s;
       return { ...s, explainStep: step as 0 | 1 | 2, recordConflict: false };
@@ -821,7 +1395,9 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
 
     case "LABEL_CHECK": {
       // Asked beside the instruction (step 1), the only step that shows it.
-      if (s.state !== "explain" || s.explainStep !== 1 || s.recordConflict || !isMatchConfirmed(s)) return s;
+      if (s.state !== "explain" || s.explainStep !== 1 || s.recordConflict || !isMatchConfirmed(s) || s.doseCheck) {
+        return s;
+      }
       const answered = withAudit(s, ctx, {
         eventType: "label-check-answered",
         summary: event.matches ? "Person said the label matches the record" : "Person said the label looks different",
@@ -833,8 +1409,20 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       return enterSafety(answered, ctx, "label-differs", { candidate: null, matchStatus: null });
     }
 
+    case "START_DOSE_CHECK": {
+      // The same start as a dose-change message on the explanation; it decides nothing, only compares.
+      if (s.state !== "explain" || !isMatchConfirmed(s) || s.doseCheck) return s;
+      return enterDoseRecord(
+        withAudit({ ...s, recordConflict: false, doseCheck: newDoseCheck() }, ctx, {
+          eventType: "dose-check-started",
+          summary: "Person said the dose isn't right; label-vs-record check started",
+        }),
+        ctx,
+      );
+    }
+
     case "UNDERSTOOD": {
-      if (s.state !== "explain" || !isMatchConfirmed(s)) return s;
+      if (s.state !== "explain" || !isMatchConfirmed(s) || s.doseCheck) return s;
       return withAudit({ ...s, state: "complete", recordConflict: false }, ctx, {
         eventType: "understanding-confirmed",
         summary: "User said “I understand”",
@@ -859,6 +1447,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         explainStep: 0,
         recordConflict: false,
         labelRetries: 0,
+        doseCheck: null,
       };
     }
 
@@ -920,6 +1509,9 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         nameCheckPending: false,
         labelRouteSelected: false,
         resumeExplainStep: null,
+        // A dose check that never got past "which medicine?" ends here, so a later,
+        // unrelated medicine isn't pulled into it. One already comparing is kept.
+        doseCheck: s.doseCheck?.step === "identify" ? null : s.doseCheck,
       };
     }
 
@@ -929,18 +1521,42 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       const fromSafety = s.state === "safety" && s.safetyReason !== "urgent-risk";
       const fromWellbeing =
         s.state === "listening" && event.kind === "family" && s.contextualActions.includes("ask-family");
-      if (!s.callActive || s.helpFlow || !(fromSafety || fromWellbeing)) return s;
+      // "Would you like help contacting a pharmacist?" is asked during the explanation: answering it
+      // opens the same confirm step (nothing is requested without a clear yes there).
+      const fromExplain =
+        s.state === "explain" && isMatchConfirmed(s) && !s.doseCheck && event.kind === "pharmacist-callback";
+      // "Can a pharmacist call me back?" at the start of the call (or after "another medicine"):
+      // the same confirm → review → "send" as from the help screen.
+      const fromListening = s.state === "listening" && event.kind === "pharmacist-callback";
+      if (!s.callActive || s.helpFlow || !(fromSafety || fromWellbeing || fromExplain || fromListening)) return s;
       return {
         ...s,
-        helpFlow: { kind: event.kind, stage: event.kind === "clinic" ? "info" : "confirm", reason: helpReasonFor(s) },
+        recordConflict: fromExplain ? false : s.recordConflict,
+        helpFlow: {
+          kind: event.kind,
+          stage: event.kind === "clinic" ? "info" : "confirm",
+          reason: (fromExplain && !s.recordConflict) || fromListening ? "help-requested" : helpReasonFor(s),
+        },
       };
     }
 
     case "HELP_CONFIRM": {
-      if (s.helpFlow?.stage !== "confirm") return s;
-      if (!event.granted) return closeHelp(s, ctx, false);
-      // Consent given: the client now sends the request. Nothing is "sent" until the service says so.
-      return { ...s, helpFlow: { ...s.helpFlow, stage: "sending" } };
+      if (s.helpFlow?.stage !== "confirm" && s.helpFlow?.stage !== "review") return s;
+      if (!event.granted) return closeHelp(s, ctx, false); // "not now" / "don't send": nothing is sent
+      if (s.helpFlow.stage === "review") return s; // a yes on the review sends nothing: "send" does (HELP_SEND)
+      // Everything sent to another party is checked first (owner decision, 12 October 2026):
+      // "yes" opens the review; only an explicit "send" (said or typed) sends it.
+      return { ...s, helpFlow: { ...s.helpFlow, stage: "review" } };
+    }
+
+    case "HELP_SEND": {
+      // An explicit "send" (said or typed) after the review — never from the AI, a yes or a question.
+      if (s.helpFlow?.stage !== "review") return s;
+      return withAudit({ ...s, helpFlow: { ...s.helpFlow, stage: "sending" } }, ctx, {
+        eventType: "callback-approved",
+        summary: "Help request reviewed; send given",
+        details: { kind: s.helpFlow.kind },
+      });
     }
 
     case "HELP_RESULT": {
@@ -1005,11 +1621,20 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         persona: ended.persona,
         language: ended.language,
         studyCondition: ended.studyCondition,
+        doseScenario: ended.doseScenario,
         callCount: ended.callCount,
         sessionId: ended.sessionId,
         audit: ended.audit,
         auditSeq: ended.auditSeq,
       };
+    }
+
+    case "DOSE":
+      return reduceDose(s, event.action, ctx);
+
+    case "SET_DOSE_SCENARIO": {
+      const ended = s.callActive ? reduceSession(s, { type: "END_CALL" }, ctx) : s;
+      return { ...ended, doseScenario: event.scenario, doseCheck: null };
     }
   }
 }

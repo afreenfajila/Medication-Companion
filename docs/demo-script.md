@@ -5,11 +5,11 @@ Automated tests cover logic and axe rules; these are the things only a person ca
 
 ## A. Happy path (about 2 minutes)
 1. Open `/` → choose **Mei Ling**. Landing shows **one** primary button, "Call with companion", plus small Help · Language · Settings. No "Show medicine"/schedule anywhere.
-2. Tap **Call with companion**. Footer shows Repeat · Get help · End call.
+2. Tap **Call with companion**. The only controls are **Get help · Mute · End call**.
 3. Type (or speak) **"What is this for? When do I take it?"**. Companion asks "Let's check this together…" and shows **only** "Show medicine".
 4. Tap **Show medicine** → "How would you like to show me your medicine?" with **Use camera** and **Choose a photo**. Tap **Use camera** → camera explanation → **Yes, switch camera** → browser asks for permission → rear camera preview (or explained fallback).
 5. Under **Other ways to show the label**, tap **Choose a photo** and pick `public/samples/sample-metformin-label.png` (save it first). After a few seconds: "I found a possible match: Metformin, 500 mg", **no instructions visible**. On an iPhone, also try a HEIC photo: it should open or show "I couldn't open that photo".
-6. Tap **Yes, this is my medicine** → three chunks: purpose, instruction, wrap-up. Beside the instruction: "BrightCare Pharmacy · checked …" and "Does this match what's printed on your label?". Tap **中文** and back; nothing resets.
+6. Say or type **"yes, this is my medicine"** → three chunks: purpose, instruction, wrap-up. Beside the instruction: "BrightCare Pharmacy · checked …" and "Does this match what's printed on your label?". Tap **中文** and back; nothing resets.
 7. **I understand** → complete screen. **End call** → back to quiet landing.
 
 ## B. Safe uncertainty
@@ -29,8 +29,10 @@ Automated tests cover logic and axe rules; these are the things only a person ca
 - Typed label: `metformin` / `500 mg` → possible match. `metformin` / `850 mg` → safety screen.
 
 ## E. Voice
-- **Tap to speak** → browser asks for the microphone → say the question from step 3 → it appears as a caption and behaves like typing. Deny the mic → plain message, typing still works.
-- Turn **Sound on** → replies are read aloud; **Repeat** re-reads; **Sound off** silences; ending the call stops it.
+- **Call with companion** → browser asks for the microphone → say the question from step 3 → live words show as "Hearing you…", then the final words appear once, like typing. Deny the mic → plain message, **Try again**, and the text box opens.
+- **Mute** → status says "Muted", the button reads **Unmute**, the text box opens; nothing said is answered. **Unmute** → listening resumes in the same call.
+- **Get help** → sheet with "Get help from a person", **Repeat slowly**, **Type instead**, the interrupt setting (realtime voice only) and About. Escape closes it; nothing changes in the call.
+- Scroll up in the transcript while the companion talks → your place is kept and **Latest message** appears. **End call** stops voice and mic.
 - Confirm nothing about the medicine (purpose/instruction) is read before "Yes, this is my medicine".
 
 ## F. Caregiver view

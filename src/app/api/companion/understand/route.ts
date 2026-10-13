@@ -1,6 +1,7 @@
 import { AiUnavailableError } from "@/lib/ai/claude";
+import { prepareForModel } from "@/lib/ai/input-guard";
 import { understandMessage } from "@/lib/ai/understand";
-import { fail, firstIssue, newRequestId, ok } from "@/lib/api/envelope";
+import { fail, isCrossOrigin, firstIssue, newRequestId, ok } from "@/lib/api/envelope";
 import { rateLimit } from "@/lib/api/rate-limit";
 import {
   understandCapabilitySchema,
@@ -30,9 +31,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request): Promise<Response> {
   const requestId = newRequestId();
 
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (origin && host && new URL(origin).host !== host) {
+  if (isCrossOrigin(request)) {
     return fail(403, "forbidden_origin", "This request was not allowed.", "return_home", requestId);
   }
 
@@ -68,8 +67,20 @@ export async function POST(request: Request): Promise<Response> {
   // safety screen, but the model is never asked about one, whatever the client says.
   if (classifySafety(message).level !== "none") return fallback();
 
+  // Checked before Claude sees anything: cleaned and masked, or not sent at all. An earlier turn
+  // that can't be sent is left out of the history rather than blocking every later message.
+  const said = prepareForModel(message);
+  if (!said.ok) {
+    console.error(`[companion/understand] ${requestId} input refused: ${said.reason}`);
+    return fallback();
+  }
+  const recent = history.flatMap((h) => {
+    const c = prepareForModel(h.text);
+    return c.ok ? [{ speaker: h.speaker, text: c.text }] : [];
+  });
+
   try {
-    const out = await understandMessage({ language, message, history, routerReply: approved, via });
+    const out = await understandMessage({ language, message: said.text, history: recent, routerReply: approved, via });
     if (!isSafeCompanionReply(out.reply, language)) return fallback();
     // A typed message can't have been misheard: "I didn't catch that" would be untrue.
     if (via === "typed" && claimsMishearing(out.reply)) return fallback();

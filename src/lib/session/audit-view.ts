@@ -1,7 +1,7 @@
 import { sampleAuditSeeds } from "@/lib/content/fixtures";
 import type { AuditEvent, AuditEventType } from "@/types/content";
 
-export type StatusChip = "Confirmed" | "Needs help" | "Pending";
+export type StatusChip = "Confirmed" | "Needs help" | "Pending" | "Unresolved";
 
 export type DisplayEvent = {
   id: string;
@@ -22,11 +22,22 @@ const CHIP_BY_EVENT: Partial<Record<AuditEventType, StatusChip>> = {
   "urgent-safety-triggered": "Needs help",
   "caregiver-help-requested": "Needs help",
   "pharmacist-callback-requested": "Needs help",
+  // Dose-change callback: a (simulated) request leaves the medication question open.
+  "callback-submitted": "Needs help",
+  "callback-failed": "Needs help",
+  "callback-outcome-unknown": "Needs help",
+  "dose-check-left-unresolved": "Needs help",
   "label-submitted": "Pending",
   "candidate-presented": "Pending",
 };
 
-export function chipForEvent(type: AuditEventType): StatusChip | null {
+export function chipForEvent(
+  type: AuditEventType,
+  validationStatus?: AuditEvent["validationStatus"],
+): StatusChip | null {
+  // A comparison that found a difference or couldn't finish leaves the medication question open;
+  // a match changes nothing about the record's status.
+  if (type === "comparison-completed") return validationStatus === "blocked" ? "Unresolved" : null;
   return CHIP_BY_EVENT[type] ?? null;
 }
 
@@ -54,7 +65,7 @@ export function buildTimeline(sessionEvents: readonly AuditEvent[]): DisplayEven
 /** The most recent status-bearing event decides the record's current status. */
 export function deriveRecordStatus(timelineNewestFirst: readonly DisplayEvent[]): StatusChip {
   for (const e of timelineNewestFirst) {
-    const chip = chipForEvent(e.eventType);
+    const chip = chipForEvent(e.eventType, e.validationStatus);
     if (chip) return chip;
   }
   return "Pending";

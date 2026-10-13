@@ -6,10 +6,12 @@ import { join } from "node:path";
 const ROOT = ".next/static";
 const PATTERNS = [
   [/sk-ant-[A-Za-z0-9_-]{8,}/, "Anthropic API key"],
-  [/AIza[0-9A-Za-z_-]{20,}/, "Google/Gemini API key"],
+  [/sk-(proj-)?[A-Za-z0-9_-]{20,}/, "OpenAI API key"],
   [/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\./, "JWT (e.g. Supabase key)"],
-  [/ANTHROPIC_API_KEY|GEMINI_API_KEY|SUPABASE_SERVICE_ROLE_KEY/, "secret variable name"],
+  [/ANTHROPIC_API_KEY|OPENAI_API_KEY|ELEVENLABS_API_KEY|SUPABASE_SERVICE_ROLE_KEY/, "secret variable name"],
+  [/xi-api-key|realtime\/client_secrets|single-use-token/, "server-only provider credential endpoint/header"],
   [/@anthropic-ai\/sdk|api\.anthropic\.com/, "server-only Anthropic SDK/endpoint"],
+  [/@google\/genai|generativelanguage\.googleapis\.com|GEMINI_/i, "removed Google speech SDK (must not return)"],
 ];
 
 function* walk(dir) {

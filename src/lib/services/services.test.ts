@@ -12,7 +12,7 @@ describe("simulated services (Assignment 3, H4)", () => {
   it("returns realistic results from the fictional seed data", async () => {
     const s = getServices({});
     const callback = await s.pharmacy.requestCallback(patient.id, "medical-question");
-    expect(callback).toMatchObject({ ok: true, expectedWindow: "within 1 working day" });
+    expect(callback).toEqual({ ok: true, reference: expect.stringMatching(/^BC-\d{6}$/) });
     expect(callback.ok && callback.reference).toMatch(/^BC-\d{6}$/);
     expect(await s.careCircle.notifyCaregiver(patient.id, "wellbeing", true)).toEqual({ ok: true, caregiverName: "Daniel" });
     expect(await s.careCircle.notifyCaregiver(patient.id, "wellbeing", true, "trusted-helper")).toEqual({

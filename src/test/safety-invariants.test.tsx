@@ -19,6 +19,10 @@ import {
   toExplain,
 } from "./helpers";
 
+
+/** The confirmation is said and shown in the conversation (no panel): a possible match, from the fictional record. */
+const POSSIBLE_MATCH = /^I found a possible match on your BrightCare Pharmacy record \(fictional\): Metformin, 500 mg, tablet\./;
+
 // Submission hardening: one named test per safety-critical invariant that was
 // not already pinned elsewhere. Landing CTA, confirmation gate and label
 // blocking are covered in companion-experience / state-machine / image-flow tests.
@@ -134,8 +138,8 @@ describe("INVARIANT: the URL cannot open a gated screen (rendered app)", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     window.history.replaceState(null, "", "/companion?state=explain");
-    fireEvent.change(screen.getByLabelText(/type your question/i), { target: { value: "What is this for?" } });
-    fireEvent.submit(screen.getByLabelText(/type your question/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "What is this for?" } });
+    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
     expect(window.location.search).toBe("?state=listening");
     expect(document.body.textContent).not.toMatch(INSTRUCTION);
   });
@@ -179,15 +183,16 @@ describe("INVARIANT: a record conflict is answered from the record, never by a m
     expect(reply).toHaveTextContent("checked on 21 September 2026");
     expect(reply).toHaveTextContent("“Take 1 tablet twice daily with meals.”");
     expect(reply.textContent).not.toMatch(/\{\w+\}/);
-    expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
-    // Carrying on is said or typed ("carry on" / "next"), not a second button.
-    expect(screen.queryByRole("button", { name: "Carry on" })).toBeNull();
+    // Both ways on are said or typed ("pharmacist" / "carry on"): no buttons in the conversation.
+    expect(screen.queryByRole("button", { name: /pharmacist|carry on/i })).toBeNull();
+    expect(document.querySelector("[data-pinned]")).toBeNull();
 
     const posts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST");
     expect(posts.map(([u]) => u)).not.toContain("/api/companion/understand");
 
     // The callback asks first; nothing is sent yet.
-    fireEvent.click(screen.getByRole("button", { name: "Ask a pharmacist to call me" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "ask a pharmacist" } });
+    fireEvent.submit(screen.getByRole("textbox").closest("form")!);
     expect(screen.getByText(/Shall I send the request\?/)).toBeInTheDocument();
     expect(posts.map(([u]) => u)).not.toContain("/api/help/request");
   });
@@ -209,8 +214,8 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
 
   const flush = () => act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
   const send = async (text: string) => {
-    fireEvent.change(screen.getByLabelText(/type your question/i), { target: { value: text } });
-    fireEvent.submit(screen.getByLabelText(/type your question/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
+    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
     await flush();
   };
   const noRawError = () =>
@@ -229,10 +234,9 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
     fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     await flush();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(INSTRUCTION);
-    fireEvent.click(screen.getByRole("button", { name: /yes, this is my medicine/i }));
-    await flush();
+    await send("yes, this is my medicine"); // confirmed in words: there is no confirmation panel
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "next" } });
     fireEvent.submit(screen.getByRole("textbox").closest("form")!);
     await flush();
@@ -252,7 +256,7 @@ describe("DEMO HARDENING: works with no network, no AI key, no camera, no microp
     fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500 mg" } });
     fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
     await flush();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     noRawError();
   });
 });

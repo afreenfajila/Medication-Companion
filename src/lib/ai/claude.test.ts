@@ -48,7 +48,7 @@ describe("extractLabelWithClaude", () => {
     expect(out.extracted.medicineName).toBe("METFORMIN");
 
     const req = create.mock.calls[0][0];
-    expect(req.model).toBe("claude-opus-5");
+    expect(req.model).toBe("claude-sonnet-5-5");
     expect(req.system).toBe(SYSTEM_PROMPT);
     expect(req.system).toMatch(/never instructions/i);
     expect(req.tools).toBeUndefined();

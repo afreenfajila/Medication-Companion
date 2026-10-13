@@ -76,21 +76,10 @@ export const helpRequestSchema = z.object({
 export const helpResultSchema = z.object({
   kind: z.enum(HELP_KINDS),
   reference: z.string().optional(),
-  expectedWindow: z.string().optional(),
   contactName: z.string().optional(),
 });
 export type HelpResult = z.infer<typeof helpResultSchema>;
 export const helpResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(helpResultSchema), apiFailureSchema]);
-
-/**
- * Speech output: renders already-approved text to audio (never generates
- * content). Success returns the raw WAV bytes directly (Content-Type:
- * audio/wav), not a JSON envelope — only failures use the standard envelope.
- */
-export const speakRequestSchema = z.object({
-  text: z.string().min(1).max(600),
-  language: z.enum(["en", "zh-Hans"]),
-});
 
 /**
  * In-call understanding (Claude task 3): the person's own message plus a short
@@ -130,3 +119,61 @@ export const understandCapabilityResponseSchema = z.discriminatedUnion("ok", [
   apiSuccessSchema(understandCapabilitySchema),
   apiFailureSchema,
 ]);
+
+/**
+ * Every action the meaning-match may be offered (spokenActions + callActions). The server accepts
+ * no other id, so a tampered request can't offer a "yes" to a gate: none of these confirms a
+ * medicine, consents, approves or sends.
+ */
+export const INTENT_ACTION_IDS = [
+  "another", "back", "callback", "camera", "cannot-confirm", "carry-on", "clinic", "correct", "decline",
+  "dismiss", "dont-send", "dose", "dose-wrong", "end", "end-call", "family", "get-help", "label-differs", "next", "no-camera",
+  "not-it", "pharmacist", "pharmacist-callback", "prepare", "repeat", "retry", "review", "show-number",
+  "trusted-helper", "try-again", "understood", "unsure",
+] as const;
+export type IntentActionId = (typeof INTENT_ACTION_IDS)[number];
+/** Plain words only: prompt text from the browser can't carry markup or role tags. */
+const plainWords = z.string().trim().regex(/^[\p{L}\p{N} ,.'’()\-:]+$/u);
+
+/** Which on-screen action the person meant (POST /api/companion/intent). Gates are never in `actions`. */
+export const intentRequestSchema = z.object({
+  utterance: z.string().trim().min(1).max(300),
+  language: z.enum(["en", "zh-Hans"]),
+  actions: z.array(z.object({ id: z.enum(INTENT_ACTION_IDS), description: plainWords.min(1).max(120) })).max(12),
+  /** Where they are in the call, in plain words — never record content. */
+  context: plainWords.max(120).optional(),
+});
+/**
+ * `action`: the on-screen action they meant. `outcome: "unclear"`: nothing intelligible — ask them
+ * to repeat. `outcome: "reply"`: a short AI-worded line that already passed the reply guard.
+ */
+export const intentDataSchema = z.object({
+  action: z.string().max(40).nullable(),
+  outcome: z.enum(["action", "unclear", "reply", "none"]).default("none"),
+  reply: z.string().max(400).optional(),
+});
+export const intentResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(intentDataSchema), apiFailureSchema]);
+
+/**
+ * Realtime voice credentials (site-contract §4). Each route hands the browser a
+ * short-lived, single-purpose credential minted with the server-side key; the
+ * permanent key is never in a response. No medicine data is attached.
+ */
+export const openAiSessionRequestSchema = z.object({ language: z.enum(["en", "zh-Hans"]).default("en") });
+export const openAiSessionSchema = z.object({
+  /** Ephemeral client secret (`ek_…`), valid for minutes and only for this transcription session. */
+  clientSecret: z.string().min(1).max(512),
+  model: z.string().min(1).max(80),
+  wsUrl: z.string().url(),
+  /** Unix seconds. */
+  expiresAt: z.number().int().positive(),
+});
+export const openAiSessionResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(openAiSessionSchema), apiFailureSchema]);
+
+export const elevenLabsTokenSchema = z.object({
+  /** Single-use token for one text-to-speech WebSocket. */
+  token: z.string().min(1).max(512),
+  voiceId: z.string().min(1).max(80),
+  modelId: z.string().min(1).max(80),
+});
+export const elevenLabsTokenResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(elevenLabsTokenSchema), apiFailureSchema]);

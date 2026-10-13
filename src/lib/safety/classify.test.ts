@@ -84,16 +84,12 @@ describe("health signals in casual talk (Assignment 3, E2)", () => {
 });
 
 describe("escalation view", () => {
-  it("normal uncertainty offers a pharmacist, clinic or trusted helper, and family (plus try-again after a label route)", () => {
+  it("normal uncertainty offers a pharmacist and family (plus try-again after a label route) — no clinic or trusted helper", () => {
     const view = buildEscalation("record-mismatch", true);
     expect(view.urgent).toBe(false);
-    expect(view.actions.map((a) => a.id)).toEqual([
-      "try-again",
-      "pharmacist-callback",
-      "clinic",
-      "trusted-helper",
-      "family",
-    ]);
+    expect(view.actions.map((a) => a.id)).toEqual(["try-again", "pharmacist-callback", "family"]);
+    expect(view.actions.map((a) => a.labelKey)).toEqual(["tryPhoto", "askPharmacistCall", "contactFamily"]);
+    expect(buildEscalation("help-requested", false).actions.map((a) => a.id)).toEqual(["pharmacist-callback", "family"]);
   });
 
   it("does not offer 'Try another photo' before the label route was chosen or for non-label reasons", () => {

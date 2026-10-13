@@ -1,6 +1,6 @@
 "use client";
 
-import { PrimaryButton, SecondaryButton, TextAction } from "@/components/ui/buttons";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/buttons";
 import { RecordCard } from "@/components/ui/record-card";
 import type { CandidateDisplay } from "@/types/content";
 import { fillCandidate } from "@/lib/content/explanation";
@@ -22,8 +22,9 @@ export function ConfirmScreen({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      {/* The heading itself says "possible match", so no separate state label repeating it. */}
-      <h2 className="text-center text-[22px] font-bold leading-tight">{fillCandidate(t("confirmHeading"), candidate)}</h2>
+      {/* design-standard §13: one plain question; the card below says "Possible match". */}
+      <p className="text-center text-lg leading-snug">{fillCandidate(t("confirmHeading"), candidate)}</p>
+      <h2 className="text-center text-[22px] font-bold leading-tight">{t("confirmQuestion")}</h2>
 
       <RecordCard
         candidate={candidate}
@@ -34,6 +35,8 @@ export function ConfirmScreen({
           strength: t("fieldStrength"),
           form: t("fieldForm"),
           formValue: t("formTablet"),
+          record: t("fieldRecord"),
+          recordValue: t("recordFictional").replace("{name}", candidate.recordSource),
         }}
       />
 
@@ -42,9 +45,8 @@ export function ConfirmScreen({
       <div className="flex flex-col gap-3">
         <PrimaryButton onClick={() => onDecision("confirmed")}>{t("yesMedicine")}</PrimaryButton>
         <SecondaryButton onClick={() => onDecision("denied")}>{t("tryAgain")}</SecondaryButton>
-        <TextAction className="self-center" onClick={() => onDecision("unsure")}>
-          {t("unsure")}
-        </TextAction>
+        {/* "I'm not sure" is a real safety choice, not a small link (design-standard §12). */}
+        <SecondaryButton onClick={() => onDecision("unsure")}>{t("unsure")}</SecondaryButton>
       </div>
     </div>
   );

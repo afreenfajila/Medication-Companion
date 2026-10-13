@@ -4,6 +4,10 @@ import { sessionStore } from "@/lib/session/session-store";
 import { run, toExplain } from "@/test/helpers";
 import { CompanionExperience } from "./companion-experience";
 
+
+/** The confirmation is said and shown in the conversation (no panel): a possible match, from the fictional record. */
+const POSSIBLE_MATCH = /^I found a possible match on your BrightCare Pharmacy record \(fictional\): Metformin, 500 mg, tablet\./;
+
 const FORBIDDEN_ON_HOME = [
   /show medicine/i,
   /ask about my schedule/i,
@@ -71,8 +75,8 @@ const flush = () =>
   });
 
 const send = (text: string) => {
-  fireEvent.change(screen.getByLabelText(/type your question/i), { target: { value: text } });
-  fireEvent.submit(screen.getByLabelText(/type your question/i).closest("form")!);
+  fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
+  fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
 };
 
 /** Start a call and open the camera-guidance screen (no camera in jsdom → fallback). */
@@ -115,11 +119,7 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
 
     const footer = screen.getByRole("navigation", { name: "Medication Companion" });
-    expect(within(footer).getAllByRole("button").map((b) => b.textContent)).toEqual([
-      "Repeat slowly",
-      "Get help",
-      "End call",
-    ]);
+    expect(within(footer).getAllByRole("button").map((b) => b.textContent)).toEqual(["Get help", "Mute", "End call"]);
     expect(screen.queryByRole("button", { name: /show medicine/i })).toBeNull();
 
     send("What is this for?");
@@ -143,15 +143,17 @@ describe("in-call flow", () => {
     send("i dont know what to do");
     expect(screen.getByText(/I can check a medicine label with you, then explain what your pharmacy record says/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /ask about my schedule/i })).toBeInTheDocument();
+    // One contextual action, not a row of suggestions: the schedule is asked in words.
+    expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull();
   });
 
-  it("shows both temporary actions for a broad schedule question", () => {
+  it("a broad schedule question offers the one next step, Show medicine; the schedule itself is asked in words", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("When do I take my medicine?");
     expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /ask about my schedule/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull();
+    expect(sessionStore.getSnapshot().contextualActions).toContain("ask-schedule"); // still understood when said
   });
 
   it("runs the full happy path: camera or photo → consent → label → possible match → confirm → explanation → Chinese", () => {
@@ -180,12 +182,12 @@ describe("in-call flow", () => {
     });
 
     // Possible match only — no instruction visible.
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
-    expect(screen.getAllByText("Metformin 500 mg").length).toBeGreaterThan(0);
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument(); // name, strength, form and fictional source, in words
+    expect(screen.queryByRole("button", { name: /yes, this is the medicine|no, try again|i’m not sure/i })).toBeNull(); // no panel
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
     expect(screen.queryByText(/blood sugar/)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /yes, this is my medicine/i }));
+    send("yes, this is my medicine"); // confirmed in words: there is no confirmation panel
     expect(screen.getByText("Here is what your record says.")).toBeInTheDocument();
     expect(screen.getByText("Metformin helps manage blood sugar.")).toBeInTheDocument();
 
@@ -194,25 +196,24 @@ describe("in-call flow", () => {
     fireEvent.submit(screen.getByRole("textbox").closest("form")!);
     expect(screen.getByText("Take 1 tablet twice daily with meals.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "中文" }));
+    // Language is changed in words too ("中文"), not a button.
+    send("中文");
     expect(screen.getByText("随餐每日服用一片，每日两次。")).toBeInTheDocument();
-    // Language change did not reset the confirmation.
-    expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "true");
+    // Language change did not reset the confirmation: still on the record, now in Chinese.
+    expect(screen.getByLabelText("说出来，或在这里输入")).toBeInTheDocument();
   });
 
-  it("beside the instruction: shows the dated source and asks to compare with the label; 'It looks different' reaches safety", () => {
+  it("beside the instruction: says the dated source and asks to compare with the label, in words; 'it looks different' reaches safety", () => {
     sessionStore.setForTest(run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain()));
     render(<CompanionExperience />);
     expect(screen.getByText("Take 1 tablet twice daily with meals.")).toBeInTheDocument();
-    expect(screen.getByText("BrightCare Pharmacy · checked 21 September 2026")).toBeInTheDocument();
-    const check = screen.getByRole("group", { name: "Does this match what’s printed on your label?" });
-    expect(within(check).getByRole("button", { name: "Yes, it matches" })).toBeInTheDocument();
-    // Neither answer looks like the default: no filled "yes" to agree with without looking.
-    expect(primaryButtons(check)).toHaveLength(0);
-    // The pinned step scrolls on its own rather than being clipped or pushing the call controls away.
-    expect(document.querySelector("[data-pinned]")).toHaveClass("overflow-y-auto", "max-h-[60%]");
+    expect(screen.getByText("BrightCare Pharmacy · checked 21 September 2026.")).toBeInTheDocument();
+    expect(screen.getByText("Does this match what’s printed on your label?")).toBeInTheDocument();
+    // Answered in words: no buttons to agree with without looking, and no panel.
+    expect(screen.queryByRole("button", { name: /yes, it matches|it looks different/i })).toBeNull();
+    expect(document.querySelector("[data-pinned]")).toBeNull();
 
-    fireEvent.click(within(check).getByRole("button", { name: "It looks different" }));
+    send("it looks different");
     expect(screen.getByText(/When the label and the record don’t agree, a pharmacist is the best person to look/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
     // "Incorrect output" leads to a person — not another photo.
@@ -228,12 +229,11 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("I feel so lonely");
     expect(screen.getByText(/that sounds hard/)).toBeInTheDocument();
-    // Family help and carrying on get equal weight, each with its own icon (not a calendar).
-    const choices = screen.getByRole("group", { name: "Companion says:" });
+    // One contextual action, never filled (it opens a consent step); "carry on" is said, not tapped.
+    const choices = document.querySelector<HTMLElement>("[data-pinned]")!;
     expect(primaryButtons(choices)).toHaveLength(0);
+    expect(within(choices).getAllByRole("button")).toHaveLength(1);
     expect(choices.querySelector(".lucide-users-round")).not.toBeNull();
-    expect(choices.querySelector(".lucide-arrow-right")).not.toBeNull();
-    expect(choices.querySelector(".lucide-calendar-clock")).toBeNull();
     const fetchFn = vi.fn(async (url: string) =>
       String(url) === "/api/help/request"
         ? { ok: true, json: async () => ({ ok: true, data: { kind: "family", contactName: "Daniel" }, requestId: "r" }) }
@@ -242,14 +242,21 @@ describe("in-call flow", () => {
     vi.stubGlobal("fetch", fetchFn);
     fireEvent.click(screen.getByRole("button", { name: "Let my family know" }));
 
-    const consent = screen.getByRole("group", { name: /Shall I let your family know/ });
-    expect(primaryButtons(consent)).toHaveLength(0); // consent never nudges towards "yes"
+    // The consent question is a line in the conversation, with no buttons to nudge towards "yes".
+    expect(screen.getByText(/Shall I let your family know/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /yes, let them know|not now/i })).toBeNull();
     expect(fetchFn.mock.calls.some(([u]) => u === "/api/help/request")).toBe(false); // nothing sent yet
-    fireEvent.click(within(consent).getByRole("button", { name: "Yes, let them know" }));
+    send("yes, let them know");
+    await flush();
+    // Reviewed before it goes: who it's to and what it says, then an explicit "send".
+    expect(fetchFn.mock.calls.some(([u]) => u === "/api/help/request")).toBe(false);
+    expect(screen.getByText("Daniel, your family (fictional)")).toBeInTheDocument();
+    expect(screen.getByText("I’d like some help, please.")).toBeInTheDocument();
+    send("send");
     await flush();
     // "Sent" only after the (simulated) service said so, naming who was told.
     expect(fetchFn.mock.calls.some(([u]) => u === "/api/help/request")).toBe(true);
-    expect(screen.getByText(/I’ve let Daniel know you’d like some help/)).toBeInTheDocument();
+    expect(screen.getByText(/a message to Daniel saying you’d like some help was simulated/)).toBeInTheDocument();
     expect(sessionStore.getSnapshot().audit.some((e) => e.eventType === "caregiver-help-requested")).toBe(true);
   });
 
@@ -279,15 +286,14 @@ describe("in-call flow", () => {
     expect(screen.queryByText("I’m not sure enough to explain this safely.")).toBeNull();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
     expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ask my trusted helper" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Contact my family" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try another photo" })).toBeInTheDocument();
-    // Only two filled/outlined buttons in view; the other help options are one tap away.
-    expect(screen.getByRole("button", { name: "Ask my trusted helper" }).closest("details")).not.toBeNull();
+    // Every option in view, nothing tucked away: no clinic, no trusted helper, no "More ways" link.
+    expect(screen.queryByRole("button", { name: /trusted helper|clinic/i })).toBeNull();
+    expect(screen.queryByText("More ways to get help")).toBeNull();
     const pinned = document.querySelector("[data-pinned]")!;
-    const inView = [...pinned.querySelectorAll('[data-variant="primary"], [data-variant="secondary"]')].filter(
-      (b) => !b.closest("details"),
-    );
-    expect(inView).toHaveLength(2);
+    expect(pinned.querySelector("details")).toBeNull();
+    expect(pinned.querySelectorAll('[data-variant="primary"], [data-variant="secondary"]')).toHaveLength(3);
 
     // A callback confirms first; when the service is down it says so plainly and never claims "sent".
     vi.stubGlobal(
@@ -296,12 +302,20 @@ describe("in-call flow", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Ask a pharmacist to call me" }));
     expect(screen.getByText(/Shall I send the request\?/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Yes, send the request" }));
+    expect(screen.queryByRole("button", { name: /yes, send the request/i })).toBeNull(); // answered in words
+    send("yes, please send it");
+    await flush();
+    // "Check before sending": what goes, inside the companion's message; then an explicit "send" sends it.
+    expect(screen.getByText(/^Here is the request I’d send to BrightCare Pharmacy\./)).toBeInTheDocument();
+    expect(screen.getByText("Please call me back")).toBeInTheDocument();
+    expect(document.querySelector("[data-transcript] button")).toBeNull();
+    expect(screen.queryByText(/I couldn’t send that just now/)).toBeNull(); // the "yes" sent nothing
+    send("send it");
     await flush();
     expect(screen.getByText(/I couldn’t send that just now/)).toBeInTheDocument();
     expect(screen.queryByText(/I’ve sent your request/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "See the pharmacy’s number" }));
-    expect(screen.getByText(/You can call BrightCare Pharmacy on 6555 0123/)).toBeInTheDocument();
+    send("can I have their phone number");
+    expect(screen.getByText(/You can call BrightCare Pharmacy on 0000 0123/)).toBeInTheDocument();
   });
 
   it("choose from my medicines: lists name and strength only, then still asks to confirm", () => {
@@ -311,7 +325,7 @@ describe("in-call flow", () => {
     const list = screen.getByRole("region", { name: "Which medicine are you holding?" });
     expect(list.textContent).not.toMatch(/Take 1 tablet|twice daily|blood sugar/);
     fireEvent.click(within(list).getByRole("button", { name: "Metformin 500 mg" }));
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
 
@@ -326,7 +340,7 @@ describe("in-call flow", () => {
     fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500mg" } });
     fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
     await flush();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
 
@@ -338,7 +352,7 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
     fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
     await flush();
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
   });
 
   it("choose a photo: a plain file input (no capture), shrunk first, then POSTed and still only a possible match", async () => {
@@ -360,7 +374,7 @@ describe("in-call flow", () => {
     const init = call![1] as { method: string; body: FormData };
     expect(init.method).toBe("POST");
     expect(init.body.get("image")).toBeInstanceOf(Blob);
-    expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+    expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
     // Only the analyze route — plus the once-per-call understanding check. No other network use.
     expect(fetchFn.mock.calls.every(([u]) => u === "/api/label/analyze" || u === "/api/companion/understand")).toBe(true);
@@ -425,7 +439,7 @@ describe("in-call flow", () => {
       fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
     fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
       await flush();
-      expect(screen.getByText("I found a possible match: Metformin, 500 mg. Is this the one you’re holding?")).toBeInTheDocument();
+      expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     },
   );
 

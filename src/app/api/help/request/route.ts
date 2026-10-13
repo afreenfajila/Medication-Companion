@@ -1,4 +1,4 @@
-import { fail, firstIssue, newRequestId, ok } from "@/lib/api/envelope";
+import { fail, isCrossOrigin, firstIssue, newRequestId, ok } from "@/lib/api/envelope";
 import { rateLimit } from "@/lib/api/rate-limit";
 import { helpRequestSchema, helpResultSchema } from "@/lib/api/schemas";
 import { patient } from "@/lib/content/seed-record";
@@ -16,9 +16,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request): Promise<Response> {
   const requestId = newRequestId();
 
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (origin && host && new URL(origin).host !== host) {
+  if (isCrossOrigin(request)) {
     return fail(403, "forbidden_origin", "This request was not allowed.", "return_home", requestId);
   }
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
@@ -43,7 +41,7 @@ export async function POST(request: Request): Promise<Response> {
   if (kind === "pharmacist-callback") {
     const result = await services.pharmacy.requestCallback(patientId, reason);
     if (!result.ok) return unavailable(requestId);
-    return ok(helpResultSchema.parse({ kind, reference: result.reference, expectedWindow: result.expectedWindow }), requestId);
+    return ok(helpResultSchema.parse({ kind, reference: result.reference }), requestId);
   }
 
   // Care circle: the person has just said "Yes" on the consent step — that is what this request means.

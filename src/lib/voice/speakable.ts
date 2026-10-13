@@ -1,5 +1,7 @@
 import { fillCandidate, fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
 import type { CopyKey } from "@/lib/content/translations";
+import type { CandidateDisplay } from "@/types/content";
+import type { CallbackReason } from "@/lib/dose-check/dose-check";
 import { helpLine } from "@/lib/content/help-lines";
 import { mentionsSelfHarm } from "@/lib/safety/classify";
 import { buildEscalation } from "@/lib/safety/escalation";
@@ -28,6 +30,7 @@ export function speakableText(
     | "userText"
     | "helpFlow"
     | "showMethod"
+    | "doseCheck"
   >,
   t: (key: CopyKey) => string,
   explanation: ExplanationView | null,
@@ -45,8 +48,8 @@ export function speakableText(
   const join = (...parts: Array<string | null | undefined>) =>
     parts.filter((p): p is string => Boolean(p)).join(" ");
 
-  // A help request sits on top of whichever step asked it.
-  if (session.helpFlow) return helpLine(t, session.helpFlow);
+  // A help request sits on top of whichever step asked it — but urgent guidance is always what's said.
+  if (session.helpFlow && session.safetyReason !== "urgent-risk") return helpLine(t, session.helpFlow);
 
   switch (session.state) {
     case "listening":
@@ -64,9 +67,10 @@ export function speakableText(
       return join(t("analyzingHeading"), t("analyzingBody"));
     case "confirm-match":
       if (!session.candidate) return null;
-      return join(fillCandidate(t("confirmHeading"), session.candidate), t("checkName"));
+      return confirmLine(t, session.candidate);
     case "explain": {
       if (!explanation) return null; // gate: no confirmed match → nothing medical is spoken
+      if (session.doseCheck) return doseCheckLine(session, t, explanation);
       if (session.recordConflict) return fillRecordFacts(t("recordConflict"), explanation, session.language);
       const e = explanation.explanation;
       if (session.explainStep === 0) return join(e.title, e.purpose, e.sourceLine);
@@ -101,4 +105,80 @@ export function speakableText(
     default:
       return null;
   }
+}
+
+/** After a submitted request: "the difference" only when a difference was actually found. */
+export function stillOpenKey(reason: CallbackReason): CopyKey {
+  return reason === "instruction-discrepancy" ? "doseStillUnresolved" : "doseStillUnchecked";
+}
+
+/**
+ * The companion's line for the current dose-check step (Assignment 4) — the
+ * same text is spoken, announced and added to the transcript. Record facts are
+ * filled from the confirmed record; the box wording is the person's own. It
+ * shows the difference and never says which instruction to follow.
+ */
+export function doseCheckLine(
+  session: Pick<Session, "doseCheck" | "language">,
+  t: (key: CopyKey) => string,
+  explanation: ExplanationView,
+): string | null {
+  const d = session.doseCheck;
+  if (!d) return null;
+  const join = (...parts: Array<string | null>) => parts.filter((p): p is string => Boolean(p)).join(" ");
+  const source = fillRecordFacts(t("recordCheckedOn"), explanation, session.language);
+  const fill = (key: CopyKey) =>
+    fillRecordFacts(t(key), explanation, session.language).replace("{source}", source).replace("{reading}", d.reading ?? "");
+
+  const cb = d.callback;
+  if (cb && cb.status !== "cancelled" && d.step !== "label") {
+    if (cb.status === "submitting") return t("doseSubmitting");
+    if (cb.status === "submitted") return join(t("doseSubmitted"), t(stillOpenKey(cb.draft.reason)));
+    if (cb.status === "failed") return join(t("doseFailed"), t("doseFailedBody"));
+    if (cb.status === "unknown") return join(t("doseUnknown"), t("doseUnknownBody"));
+    // Reviewing/editing: the summary read aloud (the callback number stays masked, so it isn't).
+    const r = cb.draft;
+    const last4 = r.callbackContact.replace(/\D/g, "").slice(-4);
+    return join(
+      t(cb.updated ? "doseReviewUpdated" : "doseReviewIntro"),
+      `${t("doseTo")}: ${t("doseRecipient")}.`,
+      `${t("doseReasonRow")}: ${r.concernSummary}`,
+      `${t("doseMedicine")}: ${r.medicine.displayName} ${r.medicine.strengthText}.`,
+      `${t("doseRecordRow")}: ${r.currentRecord ? `${r.currentRecord.instructionText} (${source}).` : `${t("doseNotAvailable")}.`}`,
+      r.confirmedLabel ? `${t("doseLabelRow")}: ${r.confirmedLabel.instructionText}` : `${t("doseLabelWordingRow")}: ${t("doseLabelNotIncluded")}.`,
+      t("doseNumberEnding").replace("{last4}", last4),
+      t("doseShareNotice"),
+      t("doseReviewPrompt"),
+      t("doseDemoNotice"),
+    );
+  }
+  // A correction waiting for confirmation comes before the summary it will update.
+  if (d.step === "label" && d.reading) {
+    return fill(d.labelSource === "fixture" ? "doseReadingCheck" : "doseReadingTypedCheck");
+  }
+  if (d.offer) return t("doseOffer");
+  switch (d.step) {
+    case "record-unavailable":
+      return t("doseRecordUnavailable");
+    case "label":
+      return fill("doseRecordAndAsk");
+    case "compared": {
+      const outcome = d.comparison?.outcome;
+      return join(
+        d.notice === "conflict-cleared" ? t("doseConflictCleared") : d.notice === "nothing-shared" ? t("doseNothingShared") : null,
+        outcome === "conflict" ? t("doseConflict") : outcome === "match" ? t("doseMatch") : t("doseInsufficient"),
+      );
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * The medicine confirmation, said and shown in the conversation: "a possible match", the
+ * name, strength, form and fictional source, and the question. Only a clear yes (said or
+ * typed) confirms; "no" and "not sure" never unlock the record (PRD ID-01–03).
+ */
+export function confirmLine(t: (key: CopyKey) => string, candidate: CandidateDisplay): string {
+  return fillCandidate(t("confirmSpoken"), candidate).replace("{source}", candidate.recordSource);
 }

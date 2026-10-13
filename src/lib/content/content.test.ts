@@ -59,8 +59,12 @@ describe("copy catalogue", () => {
   });
 
   it("never uses a blaming or commanding word (tone contract rule 6)", () => {
+    // Assignment 4 brief mandates "…which instruction you should follow." verbatim
+    // (docs/decisions.md). It denies a recommendation; it doesn't give one.
+    const mandated = new Set(["doseConflict"]);
     for (const lang of ["en", "zh-Hans"] as const) {
       for (const [key, line] of Object.entries(copy[lang])) {
+        if (mandated.has(key)) continue;
         expect(usesBlameWords(line), `${lang}.${key}`).toBe(false);
       }
     }

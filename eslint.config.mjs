@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendor files copied from node_modules by scripts/copy-vad-assets.mjs (git-ignored).
+    "public/vad/**",
   ]),
 ]);
 

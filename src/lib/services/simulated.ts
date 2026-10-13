@@ -22,7 +22,8 @@ export class SimulatedPharmacyService implements PharmacyService {
   async requestCallback(patientId: string, reason: HelpReason) {
     void reason;
     if (this.opts.fail || patientId !== patient.id) return { ok: false as const };
-    return { ok: true as const, reference: reference(), expectedWindow: "within 1 working day" };
+    // No callback time: a (simulated) request is not a booking or a promise.
+    return { ok: true as const, reference: reference() };
   }
 }
 

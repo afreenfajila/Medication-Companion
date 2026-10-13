@@ -1,92 +1,263 @@
 # Design Standard — Medication Companion
 
-## 1. Design intent
+## 1. Document status
 
-Medication Companion should feel calm, respectful, and comprehensible for an older adult who needs help with one medicine at a time. It is a companion call, not a dense clinical dashboard, generic chatbot, or automated prescriber.
+| Field | Value |
+|---|---|
+| Version | 0.4 — proposed Assignment 4 design standard |
+| Last updated | 10 October 2026 |
+| Primary journey | Dose-change discrepancy → reviewed pharmacist callback |
+| Platform | Mobile-first web prototype |
+| Data | Fictional only |
+| External actions | Simulated only |
+| Implementation verification | Pending UI review and testing |
 
-The design must visibly communicate three things:
+This document defines intended presentation and interaction rules.
+It does not establish implementation completeness or accessibility compliance.
 
-1. **Trust:** information comes from a labelled demo pharmacy record.
-2. **Control:** the person starts a call, gives permission, confirms a match, and can decline or ask for human help.
-3. **Caution:** the app does not guess when it is uncertain.
+Use:
+- prd.md for scope and outcomes.
+- content-model.md for facts, provenance, and approved copy.
+- site-contract.md for transitions and runtime behaviour.
 
-The product begins with one simple familiar action: calling the companion. It does not ask the person to decide whether their need is “label help” or “schedule help” before the conversation begins.
+Do not change medication logic to satisfy a visual design preference.
 
-## 2. Experience principles
+
+## 2. Design intent
+
+Medication Companion should feel calm, respectful, and understandable
+for an older adult checking one medicine at a time.
+
+It is a companion call, not:
+- A clinical dashboard.
+- An endless chatbot transcript.
+- A form wizard.
+- An automated prescriber.
+
+The design must communicate:
+
+1. Provenance:
+   Where the information came from.
+
+2. Control:
+   What the user can confirm, correct, decline, or share.
+
+3. Uncertainty:
+   What the companion cannot establish.
+
+4. Continuity:
+   Corrections and recoverable failures do not restart the call.
+
+5. Handoff:
+   A support request carries the unresolved question forward.
+
+The product must not visually imply that:
+- A medicine match is clinical verification.
+- A newer record is necessarily the instruction to follow.
+- A submitted request resolves the medication conflict.
+
+
+## 3. Experience principles
 
 ### One calm entry point
 
-The home state has one prominent CTA: `Call with companion`. Keep the screen deliberately quiet. Label and schedule pathways emerge from the active conversation only after the user explains a need or the companion asks one focused clarification question.
+The primary home state has one prominent action:
 
-### One task at a time
+“Call with companion”
 
-Ask for one decision per screen. Avoid presenting medication lists, schedules, jargon, and multiple unrelated controls in the primary user flow.
+Do not ask the user to choose a clinical category before speaking.
 
-### Spoken first, readable always
+Small utilities may include:
+- Help.
+- Language.
+- Settings.
 
-Every spoken response has a visible textual equivalent. Every voice action has a touch/typed fallback.
+### One conversational decision at a time
+
+Use one continuous call. Each step is a message in that conversation
+(amended 13 October 2026): the label check, the comparison, the callback
+summary and its outcome are companion messages with short headings and
+dividers, not panels, sheets or pop-ups. A contextual panel remains only
+where a tap is needed: the opening route choice, camera permission and
+guidance, and the safety pathway.
+
+Do not create separate pages or mandatory Next buttons for
+routine conversational turns.
+
+Explicit confirmation remains necessary for:
+- Medicine identity.
+- Label wording.
+- Device permission.
+- Sharing approval.
+
+### Spoken guidance, readable always
+
+Every spoken response has a visible textual equivalent.
+
+Text need not wait for speech to finish.
+Keep both aligned to the same turn.
+
+Every voice-dependent action has an appropriate touch or typed alternative.
 
 ### Permission before sensing
 
-Explain why camera access is requested before activating it. Make `Not now` as easy to tap as the approval path.
+Explain camera or microphone use before requesting access.
+
+Declining permission must not end the task.
 
 ### Possible, not certain
 
-Use `possible match`, `please check`, and `I’m not sure enough` when a label is being interpreted. Never overstate confidence.
+Before confirmation:
+- Say “Possible match.”
+- Ask the user to check.
+- Use neutral visual treatment.
 
-### Gentle escalation
+Confirmation means a user decision, not clinical verification.
 
-Safety interruptions should be calm and direct. They should say what is uncertain, what the app will not do, and the next human option.
+### Clear uncertainty without blame
 
-### Familiar visual metaphors
+State:
+- What is known.
+- What is missing or inconsistent.
+- What the companion cannot decide.
+- What the user can do next.
 
-A camera panel may resemble a simple video-call preview, with the medicine in the main view and an optional small self-view tile. Do not reproduce a dense video-conferencing interface.
+Avoid speculation about why a doctor, pharmacy, record, or label differs.
 
-## 3. Visual tokens
+### Recovery preserves work
 
-### Colour
+Corrections, retries, language changes, and support requests
+preserve relevant confirmed context.
 
-| Token | Value | Use |
-|---|---:|---|
-| `--bg-canvas` | `#FAF9F6` | Primary warm off-white page background |
-| `--surface` | `#FFFFFF` | Elevated cards where needed |
-| `--navy-900` | `#17324D` | Primary headings, primary buttons, camera panel |
+Do not make the user repeat the story unnecessarily.
+
+### Honest outcomes
+
+Request status and medication status are separate.
+
+A success treatment may indicate simulated submission,
+but never endorse a conflicting dose.
+
+
+## 4. Visual identity
+
+Retain:
+- Warm off-white canvas.
+- Navy text and primary actions.
+- Restrained teal companion identity.
+- Simple rounded surfaces.
+- Generous spacing.
+- Non-human companion presence.
+
+Avoid:
+- Glassmorphism.
+- Decorative gradients.
+- Heavy shadows.
+- Excessive badges.
+- Tiny metadata.
+- Alarm-like animation.
+- Large decorative illustrations that displace important content.
+- Dashboard styling in the primary call.
+
+
+## 5. Colour tokens
+
+### Base palette
+
+| Token | Value | Intended use |
+|---|---|---|
+| `--bg-canvas` | `#FAF9F6` | Page background |
+| `--surface` | `#FFFFFF` | Cards and panels |
+| `--navy-900` | `#17324D` | Primary text and primary buttons |
 | `--navy-700` | `#425B70` | Supporting dark text |
-| `--teal-600` | `#5B9B98` | Interactive accent, orb, links, status |
-| `--teal-100` | `#E7F3F2` | Secondary surfaces and neutral positive cards |
-| `--slate-600` | `#667789` | Supporting copy and disclosure |
-| `--line` | `#EBEAE4` | Dividers and subtle borders |
-| `--danger-700` | `#B75B55` | End-call / urgent safety emphasis only |
+| `--teal-decorative` | `#5B9B98` | Orb and nonessential decoration |
+| `--teal-100` | `#E7F3F2` | Secondary surfaces |
+| `--slate-600` | `#667789` | Supporting text, subject to contrast checks |
+| `--line` | `#EBEAE4` | Nonessential dividers |
+| `--danger-700` | `#B75B55` | Candidate danger token; verify actual use |
 | `--danger-100` | `#FBEAE8` | Warning surface |
-| `--focus` | `#0D6EFD` | Keyboard focus ring; must remain visible |
+| `--focus` | `#0D6EFD` | Candidate focus ring; verify on adjacent surfaces |
 
-Never rely on colour alone. Pair safety colours with plain-language labels and icons.
+These values are inherited design candidates.
+Do not assume every pairing passes contrast requirements.
 
-### Typography
+### Semantic tokens
 
-Use `DM Sans` through `next/font/google` where available; use `system-ui, sans-serif` as fallback.
+Define central semantic mappings:
 
-| Style | Size / line height | Weight | Use |
-|---|---:|---:|---|
-| Display | 30–32 px / 1.18 | 700 | Single central page question |
-| H1 | 26–28 px / 1.25 | 700 | Main state heading |
-| H2 | 22–24 px / 1.3 | 700 | Section heading / caregiver page |
-| Body large | 18 px / 1.5 | 400–500 | Medicine instructions and main guidance |
-| Body | 16 px / 1.5 | 400–500 | Supporting information |
-| Label | 13–14 px / 1.3 | 700 | Uppercase contextual label |
-| Meta | 12–14 px / 1.4 | 500 | Disclosure, record source, timestamps |
+```css
+--text-primary
+--text-secondary
+--text-action
+--action-primary-bg
+--action-primary-text
+--action-secondary-bg
+--action-secondary-text
+--border-control
+--surface-information
+--surface-uncertainty
+--surface-error
+--surface-submission
+--focus-ring
+```
+
+Use navy for action text until an alternative text colour is verified.
+
+Decorative teal must not automatically become:
+- Small link text.
+- White-text button background.
+- Required control outline.
+
+### Contrast checks
+
+Verify actual rendered foreground/background pairs:
+
+- Ordinary text: at least 4.5:1.
+- Qualifying large text: at least 3:1.
+- Required non-text controls and status graphics: at least 3:1
+  against relevant adjacent colours.
+
+Do not rely on colour alone.
+
+A subtle decorative divider need not serve as the only boundary
+of an interactive control.
+
+Record checked combinations and unresolved exceptions.
+
+
+## 6. Typography
+
+Use DM Sans through the existing font setup where available.
+Use a suitable system fallback and verify Chinese rendering.
+
+| Style | Proposed size / line height | Use |
+|---|---|---|
+| Display | 30–32 px / 1.2 | Short home question |
+| H1 | 26–28 px / 1.25 | Current state heading |
+| H2 | 22–24 px / 1.3 | Panel heading |
+| Conversation | 20–22 px / 1.5 | Current main spoken message |
+| Medication | At least 18 px / 1.5 | Instruction comparison |
+| Body | 18 px / 1.5 where practical | Supporting guidance |
+| Important label/meta | At least 16 px / 1.4 | Sources, sharing, status |
+| Noncritical metadata | 14–16 px / 1.4 | Secondary technical/demo detail |
 
 Rules:
+- Apply the same core-content minimum to English and Chinese.
+- Use scalable units in implementation.
+- Do not shrink critical content to fit a fixed screen height.
+- Allow natural wrapping.
+- Use short sentence-case headings.
+- Avoid long uppercase blocks.
+- Keep source labels readable, not pale or tiny.
+- Test text expansion and zoom.
 
-- Core medication explanation must use **18 px or larger**.
-- Do not use long all-caps blocks. Uppercase is limited to short state labels.
-- Keep line length near 35–55 characters in the phone shell.
-- Simplified Chinese must not be reduced below 16 px for core content.
+Font size alone does not establish accessibility.
 
-### Spacing and shape
+
+## 7. Spacing and shape
 
 | Token | Value |
-|---|---:|
+|---|---|
 | `--space-1` | 4 px |
 | `--space-2` | 8 px |
 | `--space-3` | 12 px |
@@ -100,290 +271,694 @@ Rules:
 | `--radius-lg` | 24 px |
 | `--radius-pill` | 999 px |
 
-Use generous vertical breathing room. A screen may intentionally have whitespace.
+Use:
+- 16–24 px between meaningful content groups.
+- Consistent internal card padding.
+- Minimal shadow.
+- Clear separation through headings, spacing, and borders.
 
-## 4. Layout rules
+Do not surround every sentence with its own card.
+
+
+## 8. Responsive call layout
+
+### Reference dimensions
+
+393 × 852 px is a design reference, not a fixed clipping box.
+
+Support:
+- 320 px.
+- 360 px.
+- 393 px.
+- 430 px.
+- Desktop.
+- 200% zoom.
+- Mobile keyboard open.
 
 ### Phone shell
 
-- Target canvas: 393 × 852 px.
-- Minimum horizontal page padding: 24 px.
-- On desktop, centre the app in a max-width phone shell around 430 px.
-- Never make the phone shell so narrow that language labels wrap unpredictably.
-- Use a sticky/safe footer only when it does not obscure active content.
+- Centre the call on desktop at approximately 430 px maximum width.
+- Use flexible height.
+- Allow content scrolling.
+- Use approximately 24 px horizontal padding at typical widths.
+- Reduce outer padding when necessary at 320 px rather than
+  shrinking important text.
+- Respect device safe areas.
 
-### Persistent elements
+### Persistent controls
 
-Every primary-user state includes:
+Sticky controls must not obscure:
+- Content.
+- Focused elements.
+- Form fields.
+- Recovery actions.
 
-1. App name: **Medication Companion**.
-2. Trust badge: **Plan checked by BrightCare Pharmacy — demo record** or shortened visual form when space requires.
-3. Current interaction state label when appropriate.
-4. Footer disclosure: **AI guide · Not a pharmacist or doctor**.
+When the mobile keyboard opens:
+- Keep the active field and relevant action reachable.
+- Allow the layout to scroll.
+- Do not pin a large decorative orb above the keyboard.
 
-During an active call, show:
+### Content density
 
-- `Repeat`
-- `Get help`
-- `End call`
+Show one contextual panel at a time.
 
-On the home state, show small utilities only:
+Reduce or collapse decoration before:
+- Reducing critical text.
+- Hiding uncertainty.
+- Hiding recovery.
+- Removing user control.
 
-- `Help`
-- `Language`
-- `Settings`
 
-Do not show `Repeat`, `Get help`, `End call`, `Show medicine`, or `Ask about my schedule` on the home state.
+## 9. Persistent framing
 
-## 5. Components
+Every primary-user state must visibly communicate:
+- Product identity.
+- Prototype status.
+- Relevant current interaction status.
 
-### CompanionOrb
+Recommended compact disclosure:
 
-**Purpose:** show the companion’s non-human presence and current state.
+“Prototype · Fictional data”
 
-Structure:
+Show AI identity:
+- At call start.
+- In a compact persistent label or accessible header context.
 
-- Three layered teal circles.
-- Soft low-opacity outer halo.
-- Icon in the centre: the companion logo when idle or speaking; otherwise a semantic icon
-  (microphone, camera, check, or help).
-- Never use a human face as the AI avatar.
+Approved identity statement:
 
-**Companion logo** (`CompanionLogo`, `src/components/ui/companion-logo.tsx`): a speech bubble
-with two dots and a four-point sparkle, meaning "it talks with you, and it's an AI guide". It is
-drawn as a round-capped line icon on a 24 px grid to match Lucide, and coloured with
-`currentColor`: off-white on the teal orb core, and off-white on a `#5B9B98` rounded square for
-the browser icon (`src/app/icon.svg`). It is decorative (`aria-hidden`); the companion is always
-also named in text.
+“AI guide · Not a pharmacist or doctor”
 
-States:
+Near record content:
+- Show source.
+- Show record date when relevant.
 
-| State | Visual |
+Near sharing and outcomes:
+
+“Demo only — no real callback request is sent.”
+
+Do not depend only on an accessible label or About page
+to disclose simulation.
+
+
+## 10. Continuous call structure
+
+An active call contains (amended 12 October 2026 at the owner's direction,
+docs/decisions.md "Active-call controls"):
+
+1. Compact header: identity and the demo-record label
+   (“BrightCare Pharmacy record (fictional)”). The record's full
+   source and date sit in the record's own messages, so the header
+   never reads as a pharmacist having checked what is being said
+   (amended 13 October 2026).
+2. The companion orb (compact) and one short, accurate status line
+   (“Listening…”, “Speaking…”). Interruption is advertised only
+   while the mic really is open during playback.
+3. The conversation transcript, in order, every turn readable,
+   newest brought into view only while the person is at the bottom.
+   Consecutive messages from one speaker share a label. A small
+   “Latest message” control appears between the transcript and the
+   controls, never over the text, only when scrolled up.
+4. At most one contextual panel, only where a tap is needed (opening
+   route choice, camera, safety). The dose check, the callback review
+   and the outcome are messages in the transcript, with no buttons
+   (amended 13 October 2026).
+5. A compact text box only when typing is needed (muted, no speech
+   input, a paused mic) or asked for (Get help → Type instead).
+6. Exactly three persistent controls: Get help, Mute/Unmute, End call.
+
+Repeat, typing, the interrupt-by-voice setting and About are one tap
+away in the Get help sheet; Repeat, Try again and Tap to talk also
+appear by themselves when recovery needs them. The transcript is not
+collapsed behind an "Earlier in this call" control.
+
+Reviewer scenario controls belong outside this structure.
+
+
+## 11. CompanionOrb
+
+### Purpose
+
+Show the companion's non-human presence and current interaction state.
+
+Use:
+- Layered teal circles.
+- Restrained halo.
+- Companion logo.
+- Semantic state icons where useful.
+
+Do not use a human face as the AI avatar.
+
+### States
+
+| State | Treatment |
 |---|---|
-| Idle | Slow soft breathing scale, 3.2–4.8 s loop; companion logo |
-| Listening | Gentle expanding outer rings; microphone icon |
-| Speaking | Subtle waveform or alternating ring opacity; companion logo |
-| Camera focus | Camera icon; focus ring; no rapid flashing |
-| Match found | Check icon; restrained teal glow |
-| Safety | Stable orb; no alarm animation; accompanying warning card |
+| Idle | Subtle breathing motion or static logo |
+| Listening | Gentle rings and microphone icon |
+| Speaking | Restrained waveform/ring change |
+| Checking | Neutral checking icon with visible status text |
+| Possible match | Neutral medicine/search icon |
+| Identity confirmed | Check icon with explicit confirmed label |
+| Uncertainty | Stable orb; explanatory panel |
+| Submission | Stable or restrained progress treatment |
 
-Animation rules:
+A checkmark must not imply clinical correctness.
 
-- Use CSS transform and opacity, never layout-changing animation.
-- Respect `prefers-reduced-motion: reduce`; show a static orb in that case.
-- Keep transitions between 180–350 ms.
-- Do not use endless fast pulsing, flashing, or motion that resembles an alarm.
+### Size
 
-### TrustBadge
+- Larger on the quiet home screen.
+- Smaller during comparison, sharing, and recovery.
+- Never displace essential information.
 
-- Light teal pill.
-- Include a shield/check icon where useful.
-- Short text, 12–14 px.
-- Must indicate demo status in details or an accessible label.
+### Motion
+
+- Transform and opacity only.
+- No layout-changing animation.
+- No fast pulsing or flashing.
+- Respect reduced motion.
+- Use approximately 180–350 ms transitions.
+- Decorative motion is hidden from assistive technology.
+
+
+## 12. Button standards
 
 ### PrimaryButton
 
-- Navy fill, white text, 56 px minimum height.
-- Full width inside the phone layout unless part of a deliberate compact choice.
-- **Compact variant — 44 px, side by side.** Only for the temporary in-call contextual
-  choices (`Show medicine` / `Ask about my schedule`), which share the pinned control area
-  with the typed fallback; stacked at full size they pushed the conversation itself off
-  screen. They sit in one row and wrap to a stack only when too narrow. Exactly at the
-  44 px tap-target floor. Never for the landing CTA, and never for a consent or
-  confirmation decision — there the full size is the point.
-- Rounded pill or 16–28 px rounded rectangle.
-- Icon before label when useful.
-- Strong visible keyboard focus.
-- Disabled state must explain why if the action is blocked.
+- Navy background with verified contrasting text.
+- At least 56 px high for major decisions.
+- Full width where appropriate.
+- Clear visible label.
+- Consistent rounded shape.
+- Visible keyboard focus.
 
 ### SecondaryButton
 
-- Light teal surface; navy/teal text.
-- Same minimum 56 px height as primary when it is an alternative decision.
-- `Not now` and `No, try again` must not be visually hidden as small text.
+- Same comfortable target size for alternative decisions.
+- Distinct visual emphasis without hiding refusal.
+- “Not now,” “No, try again,” and “Don’t send” remain easy to find.
+
+### CompactButton
+
+- Product minimum touch target: 44 × 44 CSS px.
+- Only for temporary low-density contextual controls.
+- Do not use compact controls to squeeze consent or medicine
+  confirmation into crowded layouts.
 
 ### TextAction
 
-- Teal text, optionally underlined.
-- Minimum 44 px touch target with adequate padding.
-- Use for lower-risk navigation like `Go back` or `I’m not sure.`
+- At least 44 × 44 CSS px effective target.
+- Adequate separation.
+- Clear text and verified contrast.
+- Underline links when needed to distinguish them.
 
-### TranscriptCard
+“I’m not sure” is a meaningful safety choice, not an obscure footer link.
 
-- Light teal background, 16 px radius.
-- Context label such as `Mei Ling says:` at 13 px.
-- User words in 16–18 px readable text.
-- Do not make it look like an endless chat log.
+### Disabled actions
 
-### ContextualChoiceGroup
+- Explain why a required action is unavailable.
+- Do not disable the only route without an alternative.
+- Submission disables repeated Send, not the entire call.
 
-- Appears only after the call begins and the companion needs route clarification.
-- May contain one or two compact pill buttons in a single row (wrapping on narrow screens).
-- Typical actions: `Show medicine` and `Ask about my schedule`.
-- Must appear immediately below the companion’s question that explains the choice.
-- Must disappear once a route is selected; never act as permanent navigation.
+The 44 px rule is this product's design standard,
+not a statement that it is the universal WCAG AA minimum.
 
-### RecordCard
 
-- Shows the candidate match only after analysis.
-- Label it **Possible match**.
-- Show patient name, medicine name, strength, and generic form/icon only.
-- Never show an instruction before confirmation.
+## 13. Medicine confirmation (conversational)
 
-### CameraPreview
+Amended 12 October 2026 at the owner's direction: there is no
+confirmation panel. The companion says, and the transcript shows,
+one line (`confirmSpoken`) that carries:
+- "A possible match" (never certain).
+- Medicine name.
+- Strength.
+- Form.
+- Fictional record provenance.
+- The question, and that "not sure" is an answer.
 
-- Dark navy or desaturated dark teal background.
-- Camera status and `1 medicine only` badge.
-- Generic illustrated bottle/box for demo/design state; no real product branding.
-- Muted-teal focus frame around expected label location.
-- One slow scan guide line only; it is decorative guidance, not proof of recognition.
-- Optional small `You` picture-in-picture tile to communicate a companion call.
-- Use a clear control to flip camera when browser capability is available.
+Answers are said or typed: a clear yes confirms; no denies;
+"not sure", a hedged yes or a question never confirm. The AI
+meaning-match is never offered "yes".
 
-### SafetyCard
+Do not show instructions before identity confirmation.
 
-- Pale warning surface and clear title.
-- Start with the limitation: `I’m not sure enough to explain this safely.`
-- State what the user can do next.
-- Include at least one large help action.
-- Do not use red alone or severe language for normal uncertainty.
+Do not:
+- Say “Medicine verified.”
+- Use a clinical approval seal.
+- Treat a checkmark as proof of patient ownership or clinical validity.
 
-### LanguageControl
 
-- Visible and easy to find in the explanation state.
-- Default `English`; one-tap `中文` option.
-- Future languages can appear in a menu marked `Coming soon`; do not imply availability.
-- Changing language changes content only; it must not reset confirmation or safety state.
+## 14. Label-confirmation panel
 
-## 6. Screen standards
+Heading:
 
-### 01 — Start call
+“Please check what I read”
 
-- One central animated companion orb.
-- Welcome heading: `Hello, Mei Ling`.
-- Supporting copy: `I can help you understand your medicine information from your pharmacy record.`
-- Exactly one full-width primary CTA: `Call with companion`.
-- Small reassurance: `You can speak, type, or show a label.`
-- Small utility actions only: `Help`, `Language`, `Settings`.
-- Do not show `Show medicine`, `My schedule`, `Repeat`, `Get help`, or `End call` on this state.
-- Keep the screen quiet, spacious, and free of shortcut cards.
+Show:
+- Actual extracted or entered instruction wording.
+- Whether it came from a photo, typed input, or fixture.
+- A correction route.
 
-### 02 — Companion listening
+Actions:
+- Yes, that is what the label says.
+- Change the wording.
+- I can’t confirm it.
 
-- Call controls appear only after the call begins: `Repeat · Get help · End call`.
-- Show the listening orb and a visible spoken/typed transcript.
-- The companion first interprets the person’s broad need.
-- If the person asks to understand an unknown medicine, ask: `Let’s check this together. Would you like to show me the medicine label?` Then reveal one contextual action: `Show medicine`.
-- If the person asks what they should take or asks about timing, ask a focused record-confirmation question if a medicine is already confirmed. If not, ask: `Would you like to show me a medicine label, or ask about your medicine schedule?`
-- Only at this clarification moment may the UI show temporary large options: `Show medicine` and `Ask about my schedule`.
-- Never make label and schedule cards permanent navigation on the landing page.
-- If an identified medicine has not been confirmed in the session, do not reveal instructions. Guide the user to confirmation or human help.
+After an edit:
+- Show the revised wording.
+- Require confirmation of the new revision.
+- Preserve medicine identity and call context.
 
-### 03 — Label camera permission
+Do not establish the conflict before this confirmation.
 
-- Explain purpose before any device request.
-- Approval and refusal must be equally tappable.
-- Reassurance: camera is used to help match with the current demo record.
 
-### 04 — Label camera guidance
+## 15. DoseChangeComparison
 
-- Main view is the medicine/back camera.
-- Optional small `You` PIP tile conveys continuity of conversation.
-- State label: `SHOW ONE MEDICINE`.
-- Instruction: `Hold the label inside the box.`
-- Do not imply successful reading or matching.
+### Purpose
 
-### 05 — Confirm medicine
+Make a confirmed discrepancy inspectable without recommending a dose.
 
-- State label: `I FOUND A POSSIBLE MATCH`.
-- Heading: `Is this the medicine you are holding?`
-- Candidate card includes only match identity fields.
-- Primary confirmation and equally discoverable `No, try again` option.
+### Layout
 
-### 06 — Explain and confirm
+Stack on mobile:
 
-- Use one content chunk at a time.
-- Heading example: `Here is what your record says.`
-- Clearly label the information source: demo pharmacy record.
-- English plus easy Chinese toggle.
-- Include `Repeat`, `I understand`, `Get help`.
-- Never imply the explanation replaces pharmacist/doctor advice.
+```text
+These instructions differ
 
-### 07 — Safety escalation
+Current record · [date]
+[Recorded instruction]
+Source: [fictional pharmacy]
 
-- Explain what is uncertain.
-- Do not show medication instructions.
-- Provide `Try another photo`, `Check with pharmacy`, `Ask a trusted helper`.
-- Include urgent-risk wording only when triggered.
+Label you confirmed
+[Confirmed label wording]
 
-### 08 — Caregiver dashboard
+I can show the difference, but I cannot confirm
+which instruction you should follow.
 
-- Desktop-friendly but responsive.
-- Show only one patient in MVP.
-- Use clear status chips: `Confirmed`, `Needs help`, `Pending`.
-- Make demo/prototype status persistent.
-- Audit entries are factual: what input was received, which route ran, validation outcome, and user decision.
+[ Ask for a pharmacist callback ]
 
-## 7. Accessibility requirements
+Correct label wording · Hear again
+```
 
-### Interaction
+### Rules
 
-- Every tap target: at least 44 × 44 px.
-- Tabs, menus, toggles, file inputs, camera buttons, and modal controls operate by keyboard.
-- Escape closes noncritical modal/sheet UI.
-- Restore focus when a modal closes.
-- Avoid auto-starting audio; require a user action to start a session.
+- Use explicit source labels.
+- Keep the two sources visually comparable.
+- Do not give the newer record stronger approval styling.
+- Do not label either source “correct.”
+- Do not use arrows suggesting a recommended switch.
+- Do not rely on colour to identify changed fields.
+- Use text emphasis only for actual differing fields.
+- Do not hide important qualifiers or timing details.
 
-### Screen-reader semantics
+Optional previous-record detail:
+- Place behind a labelled disclosure.
+- Do not add a third competing instruction by default.
 
-- Use native `<button>`, `<label>`, `<input>`, and headings before adding ARIA.
-- Dynamic transcript/safety messages use an appropriate `aria-live` region.
-- Camera preview has an accessible text summary.
-- Decorative orb and scan line are `aria-hidden`.
-- Icons require visible text or accessible labels.
+### Incomplete comparison
 
-### Motion and sensory safety
+Show:
+- What is missing.
+- What cannot be established.
+- How to correct it or request help.
 
-- Respect reduced motion.
-- No rapid strobing or colour-only status.
-- Audio output must have visible caption/transcript and a stop/mute control.
+Missing data must not look like successful agreement.
 
-## 8. Content voice
+
+## 16. CallbackReview
+
+### Purpose
+
+Allow the user to inspect the recipient and exact sharing content.
+
+Amended 13 October 2026: the review is one companion message in the
+conversation, under the line “I’ve prepared a short summary. Please
+check it, then say or type “send” if it’s right.” Its rows are short
+headings separated by subtle dividers. It has no buttons and no
+heading of its own; the message stays in the transcript afterwards,
+above the outcome.
+
+### Order
+
+Row labels (amended 13 October 2026, shown in small uppercase):
+
+1. TO — the fictional recipient.
+2. REASON FOR CALLBACK — her own words or the default concern.
+3. MEDICINE — name and strength.
+4. PHARMACY RECORD — the record's exact instruction, quoted, with
+   “BrightCare Pharmacy (fictional) · date” beside it.
+5. LABEL WORDING YOU CONFIRMED — quoted, only when it was confirmed.
+   Otherwise the row reads LABEL WORDING: “Not confirmed — not
+   included in the request”.
+6. CALLBACK NUMBER — masked.
+7. Sharing boundary.
+8. “Please check these details. You can tell me what to change, say
+   “send the request,” or say “cancel.””
+9. “Demo only — no real pharmacy is contacted.”
+
+### Position
+
+A new summary (and each updated version) is brought into view at its
+first line, not its last. Live words, status changes and playback do
+not move the view while it is being read. Her own scrolling always
+wins; her next turn brings the conversation on. “Latest message” stays
+outside the messages.
+
+### Actions (amended 13 October 2026)
+
+None on screen. Everything is said or typed:
+- “send the request” sends exactly the reviewed revision. A plain
+  “yes”, or “send” inside a hedge or a condition (“if it’s right, send
+  it”, “I would send it”), is told how to send. A question (“what
+  happens if I say send?”) gets a fixed explanation. Quoted, negated,
+  later, or to-someone-else uses never send. Interim words are never
+  interpreted. A repeated approval sends nothing more.
+- “cancel” or “don’t send” cancels with nothing sent.
+- Corrections, checked before any “send” in the same sentence:
+  “change the number to …” (or the number alone), “change the reason
+  to …”, “the label says …”. Each makes a new version with approval
+  cleared, shown again as “I’ve updated the summary. Nothing has been
+  sent.” New label wording is first shown back to confirm, then
+  compared again. “Change …” with nothing usable asks what to change.
+  “Change the number, then send” changes nothing and sends nothing
+  until the number is given; then a fresh “send the request” is needed.
+- “What’s the number?” says the full callback number.
+- “repeat” reads the summary again without advancing anything.
+
+### Contact detail
+
+- Masked (“•••• 0188”) in the written summary; its last four digits
+  are spoken. The full number is said when she asks for it.
+- Changed in words; the new number makes a new version to check.
+
+### Sharing boundary
+
+Only display this claim if the payload follows it. The payload also
+carries the patient ID and reference numbers (record version, label
+revision, request ID), which are not rows, so the claim names them
+(amended 13 October 2026):
+
+“Only the details shown here are included, with your patient ID and
+reference numbers for the record and this request. Your label photo
+and full conversation are not included.”
+
+### Editing
+
+- Keep corrections conversational where possible.
+- Do not expose an unnecessarily long form.
+- Do not allow editing of record facts.
+- Update the preview after changes.
+- Require fresh approval.
+- If the discrepancy disappears, explain the changed comparison.
+
+Do not add a redundant second confirmation modal.
+
+
+## 17. CallbackOutcome
+
+### Submitted
+
+Heading:
+
+“Demo: callback request submitted”
+
+Separate statuses:
+
+```text
+Request
+Submitted — simulated
+
+Medication instruction
+Unresolved
+```
+
+Supporting copy:
+
+“The difference in your medication instructions still needs checking.”
+
+Ways on, in words (amended 13 October 2026): “back to the call” /
+“carry on” returns to the conversation and says what is still open;
+“that's all” / “nothing else” ends the call. The sent summary and the
+outcome stay readable in the transcript.
+
+A success checkmark may label submission only.
+Do not put it beside the medication dose.
+
+Do not promise callback timing or pharmacist acknowledgement.
+
+### Failed
+
+Heading:
+
+“Demo: request not submitted”
+
+Body:
+
+“The request could not be delivered. No one has been notified.
+Your summary is still available.”
+
+In words (amended 13 October 2026): “try again” / “send again” sends
+the same request once more; the fictional pharmacy contact is shown in
+the outcome message; the summary stays above it; “end the call” ends.
+
+### Unknown outcome
+
+Heading:
+
+“Submission could not be confirmed”
+
+Do not claim definite success or non-delivery.
+Offer the retry/recovery behaviour defined in site-contract.md.
+
+### Cancelled
+
+“Nothing was shared.”
+
+Preserve the comparison and return path.
+
+Important outcomes remain visible.
+Do not rely on transient toasts.
+
+
+## 18. Uncertainty and safety presentation
+
+Use distinct treatment for:
+- Routine uncertainty.
+- Recoverable service failure.
+- Existing urgent guidance.
+
+### Routine uncertainty
+
+- Neutral or restrained warning surface.
+- State the limitation.
+- Offer correction or human help.
+- Avoid alarm imagery.
+
+### Conflict
+
+Source instructions may be displayed for comparison after
+identity confirmation.
+
+No actionable dose recommendation appears.
+
+### Urgent guidance
+
+- Clear, direct wording.
+- No decorative delay.
+- Preserve existing approved safety information.
+- Do not invent new clinical rules during visual implementation.
+
+“Gentle” must not mean vague or difficult to act on.
+
+
+## 19. Input, interruption, and recovery
+
+### Voice/text
+
+- Typing remains reachable.
+- Correcting a transcript does not restart the call.
+- Uncertain speech is not automatically confirmed.
+- Listening/speaking/checking are distinct visible states.
+
+### Repeat
+
+- Repeats the current approved content.
+- Does not advance the journey.
+- Can be interrupted.
+
+### Language change
+
+- Preserves confirmation, comparison, and unresolved status.
+- Does not imply support for unavailable languages.
+- Handles text expansion.
+
+### End call
+
+- Clearly labelled.
+- Stops recognition/playback.
+- Does not claim to cancel already-submitted service work.
+- Does not silently resolve the medication conflict.
+
+### Recovery
+
+Always explain:
+1. What happened.
+2. What remains preserved.
+3. What the user can do next.
+
+
+## 20. Camera and photo presentation
+
+- Explain purpose before camera activation.
+- Offer refusal and fallback.
+- Use a simple label frame.
+- Show only necessary controls.
+- Prefer medicine view over self-view.
+- Optional self-view must not add unnecessary permission complexity.
+- Do not imply successful reading through a scan animation.
+- Capture requires explicit action.
+
+Photo upload:
+- Explain processing accurately.
+- Do not claim provider-side deletion unless verified.
+- Show a clear unreadable/unsupported-file recovery.
+
+
+## 21. Accessibility behaviour
+
+### Semantic structure
+
+- Use native headings, buttons, labels, and inputs.
+- Use ARIA only where necessary.
+- Icons have visible labels or accessible names.
+- Decorative visuals are aria-hidden.
+
+### Keyboard and focus
+
+- All controls operate by keyboard.
+- Focus remains visible.
+- Modal/sheet focus behaviour follows the component pattern.
+- Escape closes noncritical overlays where appropriate.
+- Restore focus after dismissal.
+- Do not move focus on every transcript update.
+
+### Dynamic announcements
+
+- Use concise status announcements.
+- Avoid reading the entire conversation repeatedly.
+- Do not create competing assertive live regions.
+- Coordinate announcements with speech output.
+- Keep errors attached to the relevant control.
+
+### Zoom and reflow
+
+- No horizontal scrolling for the main call at 320 px.
+- Check 200% zoom.
+- Essential information and controls remain reachable.
+- Do not use fixed heights that clip translated text.
+
+### Motion and audio
+
+- Reduced-motion support.
+- No flashing.
+- Visible speech text.
+- Stop/mute control.
+- User action starts the audio session.
+
+
+## 22. Caregiver demo view
+
+Preserve the existing read-only view where compatible.
+
+- Clearly fictional.
+- One patient only.
+- No instruction editing.
+- No production authorisation claim.
+- Audit events describe actual prototype events.
+- Request submission is not clinical resolution.
+- Avoid ambiguous chips such as “Confirmed” without an object.
+
+Prefer:
+- Medicine identity confirmed.
+- Callback request submitted — simulated.
+- Medication question unresolved.
+
+Do not expand this into a clinical administration dashboard.
+
+
+## 23. Content voice
 
 Use:
-
-- `Let’s check this together.`
-- `Would you like to show me the medicine label?`
-- `Would you like to show me a medicine label, or ask about your medicine schedule?`
-- `I found a possible match. Please check the name on the label.`
-- `I’m not sure enough to explain this safely.`
-- `Here is what your current demo pharmacy record says.`
+- “Let’s check the difference.”
+- “Please check what I read.”
+- “Thank you. I’ve corrected the label wording.”
+- “These instructions differ.”
+- “I cannot resolve this difference.”
+- “No one has been notified.”
 
 Avoid:
+- “This is definitely your medicine.”
+- “I verified the medicine.”
+- “The new dose is correct.”
+- “Everything is sorted.”
+- “Your pharmacist will call soon.”
+- Speculation about why the record differs.
+- Technical scoring or model language in the main call.
 
-- `You should…` when the system is not quoting a verified record.
-- `This is definitely…`
-- `I verified your medicine.`
-- `No problem` in response to uncertainty.
-- Technical labels such as OCR, confidence score, recognition engine, or model output in the primary user flow.
+Do not prohibit clear operational wording simply because it
+describes failure.
 
-## 9. Responsive standard
+Do not force every response to end with a question.
 
-- Primary target: 320–430 px viewport width.
-- Maintain readable layout at 320 px without horizontal scrolling.
-- Desktop: centre phone experience; caregiver dashboard can use up to 1100 px container.
-- Do not bury core controls below a desktop fold; phone scroll is acceptable when progress is clear.
 
-## 10. Quality checklist
+## 24. Design validation
 
-- [ ] Landing screen has exactly one prominent primary action.
-- [ ] Landing screen contains no label or schedule shortcut card.
-- [ ] Contextual choices appear only after an active-call companion prompt.
-- [ ] One clear primary action per subsequent state.
-- [ ] Medication content is large enough to read.
-- [ ] Permission language appears before camera/microphone activation.
-- [ ] Uncertainty state differs by words, icon, and surface treatment.
-- [ ] Confirmation is required before explanation.
-- [ ] UI remains usable with motion disabled.
-- [ ] Typed and touch alternatives exist for voice/device actions.
-- [ ] Every screen identifies the prototype/demo record context appropriately.
+Check these states:
+
+- Home.
+- Listening.
+- Medicine confirmation.
+- Label confirmation.
+- Label correction.
+- Conflict comparison.
+- Incomplete comparison.
+- Sharing review.
+- Submitting.
+- Submitted.
+- Failed.
+- Unknown outcome.
+- Cancelled.
+
+At:
+- 320, 360, 393, and 430 px.
+- Desktop.
+- 200% zoom.
+- Mobile keyboard open.
+- Keyboard-only navigation.
+- Reduced motion.
+- Supported languages.
+
+Record actual checks and unresolved issues.
+Do not claim accessibility compliance from component choice alone.
+
+
+## 25. Quality checklist
+
+- [ ] Home has one prominent call action.
+- [ ] No permanent clinical route cards.
+- [ ] One contextual panel at a time.
+- [ ] Core medication text is readable in both languages.
+- [ ] Important sources and statuses are not tiny.
+- [ ] Possible match is not visually presented as verified.
+- [ ] Medicine and label confirmation are separate.
+- [ ] Comparison shows provenance.
+- [ ] Neither conflicting dose is endorsed.
+- [ ] Sharing recipient and payload are inspectable.
+- [ ] Correction and cancellation are easy to find.
+- [ ] Submitted request is distinct from unresolved medication status.
+- [ ] Failed and unknown outcomes use accurate wording.
+- [ ] Recovery preserves work.
+- [ ] Sticky controls do not obscure content.
+- [ ] Contrast pairs have been checked.
+- [ ] Keyboard focus and operation have been checked.
+- [ ] Reduced motion and audio controls work.
+- [ ] Simulation is visibly disclosed.
+- [ ] Screens match the documented build.

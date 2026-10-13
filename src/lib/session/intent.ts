@@ -68,6 +68,34 @@ export function isRecordConflict(text: string): boolean {
   return RECORD_CONFLICT.test(text.replace(/[’‘]/g, "'"));
 }
 
+// "My doctor changed my medicine, but this box still says the old amount" (Assignment 4).
+// A routing pattern only, read AFTER the safety classifier — it never decides
+// anything clinical; it opens the label-vs-record comparison.
+const DOSE_CHANGE =
+  /\b(doctor|clinic|gp|pharmacist|specialist|hospital)\b.{0,40}\b(changed?|increased|reduced|lowered|raised|adjusted)\b|\btold me to take (less|more|fewer)\b|\bmy (dose|dosage) (is|has|was) (different|changed)\b|\b(box|label|packet|bottle|pack)\b.{0,40}\b(old|still says|different|doesn'?t match|does not match)\b|\b(box|label)\b.{0,40}\bbut\b.{0,30}\b(told|prescribed)\b|\b(old|new) (amount|dose|dosage|instructions?)\b|医生.{0,8}(换|改|调整|加|减)|(盒子|标签|药盒|包装).{0,12}(旧|不一样|不同)|(旧|新)的?(药量|剂量|用量)/i;
+/**
+ * "The dosage is not right", "that's not my dose": she disputes the record's dose. Opens the same
+ * comparison, but kept apart from DOSE_CHANGE so it never overrides the safety classifier — "I took
+ * the wrong dose" is about a dose already taken, and goes to the safety route.
+ */
+const DOSE_DISPUTE =
+  /\b(dose|dosage|amount)\b.{0,15}\b(is not|isn'?t|not|is wrong|looks wrong|seems wrong|is different|looks different|is off)\b|\b(wrong|incorrect|different) (dose|dosage|amount)\b|\bnot (the |my )?(right |correct )?(dose|dosage|amount)\b|\bi (actually |really )?take (a )?(different|another) (dose|amount)\b|(剂量|药量|用量).{0,4}(不对|错了|不一样|不是)|不是(这个|我的)(剂量|药量)/i;
+
+export function isDoseChange(text: string): boolean {
+  const t = text.replace(/[’‘]/g, "'");
+  return DOSE_CHANGE.test(t) || DOSE_DISPUTE.test(t);
+}
+
+/**
+ * "My doctor reduced my dose" reports a change; "…should I skip tonight?" also asks
+ * something. Only a report whose REST is free of medical questions opens the comparison
+ * ahead of the safety classifier ("医生给我减量了" contains 减量, but only as the report).
+ */
+function isReportedDoseChangeOnly(text: string): boolean {
+  const t = text.replace(/[’‘]/g, "'");
+  return DOSE_CHANGE.test(t) && classifySafety(t.replace(DOSE_CHANGE, " ")).level === "none";
+}
+
 // Answers to "Did you mean Metformin?" — only read on the turn right after it.
 const NAME_CHECK_YES =
   /^\s*(yes|yeah|yep|yup|correct|right|that's (it|right)|that is (it|right)|exactly|i did|i do)\b|^\s*(是|对|没错)/i;
@@ -77,6 +105,11 @@ const NAME_CHECK_NO = /^\s*(no|nope|nah|not (that|quite|really)|wrong)\b|^\s*(�
 function joinSpelledLetters(text: string): string {
   // Only lone letters join — the "s" of "it's" or the "a" of "a pill" never do.
   return text.replace(/(?<![\w'’])([a-z])[\s.-]+(?=[a-z](?![\w'’]))/gi, "$1");
+}
+
+/** The record's medicine named outright (or spelled out) — not a soundalike. */
+export function namesRecordMedicine(text: string): boolean {
+  return RECORD_MEDICINE_NAME.test(joinSpelledLetters(text));
 }
 
 /**
@@ -110,7 +143,7 @@ const SCHEDULE =
 
 /**
  * Deterministic in-call routing (site-contract.md §4). Order matters:
- * safety → record conflict (explain only) → human help → off-spine talk → explicit route requests →
+ * safety → record conflict (explain only) → human help → dose change → off-spine talk → explicit route requests →
  * list-my-prescriptions → medicine named / misheard / in hand → unknown medicine →
  * schedule → broad/unclear.
  * "What is this for? When do I take it?" is an unknown-medicine question:
@@ -138,6 +171,9 @@ export function routeMessage(
       safetyReason: safety.reason,
     };
   }
+  if (safety.level === "unsupported" && isReportedDoseChangeOnly(text)) {
+    return { intent: "dose-change", assistantKey: "doseChangeIntro", contextualActions: ["show-medicine"] };
+  }
   if (safety.level === "unsupported") {
     return {
       intent: "unsupported-medical-question",
@@ -156,6 +192,10 @@ export function routeMessage(
       contextualActions: [],
       safetyReason: "help-requested",
     };
+  }
+  // Asking for a person wins; otherwise a changed-dose worry opens the comparison.
+  if (isDoseChange(text)) {
+    return { intent: "dose-change", assistantKey: "doseChangeIntro", contextualActions: ["show-medicine"] };
   }
   // Answering "Did you mean Metformin?". A yes means the name was heard as
   // intended; a no means ask again. Anything else falls through and is

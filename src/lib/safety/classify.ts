@@ -39,6 +39,12 @@ export const unsupportedMedicalPatterns: readonly RegExp[] = [
   /alcohol/i,
   /symptom/i,
   /missed (a )?dose/i,
+  // A dose already taken wrongly, or "what if I do": never a comparison, always the safety route.
+  /\b(took|taken|had|take)\b.{0,25}\b(wrong|too many|too much|instead of|by mistake|accidentally)\b/i,
+  /\baccidentally\b.{0,20}\b(took|taken|take|had)\b/i,
+  /\bwhat if i (take|took|miss|forget)\b/i,
+  // "I took it twice today" is the twice-daily schedule: deliberately not flagged.
+  /吃错|吃多了|多吃了/,
   /can i take.*with/i,
   /pregnan/i,
   /is this dangerous/i,

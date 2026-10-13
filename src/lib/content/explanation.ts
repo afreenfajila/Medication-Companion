@@ -78,14 +78,14 @@ export function fillCandidate(template: string, candidate: CandidateDisplay): st
     .replace("{strength}", candidate.strength);
 }
 
-/** The record's verified date, e.g. "21 September 2026" / "2026年9月21日". */
-export function formatVerifiedDate(language: UiLanguage): string {
+/** The record's verified date (or any given record date), e.g. "21 September 2026" / "2026年9月21日". */
+export function formatVerifiedDate(language: UiLanguage, isoDate: string = recordSource.verifiedAt): string {
   return new Intl.DateTimeFormat(language === "en" ? "en-GB" : "zh-CN", {
     day: "numeric",
     month: "long",
     year: "numeric",
     timeZone: "UTC",
-  }).format(new Date(recordSource.verifiedAt));
+  }).format(new Date(isoDate));
 }
 
 /**

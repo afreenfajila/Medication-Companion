@@ -83,12 +83,11 @@ export function buildEscalation(
   if (labelProblem && canRetry) {
     actions.push({ id: "try-again", labelKey: "tryPhoto" });
   }
-  // Pharmacist, clinic or trusted helper (the escalation card), plus family (F).
+  // Two ways to a person (owner decision, 13 October 2026): a pharmacist callback, or family.
+  // Clinic and trusted helper are no longer offered here; each still asks before anything is sent.
   actions.push(
     { id: "pharmacist-callback", labelKey: "askPharmacistCall" },
-    { id: "clinic", labelKey: "contactClinic" },
-    { id: "trusted-helper", labelKey: "askHelper" },
-    { id: "family", labelKey: "letFamilyKnow" },
+    { id: "family", labelKey: "contactFamily" },
   );
 
   const gentle = GENTLE_LABEL_REASONS.includes(reason) || reason === "label-differs";
