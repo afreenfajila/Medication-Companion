@@ -18,7 +18,9 @@ import { dispatch, useSession } from "@/lib/session/session-store";
 import { guardRequestedState, pathForState } from "@/lib/session/state-machine";
 import { speakableText } from "@/lib/voice/speakable";
 import { getVoiceCoordinator, useVoiceCapabilities } from "@/lib/voice/use-voice";
+import { callStage } from "@/lib/session/call-stage";
 import { CameraGuidanceScreen, LabelActions } from "./camera-screens";
+import { CallProgress } from "./call-progress";
 import { CallFeed, useFollowLatest } from "./call-feed";
 import { DisclosureFooter, ScreenHeader } from "./screen-chrome";
 import { StartScreen } from "./start-screen";
@@ -428,6 +430,7 @@ export function CompanionExperience() {
             )}
           </div>
         )}
+        {inCall && <CallProgress stage={callStage(session)} t={t} />}
         <ScreenBody ref={scrollerRef}>
           <main
             ref={mainRef}

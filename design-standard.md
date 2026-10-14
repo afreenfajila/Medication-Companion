@@ -383,6 +383,18 @@ docs/decisions.md "Active-call controls"):
 2. The companion orb (compact) and one short, accurate status line
    (“Listening…”, “Speaking…”). Interruption is advertised only
    while the mic really is open during playback.
+   Under it, the safety progress (amended 14 October 2026, deck slide
+   8): “Ask · Show · Check · Confirm · Explain”, the current step
+   filled navy, “Explain” with a lock (and italic, not faded) until
+   she confirms the medicine. Blocked or a pharmacist request under
+   review shows that chip instead. Status chips (small, uppercase,
+   text plus colour) sit under the message where a gate moved:
+   label photo taken / checking (grey), possible match · not
+   verified (coral), confirmed by you · unlocked and from your
+   verified plan (teal), blocked · no instructions (coral),
+   pharmacist request · review before sending (blue). The stage is
+   derived from the reducer (`call-stage.ts`), never from a model.
+   Messages fade up 12px over 400ms (none with reduced motion).
 3. The conversation transcript, in order, every turn readable. A new
    message is always brought into view (there is no “Latest message”
    control); live words and status follow only while the person is at

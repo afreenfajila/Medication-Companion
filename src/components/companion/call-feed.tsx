@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { StatusChip } from "@/components/ui/status-chip";
 import { TranscriptCard } from "@/components/ui/transcript-card";
 import type { FeedMessage } from "./use-call-feed";
 import type { T } from "./screen-chrome";
@@ -137,6 +138,13 @@ export function CallFeed({
                 </div>
               )}
               {entry.id === offerId && labelActions}
+              {entry.chips && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {entry.chips.map((c) => (
+                    <StatusChip key={c.key} label={t(c.key)} tone={c.tone} />
+                  ))}
+                </div>
+              )}
             </>
           )}
         </TranscriptCard>

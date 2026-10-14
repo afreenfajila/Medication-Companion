@@ -43,10 +43,10 @@ export function TranscriptCard({
       data-speaker="companion"
       data-entry={entryId}
       role={urgent ? "alert" : undefined}
-      className={cn("scroll-mt-2 px-1", urgent && "rounded-md border-2 border-danger-700 bg-danger-100 px-3 py-2 text-danger-800", className)}
+      className={cn("fade-in scroll-mt-2 px-1", urgent && "rounded-md border-2 border-danger-700 bg-danger-100 px-3 py-2 text-danger-800", className)}
     >
       {label && <p className="text-[15px] font-bold leading-tight text-navy-700">{label}</p>}
-      <div className={cn("fade-in flex flex-col gap-1 text-[19px] font-medium leading-normal break-words", label && "mt-1")}>{children}</div>
+      <div className={cn("flex flex-col gap-1 text-[19px] font-medium leading-normal break-words", label && "mt-1")}>{children}</div>
     </div>
   );
 }

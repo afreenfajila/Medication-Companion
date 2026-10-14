@@ -526,7 +526,9 @@ export function useVoiceConversation(opts: {
     }
 
     // A decision only she can make, or a short clear command: act at once on the fixed rules.
-    if (intent.kind === "event" && (isGateAnswer(intent.event) || isBrief(text))) {
+    // "Can I show you my label?" on the help step is unambiguous too: it goes straight to the label question.
+    const showLabel = intent.kind === "event" && intent.event.type === "RETURN_TO_CALL" && intent.event.showLabel === true;
+    if (intent.kind === "event" && (isGateAnswer(intent.event) || isBrief(text) || showLabel)) {
       act(intent.event);
     } else if (intent.kind === "ui") {
       if (intent.action === "capture") return void runCapture();

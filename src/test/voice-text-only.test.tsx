@@ -157,3 +157,58 @@ describe("the reviewed callback: only an explicit 'send', for the exact revision
     expect(cb().status).toBe("submitting");
   });
 });
+
+describe("after tapping Help, checking a medicine is still possible", () => {
+  const SAID = "No, uh, can I show my medication label? So that you can check and tell me what medication I should take tonight?";
+
+  it("on the help step, asking to show the label goes back to the label question (consent first)", () => {
+    const helped = run([{ type: "GET_HELP" }], run([startCall, askUnknown]));
+    expect(helped.safetyReason).toBe("help-requested");
+    const r = interpretUtterance(SAID, {
+      state: "safety",
+      contextualActions: [],
+      candidateId: null,
+      explainStep: 0,
+      cameraLive: false,
+      pendingSpokenMedicineName: null,
+      safetyReason: "help-requested",
+      labelRouteSelected: false,
+      canRetryLabel: true,
+    });
+    expect(r).toEqual({ kind: "event", event: { type: "RETURN_TO_CALL", showLabel: true } });
+    const back = run([{ type: "RETURN_TO_CALL", showLabel: true }], helped);
+    expect(back.state).toBe("camera-permission");
+    expect(back.labelRouteSelected).toBe(true);
+  });
+
+  it("never sidesteps the label limit: after a label that couldn't be checked, it is not this route", () => {
+    const unreadable = run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo("sample_unreadable_label"), resolve]);
+    expect(unreadable.state).toBe("safety");
+    expect(unreadable.safetyReason).not.toBe("help-requested");
+    expect(run([{ type: "RETURN_TO_CALL", showLabel: true }], unreadable)).toBe(unreadable);
+  });
+
+  it("in the call: Help, then the sentence typed, reaches the camera/photo question", () => {
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+    expect(sessionStore.getSnapshot().state).toBe("safety");
+    type(SAID);
+    expect(sessionStore.getSnapshot().state).toBe("camera-permission");
+    expect(screen.getByText(t("en", "cameraPermissionHeading"))).toBeInTheDocument();
+  });
+});
+
+describe("what is heard is always in the chat", () => {
+  it("tapping Help on the help step says its line again — and shows it again", () => {
+    render(<CompanionExperience />);
+    fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+    const ask = t("en", "safetyAsk");
+    expect(screen.getAllByText(ask)).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+    expect(screen.getAllByText(ask)).toHaveLength(2);
+    type("repeat");
+    expect(screen.getAllByText(ask)).toHaveLength(3);
+  });
+});

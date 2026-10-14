@@ -102,7 +102,9 @@ const TO_ENGLISH = /\benglish\b|英文|英语/;
 const TAKE_PHOTO = /\b(take (a |the )?(photo|picture|pic)|capture|snap( it)?|scan( it)?)\b|拍照|拍下/;
 /** Wanting a photo they already have ("choose a photo", "upload", "from my gallery") — not taking one now. */
 // "Show the label" / "let me show you the box": asking to show it (again).
-const SHOW_LABEL = /\b(show|see|look at)\b.{0,20}\b(label|medicine|box|bottle|packet|photo|picture)\b|给你看|看(一下)?标签/;
+const SHOW_LABEL = /\b(show|see|look at)\b.{0,20}\b(label|medicine|medication|box|bottle|packet|photo|picture)\b|给你看|看(一下)?标签/;
+// "Can you check my medicine / the label?"
+const CHECK_LABEL = /\bcheck\b.{0,20}\b(label|medicine|medication|box|tablets?|pills?)\b|检查.*(药|标签)/;
 const CLOSE_CAMERA = /\b(cancel|close|stop|turn off|exit)\b.{0,12}\b(camera|it|this)?\b|\bnever ?mind\b|关闭相机|关掉相机|取消/;
 // The pharmacy's own contact details (to call them herself), never her callback number.
 const PHARMACY_CONTACT = /\b(pharmacy|pharmacist|brightcare)('s)?\b.*\b(contact|number|phone)\b|\b(contact|number|phone)\b.*\b(pharmacy|pharmacist|brightcare)\b|药房.*(电话|号码)/;
@@ -625,6 +627,13 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
       if (FAMILY.test(n)) return help("family");
       if (HELPER.test(n)) return help("trusted-helper");
       if (CLINIC.test(n)) return help("clinic");
+      // "Can I show you my label?" — even as a question, it is a request: another try where one is
+      // still allowed, or (after she asked for help herself) back to the label question.
+      if (ctx.safetyReason !== "urgent-risk" && (SHOW_LABEL.test(n) || CHECK_LABEL.test(n)) && !/(don'?t|do not|not|never|won'?t).{0,12}(show|check)/.test(n)) {
+        // ("No, uh, can I show you…" — the "no" answers the last question; only "don't show" refuses.)
+        if (ctx.labelRouteSelected && ctx.canRetryLabel) return { kind: "event", event: { type: "TRY_ANOTHER_LABEL" } };
+        if (ctx.safetyReason === "help-requested") return { kind: "event", event: { type: "RETURN_TO_CALL", showLabel: true } };
+      }
       if (TRY_AGAIN.test(n)) return { kind: "event", event: { type: "TRY_ANOTHER_LABEL" } };
       if (BACK_TO_CALL.test(n) || NEXT.test(n)) return { kind: "event", event: { type: "RETURN_TO_CALL" } };
       if (ctx.safetyReason !== "urgent-risk") {
@@ -706,6 +715,10 @@ export function spokenActions(ctx: CommandContext): SpokenAction[] {
             ? a("try-again", "try showing the label again", { type: "TRY_ANOTHER_LABEL" })
             : a(h.id, HELP_DESCRIPTION[h.id], { type: "HELP_START", kind: h.id }),
         ),
+        // After she asked for help herself: checking a medicine label is still on offer.
+        ...(ctx.safetyReason === "help-requested" && !view.actions.some((h) => h.id === "try-again")
+          ? [a("show-label", "show their medicine label so the companion can check it against their pharmacy record", { type: "RETURN_TO_CALL", showLabel: true })]
+          : []),
         a("back", "go back to the conversation", { type: "RETURN_TO_CALL" }),
       ];
     }

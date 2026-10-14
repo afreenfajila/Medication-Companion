@@ -130,7 +130,7 @@ export const INTENT_ACTION_IDS = [
   "cannot-confirm", "carry-on", "clinic", "correct", "decline",
   "dismiss", "dont-send", "dose", "dose-wrong", "end", "end-call", "family", "get-help", "label-differs", "next", "no-camera",
   "not-it", "pharmacist", "pharmacist-callback", "prepare", "repeat", "retry", "review", "show-number",
-  "trusted-helper", "try-again", "understood", "unsure",
+  "show-label", "trusted-helper", "try-again", "understood", "unsure",
 ] as const;
 export type IntentActionId = (typeof INTENT_ACTION_IDS)[number];
 /** Plain words only: prompt text from the browser can't carry markup or role tags. */

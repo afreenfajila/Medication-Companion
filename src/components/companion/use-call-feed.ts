@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fillRecordFacts, type ExplanationView } from "@/lib/content/explanation";
+import { STAGE_CHIPS, type StageChip } from "@/lib/session/call-stage";
 import type { Session } from "@/lib/session/state-machine";
 import type { AssistantTurn } from "@/lib/voice/coordinator";
 import { helpLine } from "@/lib/content/help-lines";
@@ -33,6 +34,8 @@ export type FeedMessage = {
   sections?: FeedSection[];
   /** The message that offers Take photo / Upload: the buttons sit inside it while they apply. */
   labelActions?: boolean;
+  /** Safety-progress chips under the message, set only where the reducer's state moved (call-stage.ts). */
+  chips?: StageChip[];
 };
 
 type Seen = {
@@ -48,6 +51,8 @@ type Seen = {
   completeSig: string;
   safetySig: string;
   showSig: string;
+  /** Label tries seen so far: one more means "that's not it" sent her back to the label. */
+  labelRetries: number;
   userLineId: number;
   /** The current step's line, shown in its panel and not yet in the chat. */
   pendingStep: { sig: string; line: string } | null;
@@ -56,7 +61,7 @@ type Seen = {
 };
 
 function initialSeen(callCount: number): Seen {
-  return { callCount, assistantSig: "", userSig: "", inExplain: false, explainSig: "", conflictSig: "", noticeTurn: 0, confirmSig: "", helpSig: "", completeSig: "", safetySig: "", showSig: "", userLineId: 0, pendingStep: null, flushedStepSig: "" };
+  return { callCount, assistantSig: "", userSig: "", inExplain: false, explainSig: "", conflictSig: "", noticeTurn: 0, confirmSig: "", helpSig: "", completeSig: "", safetySig: "", showSig: "", labelRetries: 0, userLineId: 0, pendingStep: null, flushedStepSig: "" };
 }
 
 function explainStepLines(step: 0 | 1 | 2, e: ExplanationView["explanation"]): string[] {
@@ -118,10 +123,11 @@ export function useCallFeed(
       idRef.current += 1;
       additions.push({ id: `f${idRef.current}`, speaker, lines });
     };
-    const pushRecord = (lines: string[], sections?: FeedSection[]) => {
+    const pushRecord = (lines: string[], sections?: FeedSection[], chips?: StageChip[]) => {
       idRef.current += 1;
-      additions.push({ id: `f${idRef.current}`, speaker: "companion", lines, record: true, sections });
+      additions.push({ id: `f${idRef.current}`, speaker: "companion", lines, record: true, sections, ...(chips?.length && { chips }) });
     };
+    const chip = (stage: keyof typeof STAGE_CHIPS) => STAGE_CHIPS[stage]!;
 
     // The companion's line on the steps that show it in their own panel (camera, photo
     // reading, help screen). While the panel shows it, the chat doesn't repeat it; as
@@ -188,7 +194,8 @@ export function useCallFeed(
     // the conversation, each once per stage and language (no card).
     if (session.callActive && session.helpFlow && !held) {
       const f = session.helpFlow;
-      const helpSig = `${f.kind}:${f.stage}:${f.reference ?? ""}:${f.contactName ?? ""}:${session.language}`;
+      // Each line said again (Repeat, or Help on the help step) is shown again too: what is heard is always in the chat.
+      const helpSig = `${f.kind}:${f.stage}:${f.reference ?? ""}:${f.contactName ?? ""}:${session.language}:${session.repeatCount}`;
       if (helpSig !== seen.current.helpSig) {
         seen.current.helpSig = helpSig;
         // "Check before sending": what goes to the other party, inside the same message.
@@ -198,6 +205,7 @@ export function useCallFeed(
           speaker: "companion",
           lines: [helpLine(t, f)],
           sections: f.stage === "review" ? helpReviewSections(t, f) : undefined,
+          ...(f.stage === "review" && f.kind === "pharmacist-callback" && { chips: [chip("handoff")] }),
         });
       }
     } else if (!session.helpFlow) {
@@ -207,7 +215,7 @@ export function useCallFeed(
     // Getting a person: what happened and "pharmacist, or family?", as a message answered in words.
     // Urgent guidance is marked so it stands out, and stays in the history.
     if (session.state === "safety" && !session.helpFlow && stepLine && !held) {
-      const safetySig = `${session.language}:${session.safetyReason}:${stepLine}`;
+      const safetySig = `${session.language}:${session.safetyReason}:${stepLine}:${session.repeatCount}`;
       if (safetySig !== seen.current.safetySig) {
         seen.current.safetySig = safetySig;
         idRef.current += 1;
@@ -216,6 +224,9 @@ export function useCallFeed(
           speaker: "companion",
           lines: safetyLines(session, t),
           tone: session.safetyReason === "urgent-risk" ? "urgent" : undefined,
+          // A medicine that couldn't be confirmed (or urgent guidance): no instructions. Not when she
+          // simply asked for help.
+          ...(session.safetyReason !== "help-requested" && { chips: [chip("blocked")] }),
         });
       }
     } else if (session.state !== "safety") {
@@ -226,12 +237,27 @@ export function useCallFeed(
     // off: each a message in the conversation, once per sub-step and language.
     const showStep = session.state === "camera-permission" || session.state === "camera-guidance" || session.state === "analyzing";
     if (showStep && stepLine && !held) {
-      const showSig = `${session.state}:${session.language}:${session.cameraMode}:${session.cameraIssue}:${stepLine}`;
+      const showSig = `${session.state}:${session.language}:${session.cameraMode}:${session.cameraIssue}:${stepLine}:${session.repeatCount}`;
       if (showSig !== seen.current.showSig) {
         seen.current.showSig = showSig;
         idRef.current += 1;
         const offer = labelActionsFor(session) !== null;
-        additions.push({ id: `f${idRef.current}`, speaker: "companion", lines: showMedicineLines(session, t), ...(offer && { labelActions: true }) });
+        // Checking: "Label photo taken" (a photo only) and "Checking label against your record". Back at
+        // the label after "that's not it" (one more try counted by the reducer): blocked, no instructions.
+        const chips: StageChip[] =
+          session.state === "analyzing"
+            ? [...(session.pendingLabel?.mode === "image" ? [chip("capturing")] : []), chip("comparing")]
+            : session.labelRetries > seen.current.labelRetries
+              ? [chip("blocked")]
+              : [];
+        seen.current.labelRetries = session.labelRetries;
+        additions.push({
+          id: `f${idRef.current}`,
+          speaker: "companion",
+          lines: showMedicineLines(session, t),
+          ...(offer && { labelActions: true }),
+          ...(chips.length > 0 && { chips }),
+        });
       }
     } else if (!showStep) {
       seen.current.showSig = "";
@@ -239,7 +265,7 @@ export function useCallFeed(
 
     // The wrap-up ("Thank you for checking…"): a line in the conversation, answered in words.
     if (session.state === "complete" && stepLine && !held) {
-      const completeSig = `${session.language}:${stepLine}`;
+      const completeSig = `${session.language}:${stepLine}:${session.repeatCount}`;
       if (completeSig !== seen.current.completeSig) {
         seen.current.completeSig = completeSig;
         push("companion", stepLine);
@@ -251,14 +277,17 @@ export function useCallFeed(
     // "I found a possible match… Is this the medicine you have?": the confirmation is part of
     // the conversation, once per candidate and language (no separate panel).
     if (session.state === "confirm-match" && session.candidate && !held) {
-      const confirmSig = `${session.candidate.candidateId}:${session.language}:${session.turnCount}`;
+      const confirmSig = `${session.candidate.candidateId}:${session.language}:${session.turnCount}:${session.repeatCount}`;
       if (confirmSig !== seen.current.confirmSig) {
         seen.current.confirmSig = confirmSig;
-        push("companion", confirmLine(t, session.candidate));
+        idRef.current += 1;
+        additions.push({ id: `f${idRef.current}`, speaker: "companion", lines: [confirmLine(t, session.candidate)], chips: [chip("possibleMatch")] });
       }
     }
 
     if (session.state === "explain" && explanation && !held) {
+      // The first record message after her confirmation says it was unlocked by her.
+      const unlocked = !seen.current.inExplain;
       if (!seen.current.inExplain) {
         seen.current.inExplain = true;
         seen.current.explainSig = "";
@@ -273,7 +302,12 @@ export function useCallFeed(
       if (session.doseCheck) {
         if (dose && explainSig !== seen.current.explainSig) {
           seen.current.explainSig = explainSig;
-          pushRecord(dose.lines, dose.sections);
+          const reviewing = session.doseCheck.callback?.status === "reviewing" || session.doseCheck.callback?.status === "editing";
+          pushRecord(
+            dose.lines,
+            dose.sections,
+            unlocked ? [chip("confirmed"), chip("explaining")] : reviewing ? [chip("handoff")] : undefined,
+          );
         }
       } else if (explainSig !== seen.current.explainSig) {
         seen.current.explainSig = explainSig;
@@ -281,7 +315,8 @@ export function useCallFeed(
         // and, with no panel for them now, shown here in the same words.
         const besideInstruction =
           session.explainStep === 1 ? [`${fillRecordFacts(t("recordCheckedOn"), explanation, session.language)}.`, t("labelCheckPrompt")] : [];
-        pushRecord([...explainStepLines(session.explainStep, explanation.explanation), ...besideInstruction]);
+        const chips = session.explainStep === 0 && unlocked ? [chip("confirmed")] : session.explainStep === 1 ? [chip("explaining")] : undefined;
+        pushRecord([...explainStepLines(session.explainStep, explanation.explanation), ...besideInstruction], undefined, chips);
       }
       // "My doctor said…" is answered from the record, once per turn and language.
       const conflictSig = `${session.turnCount}:${session.language}`;

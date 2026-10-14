@@ -251,7 +251,8 @@ export type SessionEvent =
   | { type: "NEW_MEDICINE" }
   | { type: "GET_HELP" }
   | { type: "TRY_ANOTHER_LABEL" }
-  | { type: "RETURN_TO_CALL" }
+  /** Back to the conversation; `showLabel`: straight on to the label question ("can I show you the label?"). */
+  | { type: "RETURN_TO_CALL"; showLabel?: boolean }
   /** Opens a help flow: the confirm/consent step, or the clinic's number. */
   | { type: "HELP_START"; kind: HelpKind }
   | { type: "HELP_CONFIRM"; granted: boolean }
@@ -1526,7 +1527,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
     case "RETURN_TO_CALL": {
       if (s.state !== "safety" || !s.callActive || s.safetyReason === "urgent-risk") return s;
       // Recovery: back to the explanation step they left, when the record is still confirmed.
-      if (s.resumeExplainStep !== null && isMatchConfirmed(s)) {
+      if (!event.showLabel && s.resumeExplainStep !== null && isMatchConfirmed(s)) {
         return {
           ...s,
           state: "explain",
@@ -1537,7 +1538,7 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
           contextualActions: [],
         };
       }
-      return {
+      const back: Session = {
         ...s,
         state: "listening",
         safetyReason: null,
@@ -1552,6 +1553,14 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         // unrelated medicine isn't pulled into it. One already comparing is kept.
         doseCheck: s.doseCheck?.step === "identify" ? null : s.doseCheck,
       };
+      // "Can I show you the label?" after asking for help: the same label question as from the
+      // conversation (consent first). Only from a help request she made herself — after a label
+      // that couldn't be checked, another try stays TRY_ANOTHER_LABEL with its own limit.
+      if (event.showLabel) {
+        if (s.safetyReason !== "help-requested") return s;
+        return applyRoute(back, ctx, "show-medicine", "message");
+      }
+      return back;
     }
 
     case "HELP_START": {
