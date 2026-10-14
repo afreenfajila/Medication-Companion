@@ -17,6 +17,10 @@ export type EscalationView = {
   retryUsedKey: CopyKey | null;
   /** Self-harm wording: crisis line numbers shown (and read) as text — never a claimed call. */
   crisisKey: CopyKey | null;
+  /** "I won't show any medicine instructions until we're sure", when instructions were held back. */
+  noInstructionsKey: CopyKey | null;
+  /** The question that ends the message, naming only the options that really exist here. */
+  askKey: CopyKey | null;
   actions: HelpAction[];
 };
 
@@ -72,6 +76,8 @@ export function buildEscalation(
       reasonKey: "urgentNoCall",
       retryUsedKey: null,
       crisisKey: selfHarm ? "crisisLines" : null,
+      noInstructionsKey: null,
+      askKey: null,
       // No actions on the urgent path until amendment I's research and trial are done:
       // no emergency button, and no help flow that would amount to urgent routing.
       actions: [],
@@ -91,14 +97,17 @@ export function buildEscalation(
   );
 
   const gentle = GENTLE_LABEL_REASONS.includes(reason) || reason === "label-differs";
+  const asked = reason === "help-requested"; // she asked for a person: no "not sure enough" framing
   return {
     urgent: false,
     labelKey: "safetyLabel",
-    headingKey: gentle ? "labelSafetyHeading" : "safetyHeading",
-    bodyKey: reason === "label-differs" ? "labelDiffers" : gentle ? "labelSafetyBody" : "safetyBody",
-    reasonKey: REASON_LINE[reason],
+    headingKey: asked ? "helpRequestedHeading" : gentle ? "labelSafetyHeading" : "safetyHeading",
+    bodyKey: asked ? "helpRequestedBody" : reason === "label-differs" ? "labelDiffers" : gentle ? "labelSafetyBody" : "safetyBody",
+    reasonKey: asked ? null : REASON_LINE[reason],
     retryUsedKey: labelProblem && !canRetry ? "retryUsed" : null,
     crisisKey: null,
+    noInstructionsKey: asked ? null : "reasonNoInstructions",
+    askKey: actions.some((a) => a.id === "try-again") ? "safetyAskRetry" : "safetyAsk",
     actions,
   };
 }

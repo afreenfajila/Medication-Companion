@@ -87,7 +87,7 @@ export function doseMessage(
       ];
       if (cb.status === "failed") sections.push({ heading: t("doseViewContact"), text: `${careContacts.pharmacy.name}: ${careContacts.pharmacy.phone}` });
       sections.push({ text: t("doseDemoNotice") });
-      return { key: line, lines: cb.status === "submitted" ? [line] : [line, t("reviewSayToRetry")], sections };
+      return { key: line, lines: [line], sections };
     }
     // Reviewing: exactly the draft that "send the request" would share — no more, no less, in
     // design-standard §16 order. Keyed by revision too, so every corrected version is shown again.

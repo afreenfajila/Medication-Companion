@@ -90,7 +90,8 @@ describe("the reviewed callback summary: cancelled or sent in words, only by an 
   it("nothing else sends: a plain yes asks for 'send'; questions, hedges, negatives and long sentences don't send", () => {
     expect(interpretUtterance("yes", review("reviewing"))).toEqual({ kind: "reply", key: "doseSayToSend" });
     // "Send" inside a hedge or a condition is told how to send, in fixed words — never left to the AI.
-    for (const words of ["maybe send it", "if it's right, send it", "I would send it"]) {
+    expect(interpretUtterance("maybe send it", review("reviewing"))).toEqual({ kind: "reply", key: "doseReviewUnsure" });
+    for (const words of ["if it's right, send it", "I would send it"]) {
       expect(interpretUtterance(words, review("reviewing")), words).toEqual({ kind: "reply", key: "doseSayToSend" });
     }
     for (const words of [
@@ -164,8 +165,8 @@ describe("what the AI meaning-match may choose: never a yes to a gate", () => {
     { ...safety, helpStage: "confirm" },
     { ...safety, helpStage: "failed" },
     { ...base, state: "confirm-match" },
-    { ...base, state: "camera-permission", showMethod: "camera" },
-    { ...base, state: "camera-permission", showMethod: "choose" },
+    { ...base, state: "camera-permission" },
+    { ...base, state: "camera-guidance", cameraMode: "ready" },
     { ...base, state: "explain", explainStep: 1 },
     { ...base, state: "explain", explainStep: 2 },
     { ...base, state: "explain", recordConflict: true },

@@ -3,6 +3,7 @@ import { formatVerifiedDate } from "@/lib/content/explanation";
 import { recordSource } from "@/lib/content/seed-record";
 import type { CopyKey } from "@/lib/content/translations";
 import type { UiLanguage } from "@/types/content";
+import { Info } from "lucide-react";
 import { TrustBadge } from "@/components/ui/notices";
 
 export type T = (key: CopyKey) => string;
@@ -25,24 +26,38 @@ export function ScreenHeader({
   /** In a call: tighter, so the conversation keeps the screen. */
   compact?: boolean;
 }) {
+  if (compact) {
+    // In a call: the name centred on top; under it, the record label (one quiet line) with Help
+    // on the same row. The label never wraps; only on very narrow screens does it end in "…".
+    return (
+      // On phones the fixed prototype badge sits at the very top, so the title starts below it.
+      // Below 380px the gutters and the label tighten a little, so it still fits on one line at 360px.
+      <header className="flex flex-col gap-1 border-b border-line px-4 pb-2 pt-7 max-[379px]:px-3 md:pt-2">
+        <p className="truncate text-center text-[17px] font-bold tracking-tight">{t("appName")}</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[14px] text-navy-700 max-[379px]:gap-1 max-[379px]:text-[13px]">
+            <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 overflow-hidden text-ellipsis">{t("recordFictional").replace("{name}", recordSource.name)}</span>
+          </p>
+          {control}
+        </div>
+      </header>
+    );
+  }
   return (
-    <header className={compact ? "flex flex-row flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 pb-1 pt-2 text-center" : "flex flex-col items-center gap-2 px-6 pb-2 pt-6 text-center"}>
+    <header className="flex flex-col items-center gap-2 px-6 pb-2 pt-6 text-center">
       <p className="text-[17px] font-bold tracking-tight">{t("appName")}</p>
-      {compact ? (
-        <TrustBadge plain label={t("recordFictional").replace("{name}", recordSource.name)} />
-      ) : (
-        // The date comes from the record.
-        <TrustBadge label={t("trustBadge").replace("{verifiedDate}", formatVerifiedDate(language))} />
-      )}
+      {/* The date comes from the record. */}
+      <TrustBadge label={t("trustBadge").replace("{verifiedDate}", formatVerifiedDate(language))} />
       {control}
     </header>
   );
 }
 
 /**
- * Persistent disclosure + link to /about (site-contract §15). During a call the
- * words stay on screen and the link moves into the Get help sheet, so the call
- * keeps exactly three persistent controls.
+ * Persistent disclosure + link to /about (site-contract §15). During a call the words stay,
+ * small and centred under the control row; the link is on the start screen only, so the call
+ * keeps just its own controls.
  */
 export function DisclosureFooter({ t, inCall = false }: { t: T; inCall?: boolean }) {
   return (

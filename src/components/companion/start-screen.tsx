@@ -33,8 +33,10 @@ export function StartScreen({
   const close = () => setSheet(null);
 
   return (
-    <div className="flex flex-1 flex-col items-center py-4 text-center">
-      <div className="flex flex-1 flex-col items-center justify-center gap-7 py-4">
+    // Short screens (a laptop window, a small phone): tighter spacing and a smaller orb, so the
+    // start screen fits without scrolling.
+    <div className="flex flex-1 flex-col items-center py-4 text-center [@media(max-height:820px)]:py-2">
+      <div className="flex flex-1 flex-col items-center justify-center gap-7 py-4 [@media(max-height:820px)]:gap-4 [@media(max-height:820px)]:py-1">
         <CompanionOrb state="idle" />
         <div>
           <h1 className="text-[31px] font-bold leading-[1.18]">{t("welcome")}</h1>

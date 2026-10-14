@@ -14,7 +14,7 @@ const SAFETY_ANCHORS: Partial<Record<CopyKey, [RegExp, RegExp]>> = {
   crisisLines: [/1767.*Emergency: 995/, /1767.*995/],
   doseChangeIntro: [/I can’t tell you how many to take/, /./],
   doseConflict: [/I cannot confirm which instruction you should follow/, /无法确认您应该按哪一个服用/],
-  doseInsufficient: [/do not have enough confirmed information/, /没有足够的已确认信息/],
+  doseInsufficient: [/don’t have enough confirmed wording to compare these properly, and I won’t guess/, /没有足够的已确认文字.*不会去猜/],
   doseRecordUnavailable: [/I won’t guess/, /不会去猜/],
   recordConflict: [/“\{instruction\}”[\s\S]*a pharmacist can check it with you/, /\{instruction\}/],
   labelDiffers: [/a pharmacist is the best person to look/, /./],

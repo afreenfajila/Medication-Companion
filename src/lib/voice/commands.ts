@@ -10,7 +10,7 @@ import { parseTypedLabel } from "@/lib/label/typed-label";
 import { classifySafety } from "@/lib/safety/classify";
 import { isDoseChange, isRecordConflict } from "@/lib/session/intent";
 import { buildEscalation } from "@/lib/safety/escalation";
-import type { DoseCheck, HelpKind, SessionEvent } from "@/lib/session/state-machine";
+import type { CameraIssue, CameraMode, DoseCheck, HelpKind, SessionEvent } from "@/lib/session/state-machine";
 import type { CompanionState, ContextualActionId, SafetyReason } from "@/types/content";
 
 /**
@@ -21,7 +21,8 @@ import type { CompanionState, ContextualActionId, SafetyReason } from "@/types/c
  */
 export type VoiceIntent =
   | { kind: "event"; event: SessionEvent }
-  | { kind: "ui"; action: "capture" }
+  /** Things only the screen can do: take the still, the interrupt setting, the paused mic. */
+  | { kind: "ui"; action: "capture" | "interrupt-on" | "interrupt-off" | "listen-again" }
   | { kind: "message"; text: string }
   /** A medicine name was said with no strength yet — ask for the strength next. */
   | { kind: "need-strength"; medicineName: string }
@@ -37,10 +38,13 @@ export type CommandContext = {
   cameraLive: boolean;
   /** The companion just asked "did you mean <medicine>?" — "yes" answers that, not an offered button. */
   nameCheckPending?: boolean;
+  /** The companion just asked "What else can I help with?" in the open conversation. */
+  anythingElse?: boolean;
   /** The companion just answered "my doctor said…" and asked: pharmacist, or carry on? */
   recordConflict?: boolean;
-  /** On the camera-permission step: choosing camera or photo, or the consent question. */
-  showMethod?: "choose" | "camera";
+  /** After the camera question: Take photo / Upload offered, the camera open, or no camera (and why). */
+  cameraMode?: CameraMode | null;
+  cameraIssue?: CameraIssue | null;
   /** Stage of a help request on screen (confirm, sent, failed…), if any. */
   helpStage?: "confirm" | "review" | "sending" | "sent" | "failed" | "info" | null;
   /** The dose-change check, when one is running (Assignment 4). */
@@ -64,10 +68,26 @@ const normalise = (text: string) =>
 const wordCount = (n: string) => (n === "" ? 0 : n.split(" ").length);
 
 // --- vocabulary (English + Simplified Chinese) -------------------------------
-const HEDGE = /\b(not sure|unsure|don't know|do not know|maybe|i guess|perhaps|hmm|can't tell|cannot tell)\b|不确定|不知道|不太确定|也许|可能/;
+/** Unsure, in any words. A hedged answer is never a yes (or a no) to anything: "I suppose so",
+ *  "about right", "I don't really know". Checked after "uh-huh"/"mm-hmm" are taken out. */
+const HEDGE =
+  /\b(not sure|unsure|don't know|do not know|don't really know|not really sure|no idea|maybe|i guess|perhaps|hmm+|can't tell|cannot tell|i suppose|suppose so|sort of|kind of|about right|i reckon|i think|think so|probably|might be|could be|not certain|i believe)\b|不确定|不知道|不太确定|也许|可能|大概|好像|我觉得/;
+const HEDGE_ALL = new RegExp(HEDGE.source, "g");
+/** Conversational yes sounds. */
+const BACKCHANNEL_YES = /\b(uh[- ]?huh|mm[- ]?hmm|mhm)\b/g;
+/** "Not right", "不对", "不用": a yes-word inside a no. Taken out before looking for a yes. */
+/** Yes, though it contains a "don't". */
+const YES_DESPITE_NO = /\b(don't|do not|wouldn't|would not) mind\b|\bwhy not\b|\bno (problem|worries)\b|不介意/g;
+const NEGATED_YES = /\bnot (right|correct|okay|ok|good)\b|不(对|好|行|可以|是的|用)/g;
 // "don't" matters most: "please don't" contains "please", which alone reads as a yes.
-const NEGATIVE = /\b(no|nope|nah|don't|dont|do not|cancel|not now|not really|wrong|incorrect|try again|that's not|it's not|isn't|not my|not the|later)\b|不是|不要|不对|不行|不好|没有|现在不|再试/;
-const AFFIRM = /\b(yes|yeah|yep|yup|sure|ok|okay|please|correct|right|absolutely|of course|go ahead|alright|that's it|that is it|that's right|this is my medicine)\b|是的|没错|好的|可以|对|好|行/;
+const NEGATIVE =
+  /\b(no+|nope|nah|don't|dont|do not|cancel|not now|not really|not right|not correct|wrong|incorrect|try again|that's not|it's not|isn't|not my|not the|later)\b|不是|不要|不对|不行|不好|没有|现在不|再试|不用/;
+/** "ok" on its own: heard, but not a clear yes — it never confirms, consents or approves. */
+const BARE_OK = /^(ok|okay|k|kk|okey|alright|all right|fine)[.!]*$/;
+const AFFIRM =
+  /\b(yes|y+e+s+|yse|ys|yeah|yea|yah|yep|yup|sure|ok|okay|please|correct|right|absolutely|of course|go ahead|go for it|sounds good|fine by me|alright|that's it|that is it|that's right|exactly|spot on|that's what it says|that's the one|that's mine|yes it is|this is my medicine)\b|是的|没错|好的|可以|对|好|行|就是这样|是这样/;
+/** "I can't read it", "it's too small": the wording can't be confirmed — never a guess at it. */
+const CANT_READ = /\b(can't|cannot|can not|unable to|hard to|couldn't)\b.{0,12}\b(read|see|tell|make out)\b|\b(too (small|faded|blurry)|smudged|worn off)\b|看不清|看不到|读不了|看不出/;
 
 const END_CALL =
   /\b(end (the |this |our )?call|end it( here| now| there)?|let'?s end( (it|here|now|the call))?|finish (the |this )?call|hang up|we'?re done( here)?|good ?bye|bye( bye)?)\b|结束通话|挂断|再见|就到这里/;
@@ -81,6 +101,15 @@ const TO_ENGLISH = /\benglish\b|英文|英语/;
 
 const TAKE_PHOTO = /\b(take (a |the )?(photo|picture|pic)|capture|snap( it)?|scan( it)?)\b|拍照|拍下/;
 /** Wanting a photo they already have ("choose a photo", "upload", "from my gallery") — not taking one now. */
+// "Show the label" / "let me show you the box": asking to show it (again).
+const SHOW_LABEL = /\b(show|see|look at)\b.{0,20}\b(label|medicine|box|bottle|packet|photo|picture)\b|给你看|看(一下)?标签/;
+const CLOSE_CAMERA = /\b(cancel|close|stop|turn off|exit)\b.{0,12}\b(camera|it|this)?\b|\bnever ?mind\b|关闭相机|关掉相机|取消/;
+// The pharmacy's own contact details (to call them herself), never her callback number.
+const PHARMACY_CONTACT = /\b(pharmacy|pharmacist|brightcare)('s)?\b.*\b(contact|number|phone)\b|\b(contact|number|phone)\b.*\b(pharmacy|pharmacist|brightcare)\b|药房.*(电话|号码)/;
+// The interrupt setting, and a paused mic, by words (they used to be buttons).
+const INTERRUPT_OFF = /\b(stop|don't|do not|no more|turn off|switch off|disable)\b.{0,24}\binterrupt|关闭打断|不要打断/;
+const INTERRUPT_ON = /\b(let me|allow|turn on|switch on|enable|i want to)\b.{0,24}\binterrupt|打开打断|让我打断/;
+const LISTEN_AGAIN = /\b(listen (again|to me)|start listening|(turn|switch) (the )?mic(rophone)? (back )?on|unpause)\b|继续听|重新听/;
 const PHOTO_INSTEAD = /\b(photos?|pictures?|pics?|images?|gallery|upload|album|camera roll|from my phone)\b|照片|相册|图片|上传/;
 const NEXT = /\b(next|continue|go on|keep going|carry on|go ahead|tell me more|what else|read on|keep reading)\b|下一步|继续|接着说/;
 const BACK = /\b(back|previous|go back)\b|上一步|返回/;
@@ -101,7 +130,7 @@ const TRY_AGAIN = /\b((try|another|new).*(photo|picture|again|label)|again)\b|�
 const CHANGE_WORDING = /\b(change|correct|fix|edit|redo)\b.{0,24}\b(wording|label|words|reading|what i said)\b|(改|更正|修改)(一下)?(标签|措辞|内容|用法)/;
 /** Correcting the summary in words (owner brief, 13 October 2026). Checked before "send", so
  *  "change the number, then send" changes it and asks again; it never sends. */
-const CHANGE_ANY = /\b(change|correct|fix|edit|update|replace|wrong)\b|改|更正|修改|换/;
+const CHANGE_ANY = /\b(change|fix|edit|update|replace|wrong)\b|\bcorrect (it|that|this|the|my)\b|改|更正|修改|换/;
 const NUMBER_WORDS = /\b(number|phone|contact)\b|号码|电话/;
 const PHONE = /\+?\d[\d\s-]{6,}\d/;
 const REASON_TO = /\breason\b.{0,12}?\b(to|is)\b\s*[:,]?\s*(.+)$/i;
@@ -111,7 +140,7 @@ const SHOW_NUMBER = /\b(show|read|tell|say|what('s| is))\b/;
 const BACK_TO_CALL = /\b(back to (the )?(conversation|call)|carry on|continue (the )?(call|conversation)|talk (to you )?more)\b|回到对话/;
 const DIFFERENT = /\b(different|differs|doesn't match|does not match|don't match)\b|不一样|不同|不符/;
 const MATCHES = /\b(it matches|matches|same|the same)\b|一样|相同/;
-const PHARMACIST =/\b(pharmacist|pharmacy|check with)\b|药剂师|药房/;
+const PHARMACIST = /\b(pharmacist|pharmacy|chemist)\b|药剂师|药房/;
 const ANOTHER_MEDICINE = /\b(another|other|new|different|next)( medicine| one)?\b|另一种|另一个/;
 // The safety screen's own help options, by name.
 const CLINIC = /\b(clinic|doctor|gp)\b|诊所|医生/;
@@ -189,6 +218,10 @@ export function isQuestion(text: string): boolean {
   return QUESTION.test(normalise(raw)) || raw.includes("?") || raw.includes("？");
 }
 /** Words that only appear when someone is reading an instruction, not answering yes or no. */
+/** Words that only label wording would contain, for the label step without AI. ("Day", "morning" and
+ *  "one" alone are not enough: "it's been a long day", "that's the one".) */
+const LABEL_WORDS =
+  /\d|\b(take|tablets?|tabs?|capsules?|caps?|pills?|two|three|four|five|half|once|twice|daily|mg|ml|directed|crush|chew|swallow|dissolve|meals?|food|bedtime|every)\b|\bone (tablet|capsule|pill|a day|daily|twice|in the)\b|片|粒|次|服|餐|饭|睡前|每日|每天/;
 const INSTRUCTION_WORDS =
   /\d|\b(take|tablets?|tabs?|capsules?|pills?|one|two|three|four|half|once|twice|daily|day|times?|meals?|food|morning|night|bedtime|mg)\b|片|粒|次|服|餐|饭|睡前|早上|每日|每天/;
 
@@ -220,6 +253,12 @@ function reviewAnswer(
   });
   const change = CHANGE_ANY.test(n);
   const phone = raw.match(PHONE)?.[0].trim();
+  // "Who will see this?": exactly who, from the summary — never a guess.
+  if (/\bwho\b.*\b(see|get|read|receive|sees|gets)\b|谁.*(看|收到)/.test(n)) return { kind: "reply", key: "doseWhoSees" };
+  // "That's my old number": ask for the new one.
+  if (!phone && /\b(old|new|different|changed|wrong|not my)\b.*\b(number|phone)\b|\b(number|phone)\b.*\b(old|changed|wrong|different|out of date)\b|号码.*(换|变|旧|不对)/.test(n)) {
+    return { kind: "reply", key: "doseAskNumber" };
+  }
   // Asking to see the number: said back in full (it is masked in the summary).
   if (NUMBER_WORDS.test(n) && !change && !phone && (question || SHOW_NUMBER.test(n))) return { kind: "reply", key: "doseNumberIs" };
   // A new number: "change the number to 0000 0199", or just the number after being asked for it.
@@ -243,6 +282,12 @@ function reviewAnswer(
   }
   // "What happens if I say send?": a fixed answer; nothing is sent.
   if (question && SEND.test(n)) return { kind: "reply", key: "doseSendExplained" };
+  // A plain "no" / "not really" / "不对": what would she like changed? (Nothing is sent or dropped.)
+  if (NEGATIVE.test(n) && !SEND.test(n) && !HOLD.test(n) && !AFFIRM.test(n.replace(NEGATED_YES, " ")) && isShort(n)) {
+    return { kind: "reply", key: "doseWhatToChange" };
+  }
+  // Unsure: no pressure; nothing is sent until she says so.
+  if (HEDGE.test(n.replace(BACKCHANNEL_YES, " "))) return { kind: "reply", key: "doseReviewUnsure" };
   return null;
 }
 
@@ -261,13 +306,21 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
   if (REPEAT.test(n)) return { kind: "event", event: { type: "REPEAT" } };
   if (TO_CHINESE.test(n)) return { kind: "event", event: { type: "SET_LANGUAGE", language: "zh-Hans" } };
   if (TO_ENGLISH.test(n)) return { kind: "event", event: { type: "SET_LANGUAGE", language: "en" } };
+  if (INTERRUPT_OFF.test(n)) return { kind: "ui", action: "interrupt-off" };
+  if (INTERRUPT_ON.test(n)) return { kind: "ui", action: "interrupt-on" };
+  if (LISTEN_AGAIN.test(n)) return { kind: "ui", action: "listen-again" };
 
   // 3. The current screen's decision.
-  const hedge = HEDGE.test(n);
-  const negative = NEGATIVE.test(n);
-  // "Is that right?" / "对吗？" asks; it never confirms or consents to anything.
+  const yesSound = new RegExp(BACKCHANNEL_YES.source).test(n);
+  const plain = n.replace(BACKCHANNEL_YES, " ");
+  const hedge = HEDGE.test(plain);
+  // "I don't know" is unsure, not a no.
+  const negative = NEGATIVE.test(plain.replace(HEDGE_ALL, " ").replace(YES_DESPITE_NO, " "));
+  // "Is that right?" / "对吗？" asks; it never confirms or consents to anything. Nor does a hedged yes.
   const asked = QUESTION.test(n) || raw.includes("?") || raw.includes("？");
-  const affirm = AFFIRM.test(n) && !asked;
+  // "ok" alone is not a yes (owner brief, 14 October 2026): at a decision it is asked again plainly.
+  const bareOk = BARE_OK.test(n.trim());
+  const affirm = (AFFIRM.test(plain.replace(NEGATED_YES, " ")) || yesSound || new RegExp(YES_DESPITE_NO.source).test(n)) && !asked && !hedge && !bareOk;
 
   // A help request on screen. Consent/confirmation must be a clear, short yes.
   switch (ctx.helpStage) {
@@ -279,12 +332,13 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
       if (affirm) return { kind: "reply", key: "helpSayToSend" };
       return { kind: "unclear" };
     case "confirm":
+      if (bareOk) return { kind: "reply", key: "okIsItYes" };
       if (negative || hedge) return { kind: "event", event: { type: "HELP_CONFIRM", granted: false } };
       if (affirm && isSentence(n)) return { kind: "event", event: { type: "HELP_CONFIRM", granted: true } };
       return { kind: "unclear" };
     case "failed":
       if (TRY_AGAIN.test(n)) return { kind: "event", event: { type: "HELP_RETRY" } };
-      if (/\b(number|phone)\b|电话|号码/.test(n)) return { kind: "event", event: { type: "HELP_SHOW_NUMBER" } };
+      if (/\b(number|phone|contact)\b|电话|号码/.test(n)) return { kind: "event", event: { type: "HELP_SHOW_NUMBER" } };
       if (negative) return { kind: "event", event: { type: "HELP_DISMISS" } };
       return { kind: "unclear" };
     case "sent":
@@ -307,6 +361,11 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
       // Except after "Did you mean Metformin?": there "yes" answers the name
       // check and the label button is only an alternative, so the reducer decides.
       if (ctx.nameCheckPending) return { kind: "message", text: raw };
+      // Just asked "What else can I help with?": "no", "that's all" finish the call; "yes" asks what.
+      if (ctx.anythingElse) {
+        if (NOTHING_ELSE.test(n) || (negative && !affirm && isShort(n))) return { kind: "event", event: { type: "END_CALL" } };
+        if (affirm && isShort(n)) return { kind: "reply", key: "anotherMedicineGuide" };
+      }
       const question = QUESTION.test(n) || raw.includes("?") || raw.includes("？");
       if (offered.length === 1 && offered[0] === "show-medicine" && affirm && !negative && !hedge && !question && isShort(n)) {
         return { kind: "event", event: { type: "SELECT_ROUTE", route: "show-medicine" } };
@@ -317,30 +376,49 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
       if (PHARMACIST_CONTACT.test(n) && !negative && !isDoseChange(raw)) {
         return { kind: "event", event: { type: "HELP_START", kind: "pharmacist-callback" } };
       }
+      // "Shall I let your family know…?" — "let my family know" (it was a button): the same consent
+      // step as before; nothing is sent without her yes and her "send".
+      if (offered.includes("ask-family") && FAMILY.test(n) && !negative && !hedge && !question) {
+        return { kind: "event", event: { type: "HELP_START", kind: "family" } };
+      }
       return { kind: "message", text: raw };
     }
 
-    case "camera-permission":
-      // First: camera or photo (H2). A photo needs a tap (the system picker can't
-      // open from speech); the name and strength can simply be said.
-      if (ctx.showMethod === "choose") {
-        // The phone's photo picker only opens from a tap, so say where to tap.
-        if (PHOTO_INSTEAD.test(n) && !TAKE_PHOTO.test(n)) return { kind: "reply", key: "photoNeedsTap" };
-        if (/\bcamera\b|相机|摄像头/.test(n)) return { kind: "event", event: { type: "CHOOSE_CAMERA" } };
-        const said = parseSpokenLabel(raw);
-        const parsed = said ? parseTypedLabel({ ...said, patientName: "" }) : null;
-        if (parsed?.ok) return { kind: "event", event: { type: "SUBMIT_LABEL", input: parsed.input } };
-        return { kind: "unclear" };
-      }
-      // "I'd rather choose a photo": not the camera. Declining opens the photo, medicine-list and typing choices.
-      if (PHOTO_INSTEAD.test(n) && !TAKE_PHOTO.test(n)) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: false } };
-      if (hedge) return { kind: "unclear" };
+    case "camera-permission": {
+      // One question: may I see the label, with the camera or a photo? A clear yes (or asking for
+      // the camera or a photo) only brings up Take photo and Upload; a no or a hedge never does.
+      // The name and strength can simply be said instead.
+      const said = parseSpokenLabel(raw);
+      const parsed = said ? parseTypedLabel({ ...said, patientName: "" }) : null;
+      if (parsed?.ok) return { kind: "event", event: { type: "SUBMIT_LABEL", input: parsed.input } };
+      if (/\b(i'?d|i would) rather not\b|\bprefer not\b/.test(n) && !asked) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: false } };
+      if (hedge || asked) return { kind: "unclear" };
       if (negative && !affirm) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: false } };
-      if (affirm && !negative && isSentence(n)) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: true } };
+      // "Is that okay?" — "okay" is a yes here: it only brings up Take photo / Upload, never a photo by itself.
+      if ((affirm || bareOk) && !negative && isSentence(n)) return { kind: "event", event: { type: "CAMERA_CONSENT", granted: true } };
+      if (!negative && (TAKE_PHOTO.test(n) || PHOTO_INSTEAD.test(n) || /\bcamera\b|相机|摄像头/.test(n))) {
+        return { kind: "event", event: { type: "CAMERA_CONSENT", granted: true } };
+      }
       return { kind: "unclear" };
+    }
 
     case "camera-guidance": {
       if (TAKE_PHOTO.test(n) && ctx.cameraLive) return { kind: "ui", action: "capture" };
+      const camera = /\bcamera\b|相机|摄像头/.test(n);
+      const photo = PHOTO_INSTEAD.test(n) && !TAKE_PHOTO.test(n);
+      if (ctx.cameraMode === "preview") {
+        // "Cancel", or "I'll upload one instead": back to Take photo / Upload.
+        if ((CLOSE_CAMERA.test(n) && !TAKE_PHOTO.test(n)) || photo) return { kind: "event", event: { type: "CLOSE_CAMERA" } };
+      } else if (ctx.cameraMode === "ready") {
+        if (TAKE_PHOTO.test(n) || camera) return { kind: "event", event: { type: "OPEN_CAMERA" } };
+        // The phone's photo picker only opens from a tap: say where to tap.
+        if (photo || SHOW_LABEL.test(n)) return { kind: "reply", key: "photoNeedsTap" };
+      } else if (ctx.cameraMode === "fallback") {
+        const wants = SHOW_LABEL.test(n) || TAKE_PHOTO.test(n) || photo || camera;
+        // After a "no": asked again. With the camera off or missing: Upload is still in the message.
+        if (wants && !negative && !ctx.cameraIssue) return { kind: "event", event: { type: "SHOW_LABEL_AGAIN" } };
+        if (wants && !negative && ctx.cameraIssue) return { kind: "reply", key: "photoNeedsTap" };
+      }
       // Saying the name and strength out loud ("It's Metformin, 500 milligrams")
       // is another way to fill the same typed-label form — for anyone who'd
       // rather not use the camera, or whose pronunciation speech recognition
@@ -382,7 +460,11 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
     case "confirm-match": {
       const id = ctx.candidateId;
       if (!id) return { kind: "unclear" };
+      if (/\bwhat('s| is| does)?\b.*\b(for|do|does)\b|\bwhat it'?s for\b|做什么|干什么|治什么/.test(n) && !negative && !affirm) {
+        return { kind: "reply", key: "confirmWhatFor" };
+      }
       // Hedging beats everything: "yes, but I'm not sure" must NOT confirm a medicine.
+      if (bareOk) return { kind: "reply", key: "okIsItYes" };
       if (hedge) return { kind: "event", event: { type: "CONFIRM_MATCH", candidateId: id, decision: "unsure" } };
       if (negative && affirm) return { kind: "unclear" }; // contradictory
       if (negative) return { kind: "event", event: { type: "CONFIRM_MATCH", candidateId: id, decision: "denied" } };
@@ -397,7 +479,7 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
         const d = ctx.doseCheck;
         const question = QUESTION.test(n) || raw.includes("?") || raw.includes("？");
         const yes = affirm && !negative && !hedge && isShort(n) && !question;
-        const no = (negative || hedge) && !affirm && isShort(n);
+        const no = negative && !affirm && isShort(n) && !question;
         const cb = d.callback;
         // A label correction waiting for its yes is answered at the label step below, even with a summary open.
         if (cb && cb.status === "reviewing" && d.step !== "label") {
@@ -405,6 +487,8 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
           if (review) return review;
         }
         if (cb && cb.status !== "cancelled" && d.step !== "label") {
+          // "Show pharmacy contact": the pharmacy's own number, once the request has gone (or failed).
+          if (cb.status !== "reviewing" && cb.status !== "submitting" && PHARMACY_CONTACT.test(n)) return { kind: "reply", key: "doseCallYourself" };
           // "Don't send" cancels in words. Sending is an explicit, short "send" (said or typed)
           // for exactly the revision on screen — never a plain yes, a question, a hedge or the AI.
           const open = cb.status === "reviewing" || cb.status === "failed" || cb.status === "unknown";
@@ -419,41 +503,64 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
           }
           // A plain yes, or "send" inside a hedge or a long sentence: say how to send, never
           // "I can't send from here" (owner retest, 13 October 2026). A question is answered.
-          if (cb.status === "reviewing" && (yes || (SEND.test(n) && !question))) return { kind: "reply", key: "doseSayToSend" };
+          const fine = /\b(looks (fine|good|right|ok|okay)|all (fine|good)|that's fine|go on then|go ahead)\b|没问题|可以了/.test(n) && !question;
+          if (cb.status === "reviewing" && (yes || fine || (SEND.test(n) && !question))) return { kind: "reply", key: "doseSayToSend" };
           // After the outcome there is nothing left to decide here: "that's all" ends the call;
           // anything else carries the conversation on (the companion says what is still open).
-          if (cb.status === "submitted" || cb.status === "unknown") {
-            if (NOTHING_ELSE.test(n)) return { kind: "event", event: { type: "END_CALL" } };
+          // Submitted ("…anything else I can help with?"): "no" / "that's all" finish; "yes" carries on.
+          if (cb.status === "submitted") {
+            if (/\bwhen\b.*\b(call|ring|hear|contact)\b|什么时候.*(回电|打|联系)/.test(n)) return { kind: "reply", key: "doseNoCallbackTime" };
+            if (NOTHING_ELSE.test(n) || (no && !HOLD.test(n))) return { kind: "event", event: { type: "END_CALL" } };
             if (BACK_TO_CALL.test(n) || NEXT.test(n) || yes) return { kind: "event", event: { type: "DOSE", action: { kind: "return-to-call" } } };
             return { kind: "unclear" };
           }
-          if (cb.status === "failed" && (BACK_TO_CALL.test(n) || NEXT.test(n))) {
-            return { kind: "event", event: { type: "DOSE", action: { kind: "return-to-call" } } };
+          // Not sent, or not confirmed ("If you'd like me to try again, say “send the request”. Or we can
+          // leave it for now."): "leave it" / "no" carries on; a plain yes is told how to retry — it never sends.
+          if (cb.status === "failed" || cb.status === "unknown") {
+            if (/\b(ring|call|phone|contact)\b.*\b(them|myself|pharmacy|direct(ly)?)\b|自己打|直接打/.test(n)) return { kind: "reply", key: "doseCallYourself" };
+            if (BACK_TO_CALL.test(n) || NEXT.test(n) || /\b(leave it|not now|that's fine)\b|算了|先不/.test(n) || (no && !SEND.test(n))) {
+              return { kind: "event", event: { type: "DOSE", action: { kind: "return-to-call" } } };
+            }
+            if (NOTHING_ELSE.test(n)) return { kind: "event", event: { type: "END_CALL" } };
+            if (yes) return { kind: "reply", key: "doseRetryPrompt" };
           }
           return { kind: "unclear" };
         }
         if (d.offer) {
-          if (no) return { kind: "event", event: { type: "DOSE", action: { kind: "decline-offer" } } };
+          if (bareOk) return { kind: "reply", key: "okIsItYes" };
+          if (no || (negative && !affirm && !question)) return { kind: "event", event: { type: "DOSE", action: { kind: "decline-offer" } } };
+          if (hedge) return { kind: "reply", key: "doseOfferUnsure" };
           if (affirm && !negative && !hedge && !question && isSentence(n)) {
             return { kind: "event", event: { type: "DOSE", action: { kind: "accept-offer" } } };
           }
           return { kind: "unclear" };
         }
         if (d.step === "label") {
+          // A question is not label wording ("What does twice daily mean?", "Should I take two?"):
+          // asking how much to take gets a fixed answer; anything else is understood by meaning.
+          if (QUESTION.test(n) && !/^(it|the label|the box|this)\b/.test(n)) {
+            return isDoseQuestion(n, raw) ? { kind: "reply", key: "doseLabelStepQuestion" } : { kind: "unclear" };
+          }
+          if (CANT_READ.test(n)) return { kind: "event", event: { type: "DOSE", action: { kind: "cannot-confirm" } } };
           // "OK, one tablet twice daily" is new wording, not a yes to the reading on screen.
-          if (INSTRUCTION_WORDS.test(n)) return { kind: "message", text: raw };
+          // Shown back to confirm, never trusted as-is.
+          if (LABEL_WORDS.test(n)) return { kind: "message", text: raw };
           if (d.reading && (no || CHANGE_WORDING.test(n))) return { kind: "event", event: { type: "DOSE", action: { kind: "reject-reading" } } };
           if (d.reading && yes) {
             return { kind: "event", event: { type: "DOSE", action: { kind: "confirm-label", revision: d.labelRevision } } };
           }
-          // "Send the request" / "cancel" here is not the box's wording: the summary waits for this check.
-          if (SEND.test(n) || CANCEL.test(n)) return { kind: "unclear" };
-          // Anything longer is the person reading their box: shown back to confirm, never trusted as-is.
-          return yes || no ? { kind: "unclear" } : { kind: "message", text: raw };
+          // Unsure: no pressure, and nothing guessed.
+          if (hedge) return { kind: "reply", key: "doseReadingHedge" };
+          // Anything else ("next", "it's been a long day", "send the request") is not the box's
+          // wording: understood by meaning, never read back as the label.
+          return { kind: "unclear" };
         }
         // A difference, an incomplete check or an unreachable record can go to a pharmacist (a
         // match offers nothing: the reducer refuses it too). The offer still asks before preparing.
         const canOffer = (d.step === "compared" && d.comparison?.outcome !== "match") || d.step === "record-unavailable";
+        if (canOffer && (isDoseQuestion(n, raw) || /\bwhich (one|dose|instruction|is right)\b|\bwhat (do|should) i (take|do)\b|哪个|吃哪/.test(n))) {
+          return { kind: "reply", key: "doseWhichOne" };
+        }
         if (canOffer && (PHARMACIST.test(n) || yes)) {
           return { kind: "event", event: { type: "DOSE", action: { kind: "offer-callback" } } };
         }
@@ -461,9 +568,14 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
         if (d.step === "compared" && CHANGE_WORDING.test(n)) {
           return { kind: "event", event: { type: "DOSE", action: { kind: "review-details" } } };
         }
-        // "Back to the call" / "carry on": leave the comparison; the companion says what is still open.
-        if ((d.step === "compared" || d.step === "record-unavailable") && (BACK_TO_CALL.test(n) || NEXT.test(n))) {
-          return { kind: "event", event: { type: "DOSE", action: { kind: "return-to-call" } } };
+        if (d.step === "compared" || d.step === "record-unavailable") {
+          // After a match ("…anything else I can help with?"): "no", "that's all" finish the call.
+          if (!canOffer && (NOTHING_ELSE.test(n) || no)) return { kind: "event", event: { type: "END_CALL" } };
+          // "No thanks" to a callback, "carry on", or "yes" after a match: back to the conversation,
+          // where the companion says what is still open.
+          if (BACK_TO_CALL.test(n) || NEXT.test(n) || no || NOTHING_ELSE.test(n) || (yes && !canOffer)) {
+            return { kind: "event", event: { type: "DOSE", action: { kind: "return-to-call" } } };
+          }
         }
         return { kind: "unclear" };
       }
@@ -497,7 +609,7 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
         // The last step asks "repeat that, or help you contact a pharmacist?". A bare "yes" doesn't
         // say which, so it is asked back; "no thanks", "that's all", "got it" finish.
         if (UNDERSTOOD.test(n) || (negative && !affirm && isShort(n))) return { kind: "event", event: { type: "UNDERSTOOD" } };
-        if (affirm && !negative && isShort(n)) return { kind: "reply", key: "explainWhichOne" };
+        if ((affirm || bareOk) && !negative && isShort(n)) return { kind: "reply", key: "explainWhichOne" }; // not a decision: just "which one?"
         return { kind: "unclear" };
       }
       if (NEXT.test(n) || UNDERSTOOD.test(n) || (affirm && !negative && isShort(n))) {
@@ -514,11 +626,18 @@ export function interpretUtterance(text: string, ctx: CommandContext): VoiceInte
       if (HELPER.test(n)) return help("trusted-helper");
       if (CLINIC.test(n)) return help("clinic");
       if (TRY_AGAIN.test(n)) return { kind: "event", event: { type: "TRY_ANOTHER_LABEL" } };
-      if (BACK_TO_CALL.test(n)) return { kind: "event", event: { type: "RETURN_TO_CALL" } };
+      if (BACK_TO_CALL.test(n) || NEXT.test(n)) return { kind: "event", event: { type: "RETURN_TO_CALL" } };
+      if (ctx.safetyReason !== "urgent-risk") {
+        // "No thanks": nothing is sent, and the conversation carries on.
+        if (NOTHING_ELSE.test(n) || (negative && !affirm && isShort(n) && !asked)) return { kind: "event", event: { type: "RETURN_TO_CALL" } };
+        // A plain "yes" or "I'm not sure" doesn't say who: asked which, gently.
+        if ((affirm && isShort(n)) || hedge) return { kind: "reply", key: "safetyWhichOne" };
+      }
       return { kind: "unclear" };
     }
 
     case "complete":
+      if (hedge && !NOTHING_ELSE.test(n)) return { kind: "unclear" }; // "I'm not sure" neither ends the call nor starts again
       if (NOTHING_ELSE.test(n) || (negative && !affirm && isShort(n))) return { kind: "event", event: { type: "END_CALL" } };
       if (ANOTHER_MEDICINE.test(n) || (affirm && !negative && isShort(n))) {
         return { kind: "event", event: { type: "NEW_MEDICINE" } };
@@ -591,14 +710,13 @@ export function spokenActions(ctx: CommandContext): SpokenAction[] {
       ];
     }
     case "camera-permission":
-      return ctx.showMethod === "choose"
-        ? [a("camera", "use the camera to show the label", { type: "CHOOSE_CAMERA" })]
-        : [
-            a("no-camera", "not use the camera: for example choose a photo from their phone instead, pick from their medicines, or type the name", {
-              type: "CAMERA_CONSENT",
-              granted: false,
-            }),
-          ];
+      return [
+        a("no-camera", "not use the camera or a photo, and say the medicine name instead", { type: "CAMERA_CONSENT", granted: false }),
+      ];
+    case "camera-guidance":
+      if (ctx.cameraMode === "ready") return [a("camera", "open the camera to take a photo of the label", { type: "OPEN_CAMERA" })];
+      if (ctx.cameraMode === "preview") return [a("close-camera", "close the camera without taking a photo", { type: "CLOSE_CAMERA" })];
+      return [];
     case "confirm-match":
       return ctx.candidateId
         ? [

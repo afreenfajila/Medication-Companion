@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown } from "lucide-react";
+import { CircleHelp } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CallFooter } from "@/components/ui/call-footer";
 import { CompanionOrb } from "@/components/ui/companion-orb";
@@ -12,19 +12,17 @@ import { DOSE_SCENARIOS, buildCallbackPayload, callbackRequestId } from "@/lib/d
 import { getDoseCallbackService, type CallbackResult } from "@/lib/services/dose-callback";
 import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { requestLabelAnalysis } from "@/lib/label/analyze-client";
+import type { LabelInput } from "@/types/content";
 import { clearPendingImage, peekPendingImage } from "@/lib/label/pending-image";
 import { dispatch, useSession } from "@/lib/session/session-store";
 import { guardRequestedState, pathForState } from "@/lib/session/state-machine";
 import { speakableText } from "@/lib/voice/speakable";
 import { getVoiceCoordinator, useVoiceCapabilities } from "@/lib/voice/use-voice";
-import { AnalyzingScreen, CameraGuidanceScreen, CameraPermissionScreen, ShowMedicineChoice } from "./camera-screens";
+import { CameraGuidanceScreen, LabelActions } from "./camera-screens";
 import { CallFeed, useFollowLatest } from "./call-feed";
-import { ListeningActions, TypedInput, listeningAction } from "./listening-screen";
-import { SafetyScreen } from "./safety-screen";
-import { HelpSheet } from "./help-sheet";
 import { DisclosureFooter, ScreenHeader } from "./screen-chrome";
 import { StartScreen } from "./start-screen";
-import { useCallFeed } from "./use-call-feed";
+import { labelActionsFor, useCallFeed } from "./use-call-feed";
 import { useVoiceConversation } from "./use-conversation";
 import { VoiceBar } from "./voice-bar";
 
@@ -42,20 +40,19 @@ const UNDERSTAND_HISTORY_TURNS = 6;
 
 /**
  * The whole call — from "Call with companion" to "End call" — happens on this
- * one screen, laid out like a calm phone call:
+ * one screen, laid out like an AI voice call (owner decision, 14 October 2026):
  *
- *   compact header → orb + one status line → the conversation (the screen's one
- *   scroller) → the current step's controls, only for the few steps that need a
- *   tap (camera, photo, the help options) → the text box, only when typing is
- *   needed or asked for → the three call controls: Get help · Mute · End call.
+ *   header with Help on the right → orb + one status line → the conversation
+ *   (the screen's one scroller) → the open camera, only while it is open → one
+ *   control row: the message pill (type + send arrow) · mic · End call.
  *
+ * Every action is said or typed — the same words either way. The only other
+ * buttons are Take photo / Upload inside the companion's message (a photo needs a
+ * tap), after a consent yes, and the camera's own capture / flip / close.
  * Medicine confirmation, the label check, the comparison, "check before sending",
  * submission progress and outcomes are all messages in the conversation, answered
- * in words (said or typed) — never a separate screen, sheet or set of reply buttons.
- * Repeat, Try again and Tap to talk appear only for recovery; Repeat, typing, the
- * interrupt setting and About are also in the Get help sheet. Only the pre-call
- * landing (`StartScreen`) is a different layout, since a call cannot be "in
- * progress" before it starts.
+ * in words. Only the pre-call landing (`StartScreen`) is a different layout,
+ * since a call cannot be "in progress" before it starts.
  *
  * The URL never decides the state: `?state=` is compared to the authoritative
  * session state and rewritten to match, so `/companion?state=explain` without
@@ -366,20 +363,15 @@ export function CompanionExperience() {
   const voiceHeld = awaitingVoice && holdExpired !== holdKey;
   const inCall = session.callActive && session.state !== "start";
   const speechInput = caps.recognition || conversation.hasInput;
-  // Typing is shown only when it is needed or asked for: muted, no speech input, listening
-  // stopped by a problem, or "Type instead". Otherwise the call is voice, like a phone call.
-  const [typingOpen, setTypingOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  // Both close when a call starts or ends (adjusted while rendering, not in an effect).
-  const callKey = `${session.callCount}:${session.callActive}`;
-  const [seenCallKey, setSeenCallKey] = useState(callKey);
-  if (seenCallKey !== callKey) {
-    setSeenCallKey(callKey);
-    setTypingOpen(false);
-    setHelpOpen(false);
-  }
-  const typingNeeded = !speechInput || conversation.muted || conversation.paused;
-  const showComposer = inCall && (typingNeeded || typingOpen);
+  // The mic button says what it does now: unmute, turn a paused mic back on, talk/send in
+  // push-to-talk, or mute.
+  const mic = conversation.muted
+    ? { label: t("unmute"), act: conversation.toggleMute }
+    : conversation.paused
+      ? { label: t("micResume"), act: conversation.resume }
+      : conversation.pushToTalk
+        ? { label: t(conversation.status.kind === "listening" ? "voiceTapToSend" : "voiceTapToTalk"), act: conversation.talk }
+        : { label: t("mute"), act: conversation.toggleMute };
 
   // The one running transcript for the whole call — see use-call-feed.ts.
   const feed = useCallFeed(session, t, explanation, listeningLine, voiceHeld, conversation.notices, conversation.userLines, spoken);
@@ -389,100 +381,45 @@ export function CompanionExperience() {
   const orbState = conversation.speaking ? "speaking" : conversation.listening ? "listening" : "idle";
   const follow = useFollowLatest(scrollerRef);
 
-  let pinnedActions: React.ReactNode = null;
-  switch (session.state) {
-    case "listening":
-      pinnedActions = (
-        <ListeningActions
-          t={t}
-          session={session}
-          hidden={companionThinking}
-          onSelectRoute={(route) => dispatch({ type: "SELECT_ROUTE", route })}
-        />
-      );
-      break;
-    case "camera-permission":
-      // First camera or photo (or typing); the consent question only after "Use camera".
-      pinnedActions =
-        session.showMethod === "choose" ? (
-          <ShowMedicineChoice
-            t={t}
-            onCamera={() => dispatch({ type: "CHOOSE_CAMERA" })}
-            onSubmit={(input) => dispatch({ type: "SUBMIT_LABEL", input })}
-          />
-        ) : (
-          <CameraPermissionScreen
-            t={t}
-            onGrant={() => dispatch({ type: "CAMERA_CONSENT", granted: true })}
-            onDecline={() => dispatch({ type: "CAMERA_CONSENT", granted: false })}
-          />
-        );
-      break;
-    case "camera-guidance":
-      pinnedActions = (
-        <CameraGuidanceScreen
-          t={t}
-          mode={session.cameraMode ?? "fallback"}
-          issue={session.cameraIssue}
-          onSubmit={(input) => dispatch({ type: "SUBMIT_LABEL", input })}
-          onChooseMedicine={(medicineId) => dispatch({ type: "CHOOSE_MEDICINE", medicineId })}
-          onCameraFailed={(issue) => dispatch({ type: "CAMERA_FAILED", issue })}
-        />
-      );
-      break;
-    case "analyzing":
-      pinnedActions = <AnalyzingScreen t={t} />;
-      break;
-    case "confirm-match":
-      // Owner decision (12 October 2026): no confirmation panel. The companion says what it
-      // found from the record, in the conversation, and a clear "yes" (said or typed) confirms;
-      // "no" / "not sure" don't. The gate itself is unchanged (CONFIRM_MATCH, reducer-checked).
-      pinnedActions = null;
-      break;
-    case "explain":
-      // The explanation, the label check, the record-conflict question and the whole dose-change
-      // check (record, box, difference, summary to check, outcome) are messages in the
-      // conversation, answered in words. The gates are unchanged: every answer goes through the
-      // same interpreter and reducer as speech (commands.ts, state-machine.ts).
-      pinnedActions = null;
-      break;
-    case "safety":
-      pinnedActions = (
-        <SafetyScreen
-          t={t}
-          session={session}
-          onTryAnother={() => dispatch({ type: "TRY_ANOTHER_LABEL" })}
-          onHelp={(kind) => dispatch({ type: "HELP_START", kind })}
-          onReturn={() => dispatch({ type: "RETURN_TO_CALL" })}
-        />
-      );
-      break;
-    case "complete": // the wrap-up is a line in the conversation ("another medicine" / "that's all")
-    case "start":
-    default:
-      pinnedActions = null;
-  }
-  // A help request in progress (owner decision, 12 October 2026): its question, "check before
-  // sending" and its status are messages in the conversation, answered in words — no card, no
-  // buttons. Only a clear yes confirms and only an explicit "send" sends (reducer-checked).
-  // Urgent guidance always stays on screen, with the request's status below it.
-  if (session.helpFlow && session.safetyReason !== "urgent-risk") pinnedActions = null;
-
-  // The listening step shows at most one contextual action; without one there is no panel.
-  const hasPinned =
-    pinnedActions !== null &&
-    (session.state !== "listening" || (listeningAction(session) !== null && !companionThinking));
+  // The only panel: the in-app camera, while it is open (opened from Take photo).
+  const cameraOpen = session.state === "camera-guidance" && session.cameraMode === "preview";
+  const hasPinned = cameraOpen;
+  const submitLabel = (input: LabelInput) => dispatch({ type: "SUBMIT_LABEL", input });
+  // Take photo / Upload inside the companion's message, only while a photo can be taken.
+  const labelWhich = labelActionsFor(session);
+  const labelActions = labelWhich ? (
+    <LabelActions t={t} which={labelWhich} onTakePhoto={() => dispatch({ type: "OPEN_CAMERA" })} onSubmit={submitLabel} />
+  ) : null;
 
   return (
     <PhoneShell>
       <div lang={language} className="flex min-h-0 flex-1 flex-col">
-        <ScreenHeader t={t} language={language} compact={inCall} />
+        <ScreenHeader
+          t={t}
+          language={language}
+          compact={inCall}
+          control={
+            inCall ? (
+              // Help, always there: the same as saying "help" (on the help step, it says it again).
+              <button
+                type="button"
+                onClick={() => dispatch(session.state === "safety" ? { type: "REPEAT" } : { type: "GET_HELP" })}
+                className="-my-1.5 flex min-h-12 shrink-0 items-center rounded-pill"
+              >
+                <span className="inline-flex h-9 items-center gap-1 rounded-pill border-2 border-navy-900 px-3 text-[15px] font-bold text-navy-900 hover:bg-teal-100 max-[379px]:px-2.5">
+                  <CircleHelp className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  {t("help")}
+                </span>
+              </button>
+            ) : undefined
+          }
+        />
         {inCall && (
           // The calm companion area: the orb and one short status line. Not part of the scroller.
-          <div className="flex shrink-0 flex-col items-center gap-0.5 px-4 pb-1">
+          <div className="flex shrink-0 flex-col items-center gap-0.5 px-4 pb-1 pt-6">
             <CompanionOrb size="xs" state={orbState} />
             {speechInput ? (
-              <VoiceBar view={conversation} t={t} onRepeat={() => dispatch({ type: "REPEAT" })} />
+              <VoiceBar view={conversation} t={t} />
             ) : (
               // Without speech input, typed "didn't catch that" guidance still needs a place.
               <p role="status" aria-live="polite" className="min-h-[1.5em] text-center text-[15px] leading-snug text-navy-700">
@@ -521,51 +458,27 @@ export function CompanionExperience() {
                   hideRecord={session.state === "safety"}
                   atBottom={follow.atBottom}
                   placedRef={follow.placed}
+                  labelActions={labelActions}
                   t={t}
                 />
               </div>
             )}
           </main>
         </ScreenBody>
-        {inCall && follow.scrolledUp && (
-          // Re-reading earlier turns: a small way back down, outside the messages so it never covers them.
-          <div className="flex shrink-0 justify-center border-t border-line bg-canvas">
-            <button
-              type="button"
-              onClick={() => {
-                follow.jump();
-                mainRef.current?.focus({ preventScroll: true });
-              }}
-              className="inline-flex min-h-11 items-center gap-1.5 px-3 text-[15px] font-bold text-teal-800 underline underline-offset-4 hover:text-navy-900"
-            >
-              <ArrowDown className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>{t("latestMessage")}</span>
-            </button>
-          </div>
-        )}
         {/* Controls never wait for the voice: only the transcript line does. */}
         {hasPinned && (
-          // The current step's own controls, only while it has some. Capped and scrollable:
-          // a tall step (safety options, an open sample picker) is never clipped and never
-          // pushes the call controls off the screen.
+          // The open camera. Capped and scrollable, so it never pushes the controls off screen.
           <div
             ref={pinnedRef}
             tabIndex={-1}
             data-pinned
-            className="no-scrollbar max-h-[60%] shrink-0 overflow-y-auto border-t border-line bg-canvas px-4 pb-2 pt-3 outline-none"
+            className="no-scrollbar max-h-[60%] shrink-0 overflow-y-auto bg-canvas px-4 pb-2 pt-3 outline-none"
           >
-            {pinnedActions}
-          </div>
-        )}
-        {showComposer && (
-          <div className="shrink-0 border-t border-line bg-canvas px-4 pb-1 pt-2">
-            <TypedInput
+            <CameraGuidanceScreen
               t={t}
-              label={t("typeLabel")}
-              placeholder={t("typePlaceholder")}
-              onSend={conversation.submitText}
-              autoFocus={typingOpen}
-              onClose={typingOpen && !typingNeeded ? () => setTypingOpen(false) : undefined}
+              onSubmit={submitLabel}
+              onClose={() => dispatch({ type: "CLOSE_CAMERA" })}
+              onCameraFailed={(issue) => dispatch({ type: "CAMERA_FAILED", issue })}
             />
           </div>
         )}
@@ -573,31 +486,17 @@ export function CompanionExperience() {
           <CallFooter
             labels={{
               group: t("appName"),
-              help: t("getHelp"),
-              mute: t("mute"),
-              unmute: t("unmute"),
+              message: t("typeLabel"),
+              placeholder: t("typePlaceholder"),
+              send: t("send"),
+              mic: mic.label,
               end: t("endCall"),
             }}
+            onSend={conversation.submitText}
             muted={conversation.muted}
-            muteDisabled={!speechInput}
-            onHelp={() => setHelpOpen(true)}
-            onToggleMute={conversation.toggleMute}
+            micDisabled={!speechInput}
+            onMic={mic.act}
             onEnd={() => dispatch({ type: "END_CALL" })}
-          />
-        )}
-        {session.callActive && (
-          <HelpSheet
-            t={t}
-            open={helpOpen}
-            onClose={() => setHelpOpen(false)}
-            canTalkToPerson={session.state !== "safety"}
-            onTalkToPerson={() => dispatch({ type: "GET_HELP" })}
-            onRepeat={() => dispatch({ type: "REPEAT" })}
-            canTypeInstead={!showComposer}
-            onTypeInstead={() => setTypingOpen(true)}
-            duplex={conversation.duplex}
-            autoInterrupt={conversation.autoInterrupt}
-            onToggleAutoInterrupt={conversation.toggleAutoInterrupt}
           />
         )}
         <DisclosureFooter t={t} inCall={session.callActive} />

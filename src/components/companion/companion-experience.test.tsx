@@ -1,7 +1,9 @@
+import { recordMedicines } from "@/lib/content/seed-record";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { sessionStore } from "@/lib/session/session-store";
+import { sessionStore, dispatch } from "@/lib/session/session-store";
 import { run, toExplain } from "@/test/helpers";
+import { t } from "@/lib/content/translations";
 import { CompanionExperience } from "./companion-experience";
 
 
@@ -75,20 +77,24 @@ const flush = () =>
   });
 
 const send = (text: string) => {
-  fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
-  fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+  fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: text } });
+  fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
 };
 
-/** Start a call and open the camera-guidance screen (no camera in jsdom → fallback). */
-function toGuidance(consent: "grant" | "decline" = "grant") {
+/**
+ * Start a call, ask to show the label (in words: there is no Show medicine button) and answer the
+ * consent question. "grant": Take photo / Upload are offered; "camera": then Take photo is tapped
+ * (no camera in jsdom → fallback); "decline": no photo, just the name.
+ */
+function toGuidance(consent: "grant" | "camera" | "decline" = "grant") {
   fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
   send("What is this for?");
-  fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-  fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-  fireEvent.click(
-    screen.getByRole("button", { name: consent === "grant" ? /yes, switch camera/i : /not now/i }),
-  );
+  send("yes"); // "Would you like to show me the medicine label?"
+  act(() => dispatch({ type: "CAMERA_CONSENT", granted: consent !== "decline" })); // "yes" / "no", in words
+  if (consent === "camera") fireEvent.click(screen.getByRole("button", { name: "Take photo" }));
 }
+/** The call's own controls, by accessible name. */
+const CALL_CONTROLS = ["Send message", "Mute microphone", "End call"];
 
 describe("landing (01-start-call)", () => {
   it("exposes exactly one prominent primary CTA: Call with companion", () => {
@@ -114,18 +120,17 @@ describe("landing (01-start-call)", () => {
 });
 
 describe("in-call flow", () => {
-  it("reveals call controls and a contextual Show medicine only after the call starts and a question is asked", () => {
+  it("reveals the call controls once the call starts; showing the medicine is asked in words, never a button", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
 
     const footer = screen.getByRole("navigation", { name: "Medication Companion" });
-    expect(within(footer).getAllByRole("button").map((b) => b.textContent)).toEqual(["Get help", "Mute", "End call"]);
-    expect(screen.queryByRole("button", { name: /show medicine/i })).toBeNull();
+    expect(within(footer).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(CALL_CONTROLS);
+    expect(screen.getByRole("button", { name: "Help" })).toBeInTheDocument(); // in the header
 
     send("What is this for?");
     expect(screen.getByText(/Let’s check this together/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /show medicine|show label|ask about my schedule/i })).toBeNull();
   });
 
   it("'I take it twice a day' asks which medicine — it never assumes", () => {
@@ -134,7 +139,7 @@ describe("in-call flow", () => {
     send("I take it twice a day");
     expect(screen.getByText(/Which medicine do you mean\?/)).toBeInTheDocument();
     expect(document.querySelector("main")!.textContent).not.toMatch(/Metformin/);
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /show medicine/i })).toBeNull(); // asked in words
   });
 
   it("when the person is unsure what to do, the companion explains what it can help with", () => {
@@ -142,40 +147,35 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("i dont know what to do");
     expect(screen.getByText(/I can check a medicine label with you, then explain what your pharmacy record says/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
-    // One contextual action, not a row of suggestions: the schedule is asked in words.
-    expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull();
+    // No suggestion buttons: both are asked in words.
+    expect(screen.queryByRole("button", { name: /show medicine|ask about my schedule/i })).toBeNull();
   });
 
-  it("a broad schedule question offers the one next step, Show medicine; the schedule itself is asked in words", () => {
+  it("a broad schedule question: both next steps are understood in words, with no buttons", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("When do I take my medicine?");
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /show medicine|ask about my schedule/i })).toBeNull();
+    expect(sessionStore.getSnapshot().contextualActions).toContain("show-medicine");
     expect(sessionStore.getSnapshot().contextualActions).toContain("ask-schedule"); // still understood when said
   });
 
-  it("runs the full happy path: camera or photo → consent → label → possible match → confirm → explanation → Chinese", () => {
+  it("runs the full happy path: consent → label → possible match → confirm → explanation → Chinese", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    send("yes"); // show the label
 
-    // Camera or photo first, as equal choices; nothing medical is reachable yet.
-    expect(screen.getByText("How would you like to show me your medicine?")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Use camera" })).toHaveAttribute("data-variant", "primary");
-    expect(screen.getByRole("button", { name: "Choose a photo" })).toHaveAttribute("data-variant", "primary");
+    // One consent question, in the conversation (camera or photo, nothing kept); no buttons yet.
+    expect(screen.getByText(t("en", "cameraPermissionHeading")).closest("[data-transcript]")).not.toBeNull();
+    expect(screen.getByText(/I’ll only look at the medicine name, and the photo won’t be kept/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /take photo|upload/i })).toBeNull();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
-    // Permission is explained before the camera is ever touched.
-    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-    expect(screen.getByText("I need to see the writing clearly.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /yes, switch camera/i }));
+    send("yes");
+    expect(sessionStore.getSnapshot().state).toBe("camera-guidance");
+    expect(screen.getByRole("button", { name: "Take photo" })).toBeInTheDocument(); // inside the companion's message
 
-    fireEvent.click(screen.getByRole("button", { name: /type the label details/i }));
-    fireEvent.change(screen.getByLabelText(/medicine name/i), { target: { value: "Metformin" } });
-    fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500 mg" } });
-    fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
+    send("It's Metformin, 500 mg"); // said or typed, no form
     expect(screen.getByText("Thank you, let me have a look.")).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(1000);
@@ -200,7 +200,7 @@ describe("in-call flow", () => {
     send("中文");
     expect(screen.getByText("随餐每日服用一片，每日两次。")).toBeInTheDocument();
     // Language change did not reset the confirmation: still on the record, now in Chinese.
-    expect(screen.getByLabelText("说出来，或在这里输入")).toBeInTheDocument();
+    expect(screen.getByLabelText("输入消息")).toBeInTheDocument();
   });
 
   it("beside the instruction: says the dated source and asks to compare with the label, in words; 'it looks different' reaches safety", () => {
@@ -215,10 +215,9 @@ describe("in-call flow", () => {
 
     send("it looks different");
     expect(screen.getByText(/When the label and the record don’t agree, a pharmacist is the best person to look/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
-    // "Incorrect output" leads to a person — not another photo.
-    expect(screen.queryByRole("button", { name: "Try another photo" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Back to the conversation" })).toBeInTheDocument();
+    // "Incorrect output" leads to a person — not another photo — asked in the conversation, with a way back.
+    expect(screen.getByText("Would you like a pharmacist to call you, or shall I let your family know? Or we can just carry on talking.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /pharmacist|try another photo|back to the conversation/i })).toBeNull();
     // Escalated: the instruction already shown is tucked away, not left on screen.
     expect(screen.queryByText("Take 1 tablet twice daily with meals.")).toBeNull();
     expect(screen.getAllByText("Your record is tucked away while we get you some help.").length).toBeGreaterThan(0);
@@ -229,18 +228,16 @@ describe("in-call flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("I feel so lonely");
     expect(screen.getByText(/that sounds hard/)).toBeInTheDocument();
-    // One contextual action, never filled (it opens a consent step); "carry on" is said, not tapped.
-    const choices = document.querySelector<HTMLElement>("[data-pinned]")!;
-    expect(primaryButtons(choices)).toHaveLength(0);
-    expect(within(choices).getAllByRole("button")).toHaveLength(1);
-    expect(choices.querySelector(".lucide-users-round")).not.toBeNull();
+    // Asked in words: no "Let my family know" button, no panel.
+    expect(document.querySelector("[data-pinned]")).toBeNull();
+    expect(screen.queryByRole("button", { name: /let my family know/i })).toBeNull();
     const fetchFn = vi.fn(async (url: string) =>
       String(url) === "/api/help/request"
         ? { ok: true, json: async () => ({ ok: true, data: { kind: "family", contactName: "Daniel" }, requestId: "r" }) }
         : { ok: true, json: async () => ({ ok: true, data: { enabled: false }, requestId: "r" }) },
     );
     vi.stubGlobal("fetch", fetchFn);
-    fireEvent.click(screen.getByRole("button", { name: "Let my family know" }));
+    send("please let my family know");
 
     // The consent question is a line in the conversation, with no buttons to nudge towards "yes".
     expect(screen.getByText(/Shall I let your family know/)).toBeInTheDocument();
@@ -273,40 +270,35 @@ describe("in-call flow", () => {
   it("typed-label fallback: a mismatching strength blocks instructions and offers demo-labelled human help", async () => {
     render(<CompanionExperience />);
     toGuidance("decline");
-    fireEvent.click(screen.getByRole("button", { name: /type the label details/i }));
-    fireEvent.change(screen.getByLabelText(/medicine name/i), { target: { value: "Metformin" } });
-    fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "850 mg" } });
-    fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
+    send("It's Metformin, 850 mg");
     await flush();
 
     // A label that doesn't match gets the gentler, no-fault wording — not an alarm —
     // on a calm surface: only urgent risk is ever red.
     expect(screen.getByText("Let’s check this one together.")).toBeInTheDocument();
-    expect(screen.getByText("Let’s check this one together.").closest("section")).not.toHaveClass("bg-danger-100");
+    expect(screen.getByText("Let’s check this one together.").closest("[data-speaker]")).not.toHaveClass("bg-danger-100");
     expect(screen.queryByText("I’m not sure enough to explain this safely.")).toBeNull();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Ask a pharmacist to call me" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Contact my family" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Try another photo" })).toBeInTheDocument();
-    // Every option in view, nothing tucked away: no clinic, no trusted helper, no "More ways" link.
-    expect(screen.queryByRole("button", { name: /trusted helper|clinic/i })).toBeNull();
-    expect(screen.queryByText("More ways to get help")).toBeNull();
-    const pinned = document.querySelector("[data-pinned]")!;
-    expect(pinned.querySelector("details")).toBeNull();
-    expect(pinned.querySelectorAll('[data-variant="primary"], [data-variant="secondary"]')).toHaveLength(3);
+    // Every way on, asked in the conversation: another photo, a pharmacist, or family. No clinic, no
+    // trusted helper, no panel, no buttons.
+    expect(screen.getByText("Would you like to try another photo, have a pharmacist call you, or let your family know? Or we can just carry on talking.")).toBeInTheDocument();
+    expect(screen.getByText("I won’t show any medicine instructions until we’re sure.")).toBeInTheDocument();
+    expect(screen.queryByText(/trusted helper|clinic/i)).toBeNull();
+    expect(document.querySelector("[data-pinned]")).toBeNull();
+    expect(screen.queryByRole("button", { name: /pharmacist|family|another photo/i })).toBeNull();
 
     // A callback confirms first; when the service is down it says so plainly and never claims "sent".
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: false, status: 503, json: async () => ({ ok: false, error: { code: "service_unavailable", message: "x", safeNextAction: "retry" }, requestId: "r" }) })),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Ask a pharmacist to call me" }));
+    send("a pharmacist please");
     expect(screen.getByText(/Shall I send the request\?/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /yes, send the request/i })).toBeNull(); // answered in words
     send("yes, please send it");
     await flush();
     // "Check before sending": what goes, inside the companion's message; then an explicit "send" sends it.
-    expect(screen.getByText(/^Here is the request I’d send to BrightCare Pharmacy\./)).toBeInTheDocument();
+    expect(screen.getByText(/^Here’s the request I’d send to BrightCare Pharmacy\./)).toBeInTheDocument();
     expect(screen.getByText("Please call me back")).toBeInTheDocument();
     expect(document.querySelector("[data-transcript] button")).toBeNull();
     expect(screen.queryByText(/I couldn’t send that just now/)).toBeNull(); // the "yes" sent nothing
@@ -318,27 +310,25 @@ describe("in-call flow", () => {
     expect(screen.getByText(/You can call BrightCare Pharmacy on 0000 0123/)).toBeInTheDocument();
   });
 
-  it("choose from my medicines: lists name and strength only, then still asks to confirm", () => {
+  it("a no to the camera: the words are in the chat, no buttons, and saying the name still asks to confirm", async () => {
     render(<CompanionExperience />);
     toGuidance("decline");
-    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
-    const list = screen.getByRole("region", { name: "Which medicine are you holding?" });
-    expect(list.textContent).not.toMatch(/Take 1 tablet|twice daily|blood sugar/);
-    fireEvent.click(within(list).getByRole("button", { name: "Metformin 500 mg" }));
+    expect(screen.getByText("You can still continue.").closest("[data-transcript]")).not.toBeNull();
+    expect(screen.getByText("For example: “It’s Metformin, 500 milligrams.”")).toBeInTheDocument();
+    expect(document.querySelector("[data-pinned]")).toBeNull();
+    expect(screen.queryByRole("button", { name: /take photo|upload/i })).toBeNull();
+    send("it's metformin 500 milligrams");
+    await flush();
     expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
 
-  it("typed-label fallback: validates required fields, then a correct label reaches a possible match", async () => {
+  it("a name with no strength is asked for the strength; then it reaches a possible match", async () => {
     render(<CompanionExperience />);
     toGuidance("decline");
-    fireEvent.click(screen.getByRole("button", { name: /type the label details/i }));
-    fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
-    expect(screen.getByRole("alert")).toHaveTextContent(/medicine name and strength/i);
-
-    fireEvent.change(screen.getByLabelText(/medicine name/i), { target: { value: "metformin" } });
-    fireEvent.change(screen.getByLabelText(/strength/i), { target: { value: "500mg" } });
-    fireEvent.click(screen.getByRole("button", { name: /check these details/i }));
+    send("it's metformin");
+    expect(screen.getByText(/What strength does the label say/)).toBeInTheDocument();
+    send("500mg");
     await flush();
     expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
@@ -346,22 +336,25 @@ describe("in-call flow", () => {
 
   it("camera unavailable (jsdom) → explained fallback, and the demo label still completes the flow", async () => {
     render(<CompanionExperience />);
-    toGuidance("grant");
+    toGuidance("camera");
     expect(screen.getByText("I couldn’t find a camera.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /take photo of label/i })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
-    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
+    expect(screen.queryByRole("button", { name: /take photo/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Upload" })).toBeInTheDocument(); // still offered, in the message
+    act(() => dispatch({ type: "CHOOSE_MEDICINE", medicineId: recordMedicines[0].id }));
     await flush();
     expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
   });
 
-  it("choose a photo: a plain file input (no capture), shrunk first, then POSTed and still only a possible match", async () => {
+  it("Upload: a plain file input (no capture), shrunk first, then POSTed and still only a possible match", async () => {
     const fetchFn = stubFetch({ body: analysisEnvelope(candidate) });
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
+    send("yes");
     expect(screen.getByText(/I’ll only look at the medicine name, and the photo won’t be kept/)).toBeInTheDocument();
+    expect(document.querySelector("[data-photo-input]")).toBeNull(); // no button until the yes
+    send("yes, a photo is fine");
+    expect(screen.getAllByRole("button", { name: "Upload" })).toHaveLength(1);
 
     const input = photoInput();
     expect(input).toHaveAttribute("accept", "image/*");
@@ -383,7 +376,7 @@ describe("in-call flow", () => {
   it("a photo the browser can't open (e.g. HEIC) asks for another or the camera — nothing is sent", async () => {
     const fetchFn = stubFetch({ body: analysisEnvelope(candidate) });
     render(<CompanionExperience />);
-    toGuidance("decline");
+    toGuidance("grant");
     pickPhoto("image/heic");
     await flush();
     expect(screen.getByRole("alert")).toHaveTextContent("I couldn’t open that photo. Would you like to try another one");
@@ -400,7 +393,7 @@ describe("in-call flow", () => {
       }),
     });
     render(<CompanionExperience />);
-    toGuidance("decline");
+    toGuidance("grant");
     pickPhoto();
     await flush();
     expect(screen.getByText("Let’s check this one together.")).toBeInTheDocument();
@@ -427,7 +420,7 @@ describe("in-call flow", () => {
     async (_n, analyze) => {
       stubFetch(analyze as Parameters<typeof stubFetch>[0]);
       render(<CompanionExperience />);
-      toGuidance("decline");
+      toGuidance("grant");
       pickPhoto();
       await flush();
       // A service failure keeps its original wording (only label outcomes are softened).
@@ -435,9 +428,8 @@ describe("in-call flow", () => {
       expect(screen.getByText(/I couldn’t read that photo/)).toBeInTheDocument();
       expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
 
-      fireEvent.click(screen.getByRole("button", { name: "Try another photo" }));
-      fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
-    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
+      send("try another photo");
+    act(() => dispatch({ type: "CHOOSE_MEDICINE", medicineId: recordMedicines[0].id }));
       await flush();
       expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument();
     },
@@ -452,12 +444,14 @@ describe("in-call flow", () => {
     render(<CompanionExperience />);
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     send("What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-    expect(screen.getByText("I need to see the writing clearly.")).toBeInTheDocument();
+    send("yes");
+    expect(screen.getByText(t("en", "cameraPermissionHeading"))).toBeInTheDocument();
     expect(getUserMedia).not.toHaveBeenCalled(); // explained first, nothing activated
 
-    fireEvent.click(screen.getByRole("button", { name: /yes, switch camera/i }));
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: true }));
+    await flush();
+    expect(getUserMedia).not.toHaveBeenCalled(); // a yes only offers Take photo / Upload
+    fireEvent.click(screen.getByRole("button", { name: "Take photo" }));
     await flush();
     expect(getUserMedia).toHaveBeenCalledTimes(1);
     expect(getUserMedia).toHaveBeenCalledWith({
@@ -468,8 +462,7 @@ describe("in-call flow", () => {
     expect(stop).not.toHaveBeenCalled();
 
     // Leaving the screen (here: using the demo label) stops the camera.
-    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
-    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
+    act(() => dispatch({ type: "CHOOSE_MEDICINE", medicineId: recordMedicines[0].id }));
     expect(stop).toHaveBeenCalled();
   });
 
@@ -479,11 +472,11 @@ describe("in-call flow", () => {
     });
     vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia } });
     render(<CompanionExperience />);
-    toGuidance("grant");
+    toGuidance("camera");
     await flush();
     expect(screen.getByText("The camera is off.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Choose a photo" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Choose from my medicines" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Choose from my medicines" })).toBeNull();
   });
 
   it("End call returns to the quiet landing state", () => {
@@ -553,14 +546,13 @@ describe("understanding pass — Claude answers what the person meant", () => {
     await settle(); // capability check
     send("I do have met for pain with me");
     expect(screen.getByText(/let me think about that/i)).toBeInTheDocument();
-    // No choices while it is still thinking — they arrive with the reply.
-    expect(screen.queryByRole("button", { name: /show medicine/i })).toBeNull();
     await settle();
 
     expect(screen.getByText(nameCheck)).toBeInTheDocument();
     expect(screen.queryByText(/let me think about that/i)).toBeNull();
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull();
+    // The doors it chose are understood in words; none is a button.
+    expect(sessionStore.getSnapshot().contextualActions).toEqual(["show-medicine"]);
+    expect(screen.queryByRole("button", { name: /show medicine|ask about my schedule/i })).toBeNull();
 
     // It was sent the person's words and the router's reading — never record instructions.
     const post = fetchFn.mock.calls.find(([u, i]) => u === "/api/companion/understand" && i?.method === "POST");

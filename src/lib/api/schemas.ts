@@ -126,7 +126,8 @@ export const understandCapabilityResponseSchema = z.discriminatedUnion("ok", [
  * medicine, consents, approves or sends.
  */
 export const INTENT_ACTION_IDS = [
-  "another", "back", "callback", "camera", "cannot-confirm", "carry-on", "clinic", "correct", "decline",
+  "another", "back", "callback", "camera", "close-camera",
+  "cannot-confirm", "carry-on", "clinic", "correct", "decline",
   "dismiss", "dont-send", "dose", "dose-wrong", "end", "end-call", "family", "get-help", "label-differs", "next", "no-camera",
   "not-it", "pharmacist", "pharmacist-callback", "prepare", "repeat", "retry", "review", "show-number",
   "trusted-helper", "try-again", "understood", "unsure",
@@ -153,6 +154,22 @@ export const intentDataSchema = z.object({
   reply: z.string().max(400).optional(),
 });
 export const intentResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(intentDataSchema), apiFailureSchema]);
+
+/** The label wording she read, from how she said it (POST /api/companion/label-wording). */
+export const labelWordingRequestSchema = z.object({
+  utterance: z.string().trim().min(1).max(300),
+  language: z.enum(["en", "zh-Hans"]),
+});
+/**
+ * `outcome: "wording"`: her own words, checked to be a verbatim subset of what she said.
+ * `"no-wording"`: she didn't read any (a question, "I can't read it"). `"none"`: no answer
+ * (no AI, refused input, any error) — the app's own clean-up is used.
+ */
+export const labelWordingDataSchema = z.object({
+  outcome: z.enum(["wording", "no-wording", "none"]),
+  wording: z.string().max(200).optional(),
+});
+export const labelWordingResponseSchema = z.discriminatedUnion("ok", [apiSuccessSchema(labelWordingDataSchema), apiFailureSchema]);
 
 /**
  * Realtime voice credentials (site-contract §4). Each route hands the browser a

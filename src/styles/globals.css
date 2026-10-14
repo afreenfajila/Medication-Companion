@@ -54,6 +54,30 @@ body {
   border-radius: 8px;
 }
 
+/* The message pill: its one focus ring is on the pill itself, so the text box inside never
+   draws a second one (or a border, shadow or background) in any state. */
+.pill-input,
+.pill-input:hover,
+.pill-input:focus,
+.pill-input:focus-visible {
+  appearance: none;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* Containers the app moves focus to for screen readers (tabindex="-1") never draw a ring:
+   there is nothing to operate there, and the ring framed the whole screen. */
+[tabindex="-1"]:focus-visible {
+  outline: none;
+}
+
+/* Round controls stay round when focused (the rule above would square them off). */
+.round-focus:focus-visible {
+  border-radius: 9999px;
+}
+
 /* ---------------------------------------------------------------------------
    Companion orb — three layered circles + soft halo.
    Only transform and opacity animate. Static under reduced motion.
@@ -66,6 +90,12 @@ body {
   display: grid;
   place-items: center;
   flex: none;
+}
+/* The large (start screen) orb is smaller on short screens, so the start screen never scrolls. */
+@media (max-height: 820px) {
+  .orb:not(.orb--xs):not(.orb--sm) {
+    --orb-size: 120px;
+  }
 }
 .orb--xs {
   --orb-size: 52px;

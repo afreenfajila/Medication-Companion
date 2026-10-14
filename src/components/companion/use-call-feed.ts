@@ -5,9 +5,21 @@ import { fillRecordFacts, type ExplanationView } from "@/lib/content/explanation
 import type { Session } from "@/lib/session/state-machine";
 import type { AssistantTurn } from "@/lib/voice/coordinator";
 import { helpLine } from "@/lib/content/help-lines";
-import { confirmLine } from "@/lib/voice/speakable";
+import { confirmLine, safetyLines, showMedicineLines } from "@/lib/voice/speakable";
 import { doseMessage, helpReviewSections, type FeedSection } from "./chat-sections";
 import type { T } from "./screen-chrome";
+
+/**
+ * Which buttons a photo needs right now, if any: Take photo and Upload after the consent yes;
+ * Upload alone when the camera is off or missing; none otherwise (a "no", the camera open, or
+ * the conversation has moved on).
+ */
+export function labelActionsFor(session: Pick<Session, "state" | "cameraMode" | "cameraIssue">): "both" | "upload" | null {
+  if (session.state !== "camera-guidance") return null;
+  if (session.cameraMode === "ready") return "both";
+  if (session.cameraMode === "fallback" && session.cameraIssue) return "upload";
+  return null;
+}
 
 export type FeedMessage = {
   id: string;
@@ -16,7 +28,11 @@ export type FeedMessage = {
   /** Record content (the explanation, or a conflict reply quoting it): hidden while escalated. */
   record?: boolean;
   /** Structured content under the lines (a comparison, a request to check): part of the same message. */
+  /** Urgent guidance: drawn so it can't be missed. */
+  tone?: "urgent";
   sections?: FeedSection[];
+  /** The message that offers Take photo / Upload: the buttons sit inside it while they apply. */
+  labelActions?: boolean;
 };
 
 type Seen = {
@@ -30,6 +46,8 @@ type Seen = {
   confirmSig: string;
   helpSig: string;
   completeSig: string;
+  safetySig: string;
+  showSig: string;
   userLineId: number;
   /** The current step's line, shown in its panel and not yet in the chat. */
   pendingStep: { sig: string; line: string } | null;
@@ -38,7 +56,7 @@ type Seen = {
 };
 
 function initialSeen(callCount: number): Seen {
-  return { callCount, assistantSig: "", userSig: "", inExplain: false, explainSig: "", conflictSig: "", noticeTurn: 0, confirmSig: "", helpSig: "", completeSig: "", userLineId: 0, pendingStep: null, flushedStepSig: "" };
+  return { callCount, assistantSig: "", userSig: "", inExplain: false, explainSig: "", conflictSig: "", noticeTurn: 0, confirmSig: "", helpSig: "", completeSig: "", safetySig: "", showSig: "", userLineId: 0, pendingStep: null, flushedStepSig: "" };
 }
 
 function explainStepLines(step: 0 | 1 | 2, e: ExplanationView["explanation"]): string[] {
@@ -110,7 +128,15 @@ export function useCallFeed(
     // soon as the conversation moves on — she answers, a remark is said, or the step
     // changes — it goes into the chat in its place, so the history is complete.
     const ownStep =
-      session.state === "listening" || session.state === "explain" || session.state === "confirm-match" || session.state === "complete" || session.state === "start";
+      session.state === "listening" ||
+      session.state === "explain" ||
+      session.state === "confirm-match" ||
+      session.state === "complete" ||
+      session.state === "safety" ||
+      session.state === "camera-permission" ||
+      session.state === "camera-guidance" ||
+      session.state === "analyzing" ||
+      session.state === "start";
     const helpSpeaks = session.helpFlow !== null && session.safetyReason !== "urgent-risk";
     const stepNow = session.callActive && !ownStep && !helpSpeaks && stepLine && !held ? { sig: `${session.state}|${stepLine}`, line: stepLine } : null;
     const flushStep = () => {
@@ -176,6 +202,39 @@ export function useCallFeed(
       }
     } else if (!session.helpFlow) {
       seen.current.helpSig = "";
+    }
+
+    // Getting a person: what happened and "pharmacist, or family?", as a message answered in words.
+    // Urgent guidance is marked so it stands out, and stays in the history.
+    if (session.state === "safety" && !session.helpFlow && stepLine && !held) {
+      const safetySig = `${session.language}:${session.safetyReason}:${stepLine}`;
+      if (safetySig !== seen.current.safetySig) {
+        seen.current.safetySig = safetySig;
+        idRef.current += 1;
+        additions.push({
+          id: `f${idRef.current}`,
+          speaker: "companion",
+          lines: safetyLines(session, t),
+          tone: session.safetyReason === "urgent-risk" ? "urgent" : undefined,
+        });
+      }
+    } else if (session.state !== "safety") {
+      seen.current.safetySig = "";
+    }
+
+    // Showing the medicine: "May I see the label…?", "Tap Take photo or Upload", the camera open or
+    // off: each a message in the conversation, once per sub-step and language.
+    const showStep = session.state === "camera-permission" || session.state === "camera-guidance" || session.state === "analyzing";
+    if (showStep && stepLine && !held) {
+      const showSig = `${session.state}:${session.language}:${session.cameraMode}:${session.cameraIssue}:${stepLine}`;
+      if (showSig !== seen.current.showSig) {
+        seen.current.showSig = showSig;
+        idRef.current += 1;
+        const offer = labelActionsFor(session) !== null;
+        additions.push({ id: `f${idRef.current}`, speaker: "companion", lines: showMedicineLines(session, t), ...(offer && { labelActions: true }) });
+      }
+    } else if (!showStep) {
+      seen.current.showSig = "";
     }
 
     // The wrap-up ("Thank you for checking…"): a line in the conversation, answered in words.

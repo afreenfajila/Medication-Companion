@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { TranscriptCard } from "@/components/ui/transcript-card";
 import type { FeedMessage } from "./use-call-feed";
 import type { T } from "./screen-chrome";
@@ -7,10 +7,9 @@ import type { T } from "./screen-chrome";
 const NEAR_BOTTOM_PX = 48;
 
 /**
- * Follows the conversation only while the person is already at the bottom of the
- * call's one scrolling area. If they have scrolled up to re-read, their place is
- * kept; `scrolledUp` lets the screen offer a small "Latest message" control
- * outside the messages, and `jump` takes them back down.
+ * Tracks whether the person is at the bottom of the call's one scrolling area. Live words,
+ * "thinking" and status changes follow only while they are; a NEW message is always brought
+ * into view (there is no "Latest message" button to get back down).
  */
 export function useFollowLatest(scrollerRef: RefObject<HTMLElement | null>) {
   const atBottom = useRef(true);
@@ -20,14 +19,12 @@ export function useFollowLatest(scrollerRef: RefObject<HTMLElement | null>) {
    * live words, status and playback don't move the view off what she is reading.
    */
   const placed = useRef(false);
-  const [scrolledUp, setScrolledUp] = useState(false);
 
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     const onScroll = () => {
       const near = el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX;
-      setScrolledUp(!near);
       if (!placed.current) atBottom.current = near; // our own placement isn't her leaving the bottom
     };
     // Her own scrolling (touch, wheel, keys) ends the placement: from then on, her position rules.
@@ -42,14 +39,7 @@ export function useFollowLatest(scrollerRef: RefObject<HTMLElement | null>) {
     };
   }, [scrollerRef]);
 
-  const jump = () => {
-    atBottom.current = true;
-    placed.current = false;
-    setScrolledUp(false);
-    const el = scrollerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  };
-  return { atBottom, placed, scrolledUp, jump };
+  return { atBottom, placed };
 }
 
 /**
@@ -63,7 +53,8 @@ export function useFollowLatest(scrollerRef: RefObject<HTMLElement | null>) {
  * (a comparison, a request to check) sits inside its message with short headings
  * and subtle dividers. Live (interim) words are marked as temporary and are
  * replaced, not repeated, when the final words arrive. Transcript content is
- * static text: no buttons, no focus targets.
+ * static text; the one exception is Take photo / Upload (`labelActions`), drawn
+ * inside the newest message that offers them, only while they apply.
  */
 export function CallFeed({
   entries,
@@ -72,6 +63,7 @@ export function CallFeed({
   hideRecord = false,
   atBottom,
   placedRef,
+  labelActions = null,
   t,
 }: {
   entries: FeedMessage[];
@@ -84,6 +76,8 @@ export function CallFeed({
   atBottom?: RefObject<boolean>;
   /** Set while the view sits where the call placed it (see `useFollowLatest`). */
   placedRef?: RefObject<boolean>;
+  /** Take photo / Upload, while a photo can be taken; null once it can't. */
+  labelActions?: ReactNode;
   t: T;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -94,8 +88,9 @@ export function CallFeed({
     const last = entries.at(-1);
     const isNew = last?.id !== lastId.current;
     lastId.current = last?.id;
-    // Never yank someone who is re-reading an earlier turn. (jsdom has no scrollIntoView.)
-    if (!(atBottom?.current ?? true)) return;
+    // A new message always comes into view; otherwise someone re-reading an earlier turn
+    // keeps their place. (jsdom has no scrollIntoView.)
+    if (!isNew && !(atBottom?.current ?? true)) return;
     // A new summary to check (or comparison) opens at its first line, not its last.
     const start = isNew && last?.sections?.length ? listRef.current?.querySelector<HTMLElement>(`[data-entry="${last.id}"]`) : null;
     if (start?.scrollIntoView) {
@@ -111,6 +106,7 @@ export function CallFeed({
 
   const labelFor = (speaker: FeedMessage["speaker"]) => (speaker === "user" ? t("youSay") : t("companionSays"));
   const last = entries.at(-1);
+  const offerId = labelActions ? entries.findLast((e) => e.labelActions)?.id : undefined;
 
   return (
     <div ref={listRef} className="flex flex-col gap-3" data-transcript>
@@ -118,6 +114,7 @@ export function CallFeed({
         <TranscriptCard
           key={entry.id}
           entryId={entry.id}
+          urgent={entry.tone === "urgent"}
           speaker={entry.speaker}
           label={entries[i - 1]?.speaker === entry.speaker ? undefined : labelFor(entry.speaker)}
         >
@@ -139,6 +136,7 @@ export function CallFeed({
                   ))}
                 </div>
               )}
+              {entry.id === offerId && labelActions}
             </>
           )}
         </TranscriptCard>

@@ -25,7 +25,7 @@ function stubServer(action: string | null) {
 }
 
 const type = (text: string) => {
-  const box = screen.getByLabelText(/type it here/i);
+  const box = screen.getByLabelText(/type a message/i);
   fireEvent.change(box, { target: { value: text } });
   fireEvent.submit(box.closest("form")!);
 };
@@ -34,14 +34,13 @@ beforeEach(() => sessionStore.reset());
 afterEach(() => vi.unstubAllGlobals());
 
 describe("conversation first", () => {
-  it("one compact text box (no speech input here), and a step's own controls show directly in that step", () => {
+  it("one compact text box (no speech input here); getting a person is asked in the chat, with no panel", () => {
     stubServer(null);
     sessionStore.setForTest(run([startCall, { type: "GET_HELP" }]));
     render(<CompanionExperience />);
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
-    const pinned = document.querySelector<HTMLElement>("[data-pinned]")!;
-    expect(pinned).not.toHaveAttribute("data-choices");
-    expect(pinned.querySelectorAll("button").length).toBeGreaterThan(0); // the help choices, no extra tap
+    expect(document.querySelector("[data-pinned]")).toBeNull();
+    expect(screen.getByText("Would you like a pharmacist to call you, or shall I let your family know? Or we can just carry on talking.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /show choices|hide choices/i })).toBeNull();
   });
 

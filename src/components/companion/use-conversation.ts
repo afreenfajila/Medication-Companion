@@ -4,7 +4,11 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { t as translate, type CopyKey } from "@/lib/content/translations";
 import { dispatch, sessionStore } from "@/lib/session/session-store";
 import type { Session, SessionEvent } from "@/lib/session/state-machine";
-import { intentResponseSchema } from "@/lib/api/schemas";
+import { intentResponseSchema, labelWordingResponseSchema } from "@/lib/api/schemas";
+import { looksLikeLabelWording } from "@/lib/dose-check/dose-check";
+import { careContacts } from "@/lib/content/seed-record";
+import { cleanLabelWording } from "@/lib/dose-check/label-wording";
+import { routeMessage } from "@/lib/session/intent";
 import { isSafeCompanionReply } from "@/lib/content/understand-guard";
 import { canRetryLabel } from "@/lib/session/state-machine";
 import { runCapture } from "@/lib/voice/actions";
@@ -56,16 +60,20 @@ export function unclearGuidanceKey(
   session: Pick<Session, "state" | "explainStep"> & {
     recordConflict?: boolean;
     helpFlow?: Session["helpFlow"];
-    showMethod?: Session["showMethod"];
+    cameraMode?: Session["cameraMode"];
+    cameraIssue?: Session["cameraIssue"];
     doseCheck?: Session["doseCheck"];
   },
   /** The words were heard clearly and were a question: don't claim they weren't caught. */
   question = false,
 ): CopyKey {
   if (session.helpFlow?.stage === "confirm") return "unclearHelpConfirm";
-  if (session.state === "camera-permission" && session.showMethod === "choose") return "unclearShowMedicine";
+  if (session.state === "camera-guidance") {
+    if (session.cameraMode === "ready") return "unclearCameraReady";
+    if (session.cameraMode === "fallback") return session.cameraIssue ? "unclearCameraUpload" : "unclearCameraFallback";
+  }
   if (session.state === "explain") {
-    if (session.doseCheck) return "doseUnclear";
+    if (session.doseCheck) return question ? "doseQuestionUnclear" : "doseUnclear";
     if (session.recordConflict) return "unclearRecordConflict";
     if (session.explainStep === 1) return question ? "unclearLabelCheckQuestion" : "unclearLabelCheck";
     if (session.explainStep === 2) return question ? "unclearExplainLastQuestion" : "unclearExplainLast";
@@ -92,7 +100,7 @@ export function plainQuestion(s: Session, t: (key: CopyKey) => string): string |
 /** Identifies the decision on screen, so an answer that arrives after it changed is ignored. */
 function screenSignature(s: Session): string {
   const d = s.doseCheck;
-  return [s.callCount, s.state, s.helpFlow?.stage, s.explainStep, s.recordConflict, s.showMethod, d?.step, d?.offer, d?.callback?.status, d?.labelRevision].join("|");
+  return [s.callCount, s.state, s.helpFlow?.stage, s.explainStep, s.recordConflict, s.cameraMode, d?.step, d?.offer, d?.callback?.status, d?.labelRevision].join("|");
 }
 
 type IntentAnswer =
@@ -100,6 +108,34 @@ type IntentAnswer =
   | { outcome: "unclear" }
   | { outcome: "reply"; reply: string }
   | { outcome: "none" };
+
+/** Lines that end "What else can I help with?": a plain "no" then finishes the call. */
+const ANYTHING_ELSE_KEYS: ReadonlySet<string> = new Set(["doseBackToCall", "doseBackToCallMatch", "doseBackToCallIncomplete"]);
+
+type LabelWordingAnswer = { outcome: "wording"; wording: string } | { outcome: "no-wording" } | { outcome: "none" };
+
+/**
+ * The label wording she read, picked out by meaning (POST /api/companion/label-wording): her own
+ * words only, checked on the server and again in the reducer. "none" on any problem: the app's
+ * own clean-up is used instead.
+ */
+async function requestLabelWording(utterance: string, language: Session["language"]): Promise<LabelWordingAnswer> {
+  try {
+    const res = await fetch("/api/companion/label-wording", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ utterance, language }),
+      signal: AbortSignal.timeout(6000),
+    });
+    const parsed = labelWordingResponseSchema.safeParse(await res.json());
+    if (!parsed.success || !parsed.data.ok) return { outcome: "none" };
+    const d = parsed.data.data;
+    if (d.outcome === "wording" && d.wording) return { outcome: "wording", wording: d.wording };
+    return d.outcome === "no-wording" ? { outcome: "no-wording" } : { outcome: "none" };
+  } catch {
+    return { outcome: "none" };
+  }
+}
 
 /** Where the person is in the call, in plain words, for the meaning-match. Never record content. */
 export function screenContext(s: Pick<Session, "state" | "explainStep" | "doseCheck" | "helpFlow">): string {
@@ -111,11 +147,11 @@ export function screenContext(s: Pick<Session, "state" | "explainStep" | "doseCh
       if (s.doseCheck?.callback?.status === "reviewing") return review;
       return s.doseCheck ? "comparing their medicine label with their pharmacy record" : `hearing their pharmacy record explained, part ${s.explainStep + 1} of 3`;
     case "camera-permission":
-      return "choosing how to show their medicine label";
+      return "being asked if the companion may see their medicine label with the camera or a photo";
     case "camera-guidance":
       return "showing their medicine label";
     case "confirm-match":
-      return "checking whether a possible medicine match is theirs";
+      return "checking a possible medicine match: once they confirm it, the companion explains what their record says";
     case "safety":
       return "on the help screen, choosing who could help";
     case "complete":
@@ -295,9 +331,9 @@ export function useVoiceConversation(opts: {
   }, [session.state]);
 
   // Latest values for the long-lived coordinator callbacks.
-  const latest = useRef({ session, speaking, t, cameraLive: opts.cameraLive, soundActive, aiIntent });
+  const latest = useRef({ session, speaking, t, cameraLive: opts.cameraLive, soundActive, aiIntent, muted, paused });
   useEffect(() => {
-    latest.current = { session, speaking, t, cameraLive: opts.cameraLive, soundActive, aiIntent };
+    latest.current = { session, speaking, t, cameraLive: opts.cameraLive, soundActive, aiIntent, muted, paused };
   });
 
   // What the companion last said, and when it stopped — the echo guard's inputs.
@@ -357,7 +393,9 @@ export function useVoiceConversation(opts: {
       // In the language they just used. Record facts ({instruction}, {verifiedDate}) only
       // ever come from the confirmed record; without one, a line that needs them isn't said.
       // The callback number is only ever the one in the summary on screen.
-      const line = translate(s.language, key).replace("{callbackNumber}", s.doseCheck?.callback?.draft.callbackContact ?? "");
+      const line = translate(s.language, key)
+        .replace("{callbackNumber}", s.doseCheck?.callback?.draft.callbackContact ?? "")
+        .replace("{pharmacyPhone}", careContacts.pharmacy.phone);
       const needsRecord = /\{(instruction|verifiedDate)\}/.test(line);
       const explanation = needsRecord ? resolveExplanation(s, s.language) : null;
       if (needsRecord && !explanation) return; // record facts only ever come from a confirmed record
@@ -386,8 +424,10 @@ export function useVoiceConversation(opts: {
       candidateId: s.candidate?.candidateId ?? null,
       explainStep: s.explainStep,
       recordConflict: s.recordConflict,
+      anythingElse: s.state === "listening" && ANYTHING_ELSE_KEYS.has(s.assistantKey),
       helpStage: s.helpFlow?.stage ?? null,
-      showMethod: s.showMethod,
+      cameraMode: s.cameraMode,
+      cameraIssue: s.cameraIssue,
       doseCheck: s.doseCheck,
       cameraLive: latest.current.cameraLive,
       pendingSpokenMedicineName: pendingSpokenName.current,
@@ -396,7 +436,19 @@ export function useVoiceConversation(opts: {
       canRetryLabel: canRetryLabel(s),
     };
     const intent = interpretUtterance(text, ctx);
-    if (intent.kind === "message") {
+    // Reading the box her own way ("It says… two? I think two."): on the label step, anything that
+    // isn't already plain wording is first read for its meaning — her own words only, never one
+    // added — before it is said back. Plain wording is said back at once; without the AI, the app's
+    // own clean-up does it. Anything the safety rules route elsewhere never comes here.
+    const labelStep = intent.kind === "message" && s.state === "explain" && s.doseCheck?.step === "label";
+    const routed = labelStep ? routeMessage(text, { matchConfirmed: true, explaining: true }) : null;
+    const plainWording = (() => {
+      const c = cleanLabelWording(text);
+      return c.wording === text.trim() && !c.unsure && looksLikeLabelWording(text);
+    })();
+    const labelByMeaning =
+      labelStep && latest.current.aiIntent && !routed?.safetyReason && routed?.intent !== "urgent-risk" && !plainWording;
+    if (intent.kind === "message" && !labelByMeaning) {
       pendingSpokenName.current = null;
       const turns = sessionStore.getSnapshot().turnCount;
       dispatch({ type: "USER_MESSAGE", text: text.slice(0, 300), via });
@@ -404,7 +456,7 @@ export function useVoiceConversation(opts: {
       if (sessionStore.getSnapshot().turnCount === turns) showHerWords();
       return;
     }
-    showHerWords(); // an answer or command ("yes", "next", "use the camera"): still her turn in the chat
+    if (!labelByMeaning) showHerWords(); // an answer or command ("yes", "next", "use the camera"): still her turn in the chat
 
     // "Didn't follow" — but never the same words twice in a row on the same screen. The second
     // time, a decision gets one plain question; anything else gets different words and a way out.
@@ -425,28 +477,16 @@ export function useVoiceConversation(opts: {
       dispatch(event);
     };
 
-    // A decision only she can make, or a short clear command: act at once on the fixed rules.
-    if (intent.kind === "event" && (isGateAnswer(intent.event) || isBrief(text))) {
-      act(intent.event);
-    } else if (intent.kind === "ui") {
-      runCapture();
-    } else if (intent.kind === "need-strength") {
-      pendingSpokenName.current = intent.medicineName;
-      sayNotice("askStrengthForSpokenLabel");
-    } else if (intent.kind === "reply") {
-      pendingSpokenName.current = null;
-      sayNotice(intent.key);
-    } else {
-      // A sentence (or words the fixed phrases don't know): work out what she meant before doing
-      // anything. The step's actions plus the call's own (repeat, end, help), in any order; never a
-      // gate. If the AI is off or can't tell, the fixed rules' reading (if any) is used, then guidance.
-      const rulesSaid = intent.kind === "event" ? intent.event : null;
-      const fallback = (at: Session) => (rulesSaid ? act(rulesSaid) : sayFallback(unclearGuidanceKey(at, question), at));
+    // A sentence (or words the fixed phrases don't know): work out what she meant before doing
+    // anything. The step's actions plus the call's own (repeat, end, help), in any order; never a
+    // gate. If the AI is off or can't tell, the fixed rules' reading (if any) is used, then guidance.
+    const byMeaning = (rulesSaid: SessionEvent | null, at: Session) => {
+      const fallback = (now: Session) => (rulesSaid ? act(rulesSaid) : sayFallback(unclearGuidanceKey(now, question), now));
       const own = latest.current.aiIntent ? spokenActions(ctx) : [];
       const actions = own.length > 0 || latest.current.aiIntent ? [...own, ...callActions(ctx).filter((g) => !own.some((a) => a.event?.type === g.event?.type))] : [];
-      if (!latest.current.aiIntent || actions.length === 0) return fallback(s);
-      const asked = screenSignature(s);
-      void requestIntent(text, s, actions).then((answer) => {
+      if (!latest.current.aiIntent || actions.length === 0) return fallback(at);
+      const asked = screenSignature(at);
+      void requestIntent(text, at, actions).then((answer) => {
         const now = latest.current.session;
         if (screenSignature(now) !== asked) return; // the screen moved on meanwhile: the answer is stale
         if (answer.outcome === "action") {
@@ -466,6 +506,59 @@ export function useVoiceConversation(opts: {
         }
         fallback(now);
       });
+    };
+
+    if (labelByMeaning) {
+      const asked = screenSignature(s);
+      void requestLabelWording(text.slice(0, 300), s.language).then((answer) => {
+        const now = latest.current.session;
+        if (screenSignature(now) !== asked) return; // she moved on meanwhile
+        // She didn't read any wording ("the print is tiny", a question): what did she mean?
+        if (answer.outcome === "no-wording") {
+          showHerWords();
+          return byMeaning(null, now);
+        }
+        // Her turn, with the wording picked out (re-checked by the reducer), or the app's own clean-up.
+        pendingSpokenName.current = null;
+        dispatch({ type: "USER_MESSAGE", text: text.slice(0, 300), via, labelWording: answer.outcome === "wording" ? answer.wording : undefined });
+      });
+      return;
+    }
+
+    // A decision only she can make, or a short clear command: act at once on the fixed rules.
+    if (intent.kind === "event" && (isGateAnswer(intent.event) || isBrief(text))) {
+      act(intent.event);
+    } else if (intent.kind === "ui") {
+      if (intent.action === "capture") return void runCapture();
+      if (intent.action === "listen-again") {
+        // Typed (the mic is off): the same as tapping the mic button.
+        if (latest.current.muted) {
+          coordinator.setMuted(false);
+          setMuted(false);
+          setJustUnmuted(true);
+          return;
+        }
+        if (latest.current.paused) {
+          silentTurns.current = 0;
+          setNotice(null);
+          setPaused(false);
+          return;
+        }
+        return byMeaning(null, s);
+      }
+      // The interrupt setting: only on a call where the mic stays open while the companion talks.
+      if (!coordinator.getSnapshot().capabilities.duplex) return sayNotice("voiceInterruptUnavailable");
+      const on = intent.action === "interrupt-on";
+      coordinator.setAutoInterrupt(on);
+      sayNotice(on ? "voiceInterruptOn" : "voiceInterruptOff");
+    } else if (intent.kind === "need-strength") {
+      pendingSpokenName.current = intent.medicineName;
+      sayNotice("askStrengthForSpokenLabel");
+    } else if (intent.kind === "reply") {
+      pendingSpokenName.current = null;
+      sayNotice(intent.key);
+    } else {
+      byMeaning(intent.kind === "event" ? intent.event : null, s);
     }
   }, [coordinator]);
 

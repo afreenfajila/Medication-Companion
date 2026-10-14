@@ -1,12 +1,13 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { recordMedicines } from "@/lib/content/seed-record";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t as translate } from "@/lib/content/translations";
-import { sessionStore } from "@/lib/session/session-store";
+import { sessionStore, dispatch } from "@/lib/session/session-store";
 import { BrowserVoiceProvider } from "@/lib/voice/browser-voice";
 import { setVoiceAdaptersForTest, setVoiceProvider } from "@/lib/voice/use-voice";
 import { FakeSpeechAdapter, flush } from "@/test/fake-audio";
 import { createFakeSpeech } from "@/test/fake-speech";
-import { chooseCamera, chooseShowMedicine, grantCamera, resolve, run, startCall as startCallEvent, submitDemo, toConfirmMatch } from "@/test/helpers";
+import { chooseShowMedicine, grantCamera, resolve, run, startCall as startCallEvent, submitDemo, toConfirmMatch } from "@/test/helpers";
 import { CompanionExperience, VOICE_HOLD_MAX_MS } from "./companion-experience";
 import { VoiceBar } from "./voice-bar";
 
@@ -54,13 +55,8 @@ function finishSpeaking(fake: ReturnType<typeof createFakeSpeech>) {
   tick();
 }
 
-/** The Mute/Unmute call control. */
-const muteButton = () => screen.getByRole("button", { name: /^(mute|unmute)$/i });
-/** Opens the Get help sheet and picks one of its choices. */
-const fromHelpSheet = (choice: RegExp) => {
-  fireEvent.click(screen.getByRole("button", { name: /^get help$/i }));
-  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: choice }));
-};
+/** The mic in the control row (Mute microphone / Unmute microphone). */
+const muteButton = () => screen.getByRole("button", { name: /^(mute|unmute) microphone$/i });
 
 /** A VoiceBar view with the browser engines, nothing happening. */
 const idleView: React.ComponentProps<typeof VoiceBar>["view"] = {
@@ -139,7 +135,6 @@ describe("the call starts voice automatically — no separate button", () => {
   it("the call status discloses where speech may go before anything is happening", () => {
     render(
       <VoiceBar
-        onRepeat={() => undefined}
         t={(key) => translate("en", key)}
         view={{ ...idleView, status: { kind: "idle", callId: 1 } }}
       />,
@@ -148,14 +143,13 @@ describe("the call starts voice automatically — no separate button", () => {
   });
 
   it("with the realtime engines, the status names where the voice goes (OpenAI to hear, ElevenLabs to speak)", () => {
-    render(<VoiceBar onRepeat={() => undefined} t={(key) => translate("en", key)} view={{ ...idleView, realtimeInput: true }} />);
+    render(<VoiceBar t={(key) => translate("en", key)} view={{ ...idleView, realtimeInput: true }} />);
     expect(screen.getByText(/sent to OpenAI to be turned into text.*ElevenLabs to be spoken/i)).toBeInTheDocument();
   });
 
   it("while the companion speaks in full duplex, the status says it is still listening — and the status line holds no controls", () => {
     render(
       <VoiceBar
-        onRepeat={() => undefined}
         t={(key) => translate("en", key)}
         view={{ ...idleView, status: { kind: "speaking", callId: 1, turnId: 1, adapter: "elevenlabs", audioStarted: true, micOpen: true }, speaking: true, duplex: true }}
       />,
@@ -167,12 +161,12 @@ describe("the call starts voice automatically — no separate button", () => {
 
   it("before any audio the status is 'preparing voice', never 'speaking'; after an interruption it says 'go ahead'", () => {
     const { rerender } = render(
-      <VoiceBar onRepeat={() => undefined} t={(key) => translate("en", key)} view={{ ...idleView, status: { kind: "speaking", callId: 1, turnId: 1, adapter: "elevenlabs", audioStarted: false, micOpen: false } }} />,
+      <VoiceBar t={(key) => translate("en", key)} view={{ ...idleView, status: { kind: "speaking", callId: 1, turnId: 1, adapter: "elevenlabs", audioStarted: false, micOpen: false } }} />,
     );
     expect(screen.getByText(/^preparing voice…$/i)).toBeInTheDocument();
-    rerender(<VoiceBar onRepeat={() => undefined} t={(key) => translate("en", key)} view={{ ...idleView, status: { kind: "listening", callId: 1, turnId: 2, afterInterrupt: true }, listening: true }} />);
+    rerender(<VoiceBar t={(key) => translate("en", key)} view={{ ...idleView, status: { kind: "listening", callId: 1, turnId: 2, afterInterrupt: true }, listening: true }} />);
     expect(screen.getByText(/^I heard you — go ahead\.$/i)).toBeInTheDocument();
-    rerender(<VoiceBar onRepeat={() => undefined} t={(key) => translate("en", key)} view={{ ...idleView, status: { kind: "processing", callId: 1, turnId: 2 } }} />);
+    rerender(<VoiceBar t={(key) => translate("en", key)} view={{ ...idleView, status: { kind: "processing", callId: 1, turnId: 2 } }} />);
     expect(screen.getByText(/^checking what I heard…$/i)).toBeInTheDocument();
   });
 
@@ -185,9 +179,9 @@ describe("the call starts voice automatically — no separate button", () => {
     // ...but Mute has nothing to mute, and the text box is open from the start.
     expect(muteButton()).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "hello" } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: "hello" } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
+    expect(sessionStore.getSnapshot().contextualActions).toContain("show-medicine"); // asked in words, no button
   });
 
   it("no speech at all when the browser has neither recognition nor synthesis — the call still works by typing", () => {
@@ -196,7 +190,7 @@ describe("the call starts voice automatically — no separate button", () => {
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     expect(fake.utterances).toHaveLength(0);
     expect(muteButton()).toBeDisabled();
-    expect(screen.getByLabelText(/type it here/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/type a message/i)).toBeInTheDocument();
     expect(screen.getByText("Hello, I’m an AI guide. What would you like to know today?")).toBeInTheDocument();
   });
 });
@@ -212,7 +206,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     act(() => fake.recognitions[0].say("What is this for?", true));
 
     expect(screen.getByText(/Let’s check this together/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    expect(sessionStore.getSnapshot().contextualActions).toContain("show-medicine"); // asked in words, no button
     expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull();
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
@@ -228,7 +222,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     act(() => vi.advanceTimersByTime(900));
 
     expect(screen.getByText(/Metformin 500 mg/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    expect(sessionStore.getSnapshot().contextualActions).toContain("show-medicine"); // asked in words, no button
     // Named, not explained — the dosing instruction is still gated behind confirmation.
     expect(screen.queryByText(/Take 1 tablet/)).toBeNull();
   });
@@ -289,9 +283,8 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     respond(fake, "What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
+    act(() => fake.recognitions.at(-1)!.say("yes", true)); // "Would you like to show me the medicine label?"
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: false }));
     finishSpeaking(fake);
 
     respond(fake, "It's Metformin");
@@ -311,7 +304,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     // Acknowledged first — not bounced with a bare refusal — then walked back.
     expect(screen.getByText(/I’d enjoy talking about that/)).toBeInTheDocument();
     expect(screen.getByText(/Would you like to show me a medicine label/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    expect(sessionStore.getSnapshot().contextualActions).toContain("show-medicine"); // asked in words, no button
     expect(screen.queryByRole("button", { name: /ask about my schedule/i })).toBeNull(); // asked in words, not a second button
   });
 
@@ -327,7 +320,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
       render(<CompanionExperience />);
       startCall(fake);
       act(() => fake.recognitions[0].say(phrase, true));
-      expect(screen.getByText("How would you like to show me your medicine?")).toBeInTheDocument();
+      expect(screen.getByText(translate("en", "cameraPermissionHeading"))).toBeInTheDocument();
     },
   );
 
@@ -346,7 +339,7 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
       act(() => vi.advanceTimersByTime(900));
       // Still in `listening`, and the conversation moved forward with a new reply.
       expect(screen.getByText(/show me (a |the )?medicine label/i)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+      expect(sessionStore.getSnapshot().contextualActions).toContain("show-medicine"); // asked in words, no button
     },
   );
 
@@ -355,12 +348,13 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     respond(fake, "What is this for?");
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    expect(sessionStore.getSnapshot().contextualActions).toContain("show-medicine"); // asked in words, no button
     respond(fake, "yes");
-    expect(screen.getByText("How would you like to show me your medicine?")).toBeInTheDocument();
-    // Camera or photo is a choice; saying "camera" leads to the consent question.
-    respond(fake, "the camera please");
-    expect(screen.getByText("I need to see the writing clearly.")).toBeInTheDocument();
+    expect(screen.getByText(translate("en", "cameraPermissionHeading"))).toBeInTheDocument();
+    // One consent question (camera or photo); a yes brings Take photo / Upload into the message.
+    respond(fake, "yes please");
+    expect(screen.getByText(translate("en", "cameraReady"))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Take photo" })).toBeInTheDocument();
   });
 
   it("confirming a possible match by voice unlocks the explanation, hedging does not", () => {
@@ -368,11 +362,9 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     respond(fake, "What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i })); // decline camera → fallback
-    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
-    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
+    act(() => fake.recognitions.at(-1)!.say("yes", true)); // "Would you like to show me the medicine label?"
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: false })); // decline camera → fallback
+    act(() => dispatch({ type: "CHOOSE_MEDICINE", medicineId: recordMedicines[0].id }));
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -389,11 +381,9 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     respond(fake, "What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
-    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
+    act(() => fake.recognitions.at(-1)!.say("yes", true)); // "Would you like to show me the medicine label?"
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: false }));
+    act(() => dispatch({ type: "CHOOSE_MEDICINE", medicineId: recordMedicines[0].id }));
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -410,11 +400,9 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     respond(fake, "What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
-    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
+    act(() => fake.recognitions.at(-1)!.say("yes", true)); // "Would you like to show me the medicine label?"
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: false }));
+    act(() => dispatch({ type: "CHOOSE_MEDICINE", medicineId: recordMedicines[0].id }));
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -423,8 +411,8 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     act(() => fake.recognitions.at(-1)!.say("asdkjhasd blorp", true));
     // Acknowledged, then told what this step accepts — including "I'm not sure",
     // so the re-prompt never nudges toward confirming.
-    expect(screen.getByText(/didn’t quite catch that/i)).toBeInTheDocument();
-    expect(screen.getByText(/say “yes”, “no”, or “I’m not sure”/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sorry, I missed that/i)).toBeInTheDocument();
+    expect(screen.getByText(/A yes or no is fine, or tell me if you’re not sure/i)).toBeInTheDocument();
     expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument(); // unchanged
   });
 
@@ -433,11 +421,9 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     respond(fake, "What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Choose from my medicines" }));
-    fireEvent.click(screen.getByRole("button", { name: "Metformin 500 mg" }));
+    act(() => fake.recognitions.at(-1)!.say("yes", true)); // "Would you like to show me the medicine label?"
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: false }));
+    act(() => dispatch({ type: "CHOOSE_MEDICINE", medicineId: recordMedicines[0].id }));
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -481,9 +467,8 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     respond(fake, "What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i })); // decline camera → fallback
+    act(() => fake.recognitions.at(-1)!.say("yes", true)); // "Would you like to show me the medicine label?"
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: false })); // decline camera → fallback
     finishSpeaking(fake); // let the guidance text finish before answering by voice
 
     respond(fake, "It's Metformin, 500 milligrams");
@@ -497,9 +482,8 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     respond(fake, "What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
+    act(() => fake.recognitions.at(-1)!.say("yes", true)); // "Would you like to show me the medicine label?"
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: false }));
     finishSpeaking(fake);
 
     respond(fake, "It's Metformin");
@@ -515,9 +499,8 @@ describe("hands-free conversation — spoken turns act like the equivalent butto
     render(<CompanionExperience />);
     startCall(fake);
     respond(fake, "What is this for?");
-    fireEvent.click(screen.getByRole("button", { name: /show medicine/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Use camera" }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
+    act(() => fake.recognitions.at(-1)!.say("yes", true)); // "Would you like to show me the medicine label?"
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: false }));
     finishSpeaking(fake);
 
     respond(fake, "It's Aspirin, 300 milligrams");
@@ -540,7 +523,7 @@ describe("hands-free conversation — recovery and control", () => {
     finishSpeaking(fake);
 
     act(() => fake.recognitions.at(-1)!.say("What is this for?", true, 0));
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    expect(sessionStore.getSnapshot().contextualActions).toContain("show-medicine"); // asked in words, no button
   });
 
   it("mic errors pause the loop with a plain-language message; typing keeps working", () => {
@@ -550,9 +533,9 @@ describe("hands-free conversation — recovery and control", () => {
     act(() => fake.recognitions[0].fail("not-allowed"));
     expect(screen.getByText(/microphone is off/i)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "What is this for?" } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: "What is this for?" } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
+    expect(sessionStore.getSnapshot().contextualActions).toContain("show-medicine"); // asked in words, no button
   });
 
   it("silence is tolerated a few times before the loop pauses", () => {
@@ -574,19 +557,19 @@ describe("hands-free conversation — recovery and control", () => {
     startCall(fake);
     const call = sessionStore.getSnapshot().callCount;
     expect(fake.recognitions[0].started).toBe(true);
-    expect(muteButton()).toHaveAccessibleName("Mute");
+    expect(muteButton()).toHaveAccessibleName("Mute microphone");
 
     fireEvent.click(muteButton());
     expect(fake.recognitions[0].started).toBe(false);
-    expect(muteButton()).toHaveAccessibleName("Unmute");
+    expect(muteButton()).toHaveAccessibleName("Unmute microphone");
     // Said in words, in the polite status line, and typing opens in its place.
-    expect(screen.getByText(/^Muted\. Type below, or tap Unmute\./)).toBeInTheDocument();
-    expect(screen.getByLabelText(/type it here/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Muted\. Type below, or tap the microphone to unmute\./)).toBeInTheDocument();
+    expect(screen.getByLabelText(/type a message/i)).toBeInTheDocument();
     tick();
     expect(fake.recognitions).toHaveLength(1); // stayed off — no new recognition opened
 
     fireEvent.click(muteButton());
-    expect(muteButton()).toHaveAccessibleName("Mute");
+    expect(muteButton()).toHaveAccessibleName("Mute microphone");
     tick();
     expect(fake.recognitions.length).toBeGreaterThan(1);
     expect(sessionStore.getSnapshot().callCount).toBe(call); // the same call, not a new one
@@ -600,7 +583,7 @@ describe("hands-free conversation — recovery and control", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /end call/i }));
     expect(fake.recognitions[0].started).toBe(false);
-    expect(screen.queryByRole("button", { name: /^(mute|unmute)$/i })).toBeNull(); // call controls gone
+    expect(screen.queryByRole("button", { name: /^(mute|unmute) microphone$/i })).toBeNull(); // call controls gone
 
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     expect(fake.utterances).toHaveLength(2); // the greeting is spoken again, automatically
@@ -714,7 +697,8 @@ describe("words and voice arrive together — one voice for the whole call", () 
     tick(); // the mic reopens: the call is not stuck
     expect(fake.recognitions).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: /repeat/i }));
+    expect(screen.getByText(/say or type “repeat”/)).toBeInTheDocument(); // no Repeat button: said or typed
+    act(() => fake.recognitions.at(-1)!.say("repeat", true));
     expect(voice.speaks.at(-1)).toMatchObject({ text: GREETING, slow: true }); // same voice, the whole line, slower
     expect(fake.utterances).toHaveLength(0);
   });
@@ -744,9 +728,9 @@ describe("words and voice arrive together — one voice for the whole call", () 
     fireEvent.click(screen.getByRole("button", { name: /call with companion/i }));
     await voice.connect();
     await voice.start();
-    fromHelpSheet(/type instead/i);
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "What is this for?" } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    // The message pill is always there: no "Type instead".
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: "What is this for?" } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
     expect(voice.interrupts).toEqual([voice.speaks[0].identity]); // the greeting stops
     expect(voice.speaks).toHaveLength(2); // the reply is the next line, in the same voice
     await voice.start(); // its words appear as it is said
@@ -765,16 +749,16 @@ describe("one visible line for every spoken line", () => {
     expect(screen.getByText(shown)).toBeInTheDocument();
     const before = sessionStore.getSnapshot();
 
-    // Repeat is not a standing control in a healthy call; it is one tap away in Get help.
+    // Repeat is not a button: it is said (or typed).
     expect(screen.queryByRole("button", { name: /repeat/i })).toBeNull();
-    fromHelpSheet(/repeat/i);
+    act(() => fake.recognitions.at(-1)!.say("say that again", true));
     expect(fake.utterances.at(-1)!.text).toBe(shown); // the whole line, unchanged
     expect(fake.utterances.at(-1)!.rate).toBeLessThan(fake.utterances.at(-2)!.rate); // slowly
     // The transcript shows the repeat (existing feed behaviour) with the identical words; nothing advanced.
     expect(screen.getAllByText(shown).length).toBeGreaterThanOrEqual(1);
     const after = sessionStore.getSnapshot();
     expect({ ...after, repeatCount: before.repeatCount, audit: before.audit }).toEqual(before);
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
+    expect(sessionStore.getSnapshot().contextualActions).toContain("show-medicine"); // asked in words, no button
   });
 
   it("a voice notice is a visible companion turn in the transcript, with exactly the words that are spoken", () => {
@@ -796,11 +780,11 @@ describe("one visible line for every spoken line", () => {
     install({ recognition: false, synthesis: false });
     sessionStore.setForTest(toConfirmMatch());
     render(<CompanionExperience />);
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "asdkjhasd blorp" } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
-    expect(screen.getByText(/say “yes”, “no”, or “I’m not sure”/i)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "yes" } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: "asdkjhasd blorp" } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
+    expect(screen.getByText(/A yes or no is fine, or tell me if you’re not sure/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: "yes" } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
     expect(screen.getByText("Here is what your record says.")).toBeInTheDocument();
   });
 });
@@ -812,7 +796,6 @@ describe("the reviewed callback is sent by an explicit spoken or typed 'send'", 
       startCallEvent,
       { type: "USER_MESSAGE", text: "My doctor changed my medicine, but this box still says the old amount. How many should I take now?", via: "typed" },
       chooseShowMedicine,
-      chooseCamera,
       grantCamera,
       submitDemo(),
       resolve,
@@ -846,6 +829,21 @@ describe("the reviewed callback is sent by an explicit spoken or typed 'send'", 
     act(() => fake.recognitions.at(-1)!.say("yes, send it", true));
     expect(sessionStore.getSnapshot().doseCheck?.callback?.status).toBe("submitting");
     expect(sessionStore.getSnapshot().doseCheck?.callback?.approvedRevision).toBe(sessionStore.getSnapshot().doseCheck?.callback?.revision);
+  });
+
+  it("a hesitant spoken reading is said back as heard, without adding a word, and confirmed by 'yes'", () => {
+    const fake = install();
+    toReview();
+    render(<CompanionExperience />);
+    finishSpeaking(fake);
+    act(() => fake.recognitions.at(-1)!.say("no", true)); // not what the camera read
+    finishSpeaking(fake);
+    act(() => fake.recognitions.at(-1)!.say("It says… two? I think two.", true));
+    expect(fake.utterances.at(-1)!.text).toBe("No rush. I heard “two”. Is that what’s printed on your label?");
+    expect(screen.getByText("No rush. I heard “two”. Is that what’s printed on your label?")).toBeInTheDocument();
+    finishSpeaking(fake);
+    act(() => fake.recognitions.at(-1)!.say("Yes.", true));
+    expect(sessionStore.getSnapshot().doseCheck?.labelText).toBe("two");
   });
 
   it("'don't send' said aloud cancels the reviewed summary with nothing sent", () => {

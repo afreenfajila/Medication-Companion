@@ -1,3 +1,4 @@
+import { recordMedicines } from "@/lib/content/seed-record";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CompanionExperience } from "@/components/companion/companion-experience";
@@ -5,10 +6,10 @@ import { resolveExplanation } from "@/lib/content/explanation";
 import { isApprovedSpeech } from "@/lib/content/speech-guard";
 import { t } from "@/lib/content/translations";
 import { classifySafety } from "@/lib/safety/classify";
-import { sessionStore } from "@/lib/session/session-store";
+import { sessionStore, dispatch } from "@/lib/session/session-store";
 import { guardRequestedState, type Session } from "@/lib/session/state-machine";
 import { speakableText } from "@/lib/voice/speakable";
-import { askUnknown, chooseShowMedicine, chooseCamera, grantCamera, resolve, run, startCall, submitDemo, toConfirmMatch, toExplain } from "./helpers";
+import { askUnknown, chooseShowMedicine, grantCamera, resolve, run, startCall, submitDemo, toConfirmMatch, toExplain } from "./helpers";
 
 
 /** The confirmation is said and shown in the conversation (no panel): a possible match, from the fictional record. */
@@ -23,8 +24,8 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 const send = (text: string) => {
-  fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
-  fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+  fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: text } });
+  fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
 };
 const typeIn = (text: string) => {
   const box = screen.getByRole("textbox");
@@ -58,11 +59,9 @@ describe("primary journey (deck): question → Show medicine → camera → poss
     click(/call with companion/i);
     send("What is this for? When do I take it?");
     expect(screen.getByText("Let’s check this together. Would you like to show me the medicine label?")).toBeInTheDocument();
-    click(/show medicine/i);
-    click("Use camera");
-    click(/yes, switch camera/i); // consent before the camera
-    click("Choose from my medicines");
-    click("Metformin 500 mg"); // jsdom has no camera → demo/sample/typed fallback
+    send("yes"); // "Would you like to show me the medicine label?" — said or typed, no button
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: true })); // consent before the camera
+    act(() => dispatch({ type: "CHOOSE_MEDICINE", medicineId: recordMedicines[0].id })); // jsdom has no camera → demo/sample/typed fallback
     act(() => void vi.advanceTimersByTime(1000));
 
     expect(screen.getByText(POSSIBLE_MATCH)).toBeInTheDocument(); // possible match, not certain
@@ -101,7 +100,7 @@ describe("3. explanation cannot appear before confirmation", () => {
 });
 
 describe("4. no-match / unreadable blocks instructions — one retry, then human help only", () => {
-  const toGuidance = () => run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera]);
+  const toGuidance = () => run([startCall, askUnknown, chooseShowMedicine, grantCamera]);
 
   it.each(["sample_unreadable_label", "sample_mismatch_label"] as const)("%s → safety with no instruction", (asset) => {
     const s = run([submitDemo(asset), resolve], toGuidance());
@@ -114,25 +113,25 @@ describe("4. no-match / unreadable blocks instructions — one retry, then human
     render(<CompanionExperience />);
     click(/call with companion/i);
     send("What is this for?");
-    click(/show medicine/i);
-    click("Use camera");
-    click(/yes, switch camera/i);
-    click("Choose from my medicines");
-    click("Metformin 500 mg");
+    send("yes"); // "Would you like to show me the medicine label?" — said or typed, no button
+    act(() => dispatch({ type: "CAMERA_CONSENT", granted: true }));
+    act(() => dispatch({ type: "CHOOSE_MEDICINE", medicineId: recordMedicines[0].id }));
     act(() => void vi.advanceTimersByTime(1000));
     send("no, that's not it");
 
-    click("Try another photo"); // the one retry
-    click("Choose from my medicines");
-    click("Metformin 500 mg");
+    send("try another photo"); // the one retry, asked for in words
+    act(() => dispatch({ type: "CHOOSE_MEDICINE", medicineId: recordMedicines[0].id }));
     act(() => void vi.advanceTimersByTime(1000));
     send("no, that's not it");
 
     expect(screen.queryByRole("button", { name: "Try another photo" })).toBeNull();
     expect(screen.getByText(t("en", "retryUsed"))).toBeInTheDocument();
-    for (const name of ["Ask a pharmacist to call me", "Contact my family"]) {
-      expect(screen.getByRole("button", { name })).toBeInTheDocument();
-    }
+    // Only a person now, offered in the conversation: no photo option, no buttons.
+    // (The first message, which offered another photo, stays in the history; the latest one doesn't.)
+    const latest = [...document.querySelectorAll('[data-speaker="companion"]')].filter((el) => el.textContent?.includes(t("en", "retryUsed"))).at(-1)!;
+    expect(latest).toHaveTextContent(t("en", "safetyAsk"));
+    expect(latest).not.toHaveTextContent(t("en", "safetyAskRetry"));
+    expect(document.querySelector("[data-pinned]")).toBeNull();
     expect(screen.queryByText(INSTRUCTION)).toBeNull();
   });
 
@@ -188,13 +187,13 @@ describe("voice layer speaks approved text only", () => {
       run([startCall]),
       run([startCall, askUnknown]),
       run([startCall, askUnknown, chooseShowMedicine]),
-      run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera]),
+      run([startCall, askUnknown, chooseShowMedicine, grantCamera]),
       toConfirmMatch(),
       explain,
       run([{ type: "EXPLAIN_STEP", direction: "next" }], explain),
       run([{ type: "EXPLAIN_STEP", direction: "next" }, { type: "EXPLAIN_STEP", direction: "next" }], explain),
       run([{ type: "UNDERSTOOD" }], explain),
-      run([startCall, askUnknown, chooseShowMedicine, chooseCamera, grantCamera, submitDemo("sample_unreadable_label"), resolve]),
+      run([startCall, askUnknown, chooseShowMedicine, grantCamera, submitDemo("sample_unreadable_label"), resolve]),
       run([startCall, { type: "USER_MESSAGE", text: "I have chest pain" }]),
     ];
     for (const lang of ["en", "zh-Hans"] as const) {

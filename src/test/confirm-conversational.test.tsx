@@ -42,13 +42,13 @@ describe("the medicine confirmation is a conversation", () => {
     expect(speakableText(s, (k) => t("en", k), null, null)).toBe(en); // what is said is what is shown
   });
 
-  it("no panel or buttons: a healthy voice call keeps just Get help, Mute and End call; the line is in the transcript", () => {
+  it("no panel or buttons: a healthy voice call keeps just Help, the message pill, the mic and End call; the line is in the transcript", () => {
     const fake = createFakeSpeech();
     setVoiceProvider(new BrowserVoiceProvider(fake.env));
     sessionStore.setForTest(toConfirmMatch());
     render(<CompanionExperience />);
     act(() => vi.advanceTimersByTime(400));
-    expect(screen.getAllByRole("button").map((b) => b.textContent?.trim())).toEqual(["Get help", "Mute", "End call"]);
+    expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") || b.textContent?.trim())).toEqual(["Help", "Send message", "Mute microphone", "End call"]);
     expect(document.querySelector("[data-pinned]")).toBeNull();
     const line = screen.getByText(EN);
     expect(line.closest("[data-speaker]")).toHaveAttribute("data-speaker", "companion");
@@ -83,8 +83,8 @@ describe("the medicine confirmation is a conversation", () => {
     sessionStore.setForTest(toConfirmMatch());
     const { unmount } = render(<CompanionExperience />);
     const type = (text: string) => {
-      fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
-      fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+      fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: text } });
+      fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
     };
     type("I'm not sure");
     expect(sessionStore.getSnapshot().state).not.toBe("explain");

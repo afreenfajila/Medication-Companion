@@ -8,7 +8,7 @@ import { reduceSession, type DoseAction, type Session } from "@/lib/session/stat
 import { SimulatedDoseCallbackService } from "@/lib/services/dose-callback";
 import { interpretUtterance } from "@/lib/voice/commands";
 import { doseCheckLine } from "@/lib/voice/speakable";
-import { CTX, chooseCamera, chooseShowMedicine, grantCamera, resolve, run, startCall, submitDemo } from "@/test/helpers";
+import { CTX, chooseShowMedicine, grantCamera, resolve, run, startCall, submitDemo } from "@/test/helpers";
 import {
   buildCallbackPayload,
   callbackRequestId,
@@ -38,7 +38,6 @@ function toDoseConfirm(scenario: DoseScenario | null = null, from?: Session): Se
       startCall,
       { type: "USER_MESSAGE", text: OPENING, via: "typed" },
       chooseShowMedicine,
-      chooseCamera,
       grantCamera,
       submitDemo(),
       resolve,
@@ -166,7 +165,7 @@ describe("label wording: revisions and confirmation", () => {
   it("typed wording is shown back as a new revision; only confirming it compares", () => {
     const entered = run([dose({ kind: "enter-label", text: OLD_LABEL })], toLabelStep());
     expect(entered.doseCheck).toMatchObject({ reading: OLD_LABEL, labelSource: "typed", labelRevision: 1, comparison: null });
-    expect(line(entered)).toContain("Please check what I noted");
+    expect(line(entered)).toBe(`You wrote “${OLD_LABEL}”. Is that exactly what’s printed on your label?`);
     const confirmed = confirmShown(entered);
     expect(confirmed.doseCheck).toMatchObject({ labelText: OLD_LABEL, confirmedLabelRevision: 1 });
     expect(confirmed.doseCheck?.comparison).toMatchObject({ outcome: "conflict", labelRevision: 1, recordVersion: "brightcare-metformin-v1" });
@@ -372,7 +371,7 @@ describe("callback summary: review, edit, send", () => {
     expect(failed.doseCheck?.labelText).toBe(OLD_LABEL);
     expect(failed.doseCheck?.callback?.draft).toEqual(submitting.doseCheck?.callback?.draft);
     expect(line(failed)).toBe(
-      "Demo: request not submitted. The request could not be delivered. No one has been notified. Your summary is still available.",
+      "Demo: request not submitted. The request could not be delivered. No one has been notified. Your summary is still available. If you’d like me to try again, just say “send the request”. Or we can leave it for now.",
     );
 
     const retry = run([dose({ kind: "send", revision: 1 })], failed);
@@ -391,7 +390,7 @@ describe("callback summary: review, edit, send", () => {
     const done = run([dose({ kind: "result", requestId: requestIdOf(submitting), outcome: "submitted", reference: "SIM-0001" })], submitting);
     expect(done.doseCheck?.callback?.status).toBe("submitted");
     const said = line(done)!;
-    expect(said).toBe("Demo: callback request submitted. The difference in your medication instructions still needs checking.");
+    expect(said).toBe("Demo: callback request submitted. The difference in your medication instructions still needs checking. Is there anything else I can help with?");
     expect(said).not.toMatch(/sorted|will call|is safe|follow the new/i);
     // No second send of the same request, and no relabelling it as resolved.
     expect(run([dose({ kind: "send", revision: 1 })], done)).toBe(done);
@@ -552,7 +551,7 @@ describe("audit fixes (10 October 2026)", () => {
     explainStep: s.explainStep,
     cameraLive: false,
     helpStage: s.helpFlow?.stage ?? null,
-    showMethod: s.showMethod,
+    cameraMode: s.cameraMode,
     doseCheck: s.doseCheck,
     pendingSpokenMedicineName: null,
   });

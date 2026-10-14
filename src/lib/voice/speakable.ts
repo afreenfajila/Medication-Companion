@@ -24,12 +24,12 @@ export function speakableText(
     | "explainStep"
     | "candidate"
     | "cameraMode"
+    | "cameraIssue"
     | "labelRetries"
     | "recordConflict"
     | "language"
     | "userText"
     | "helpFlow"
-    | "showMethod"
     | "doseCheck"
   >,
   t: (key: CopyKey) => string,
@@ -55,16 +55,9 @@ export function speakableText(
     case "listening":
       return listeningOverride !== undefined ? listeningOverride : t(session.assistantKey);
     case "camera-permission":
-      // The photo note is said first, before any picker opens (H2).
-      return session.showMethod === "choose"
-        ? join(t("showMedicineHeading"), t("photoIntro"))
-        : join(t("cameraPermissionHeading"), t("cameraPermissionBody"));
     case "camera-guidance":
-      return session.cameraMode === "preview"
-        ? t("cameraGuidanceHeading")
-        : t("fallbackHeading");
     case "analyzing":
-      return join(t("analyzingHeading"), t("analyzingBody"));
+      return join(...showMedicineLines(session, t));
     case "confirm-match":
       if (!session.candidate) return null;
       return confirmLine(t, session.candidate);
@@ -84,27 +77,62 @@ export function speakableText(
       }
       return join(e.caution, e.confirmationPrompt);
     }
-    case "safety": {
-      const view = buildEscalation(
-        session.safetyReason ?? "help-requested",
-        session.labelRouteSelected,
-        session.labelRetries < MAX_LABEL_RETRIES,
-        mentionsSelfHarm(session.userText),
-      );
-      return join(
-        t(view.headingKey),
-        view.reasonKey ? t(view.reasonKey) : null,
-        view.retryUsedKey ? t(view.retryUsedKey) : null,
-        t(view.bodyKey),
-        view.crisisKey ? t(view.crisisKey) : null,
-      );
-    }
+    case "safety":
+      return join(...safetyLines(session, t));
     case "complete":
       return join(t("completeHeading"), t("completeBody"));
     case "start":
     default:
       return null;
   }
+}
+
+/**
+ * Showing the medicine, as messages in the conversation (owner decision, 14 October 2026): the
+ * one consent question (camera or photo, and what is kept), then Take photo / Upload, what to do
+ * with the camera open or off, and "let me have a look". Shown as short lines; said as one turn.
+ * The only buttons are inside the "ready" (or camera-off) message, and in the open camera.
+ */
+export function showMedicineLines(
+  session: Pick<Session, "state" | "cameraMode" | "cameraIssue">,
+  t: (key: CopyKey) => string,
+): string[] {
+  if (session.state === "analyzing") return [t("analyzingHeading"), t("analyzingBody")];
+  if (session.state === "camera-permission") return [t("cameraPermissionHeading"), t("cameraPermissionBody"), t("cameraPurpose")];
+  if (session.cameraMode === "ready") return [t("cameraReady")];
+  if (session.cameraMode === "preview") return [t("cameraGuidanceHeading"), t("cameraGuidanceBody"), t("cameraPrivacy")];
+  const issue = session.cameraIssue;
+  return [
+    t(issue === "denied" ? "cameraDeniedHeading" : issue === "unavailable" ? "cameraUnavailableHeading" : "fallbackHeading"),
+    t(issue === "denied" ? "cameraDeniedBody" : issue === "unavailable" ? "cameraUnavailableBody" : "fallbackBody"),
+    t("spokenLabelHint"),
+  ];
+}
+
+/**
+ * Getting a person, as one message in the conversation (no card, no buttons): what happened, that
+ * nothing will be guessed, and a question naming only the ways on that exist here — answered in
+ * words. Shown as short paragraphs; said as one turn (`speakableText`).
+ */
+export function safetyLines(
+  session: Pick<Session, "safetyReason" | "labelRouteSelected" | "labelRetries" | "userText">,
+  t: (key: CopyKey) => string,
+): string[] {
+  const view = buildEscalation(
+    session.safetyReason ?? "help-requested",
+    session.labelRouteSelected,
+    session.labelRetries < MAX_LABEL_RETRIES,
+    mentionsSelfHarm(session.userText),
+  );
+  return [
+    view.headingKey,
+    view.reasonKey,
+    view.retryUsedKey,
+    view.bodyKey,
+    view.crisisKey,
+    view.noInstructionsKey,
+    view.askKey,
+  ].flatMap((key) => (key ? [t(key)] : []));
 }
 
 /** After a submitted request: "the difference" only when a difference was actually found. */
@@ -125,7 +153,8 @@ export function doseCheckLine(
 ): string | null {
   const d = session.doseCheck;
   if (!d) return null;
-  const join = (...parts: Array<string | null>) => parts.filter((p): p is string => Boolean(p)).join(" ");
+  // Chinese sentences sit side by side with no space between them.
+  const join = (...parts: Array<string | null>) => parts.filter((p): p is string => Boolean(p)).join(session.language === "zh-Hans" ? "" : " ");
   const source = fillRecordFacts(t("recordCheckedOn"), explanation, session.language);
   const fill = (key: CopyKey) =>
     fillRecordFacts(t(key), explanation, session.language).replace("{source}", source).replace("{reading}", d.reading ?? "");
@@ -133,9 +162,10 @@ export function doseCheckLine(
   const cb = d.callback;
   if (cb && cb.status !== "cancelled" && d.step !== "label") {
     if (cb.status === "submitting") return t("doseSubmitting");
-    if (cb.status === "submitted") return join(t("doseSubmitted"), t(stillOpenKey(cb.draft.reason)));
-    if (cb.status === "failed") return join(t("doseFailed"), t("doseFailedBody"));
-    if (cb.status === "unknown") return join(t("doseUnknown"), t("doseUnknownBody"));
+    // Each outcome ends with a question a plain yes or no can answer.
+    if (cb.status === "submitted") return join(t("doseSubmitted"), t(stillOpenKey(cb.draft.reason)), t("doseAnythingElse"));
+    if (cb.status === "failed") return join(t("doseFailed"), t("doseFailedBody"), t("doseRetryPrompt"));
+    if (cb.status === "unknown") return join(t("doseUnknown"), t("doseUnknownBody"), t("doseRetryPrompt"));
     // Reviewing/editing: the summary read aloud (the callback number stays masked, so it isn't).
     const r = cb.draft;
     const last4 = r.callbackContact.replace(/\D/g, "").slice(-4);
@@ -154,14 +184,17 @@ export function doseCheckLine(
   }
   // A correction waiting for confirmation comes before the summary it will update.
   if (d.step === "label" && d.reading) {
-    return fill(d.labelSource === "fixture" ? "doseReadingCheck" : "doseReadingTypedCheck");
+    if (d.labelSource === "fixture") return fill("doseReadingCheck");
+    // Said back the way she gave it ("I heard…" / "You wrote…"), gently if she sounded unsure.
+    return join(d.readingUnsure ? t("doseReadingNoRush") : null, fill(d.labelSource === "speech-transcript" ? "doseReadingHeardCheck" : "doseReadingTypedCheck"));
   }
   if (d.offer) return t("doseOffer");
   switch (d.step) {
     case "record-unavailable":
       return t("doseRecordUnavailable");
     case "label":
-      return fill("doseRecordAndAsk");
+      // After a "no" to the read-back: ask again, without repeating the record she just heard.
+      return d.labelRevision > 0 ? t("doseReadingAskAgain") : fill("doseRecordAndAsk");
     case "compared": {
       const outcome = d.comparison?.outcome;
       return join(

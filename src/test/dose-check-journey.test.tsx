@@ -5,7 +5,7 @@ import { DoseCheckReviewer } from "@/components/companion/dose-check-reviewer";
 import { setDoseCallbackServiceForTest, SimulatedDoseCallbackService } from "@/lib/services/dose-callback";
 import { dispatch, sessionStore } from "@/lib/session/session-store";
 import type { Session } from "@/lib/session/state-machine";
-import { chooseCamera, chooseShowMedicine, grantCamera, resolve, run, startCall, submitDemo } from "./helpers";
+import { chooseShowMedicine, grantCamera, resolve, run, startCall, submitDemo } from "./helpers";
 
 const OPENING =
   "My doctor changed my medicine, but this box still says the old amount. How many should I take now?";
@@ -21,7 +21,6 @@ function conflictSession(scenario: Session["doseScenario"] = "conflict-sent"): S
     startCall,
     { type: "USER_MESSAGE", text: OPENING, via: "typed" },
     chooseShowMedicine,
-    chooseCamera,
     grantCamera,
     submitDemo(),
     resolve,
@@ -69,7 +68,7 @@ function toReview() {
   expect(compared.getByText("Different")).toBeInTheDocument();
   noButtons();
   typeIn("ask a pharmacist");
-  expect(lastCompanion().getByText(/^I can prepare a summary/)).toBeInTheDocument();
+  expect(lastCompanion().getByText(/^I can put together a short summary for a pharmacist/)).toBeInTheDocument();
   typeIn("yes please");
   expect(lastCompanion().getByText("I’ve prepared a short summary for the pharmacist.")).toBeInTheDocument();
 }
@@ -200,7 +199,7 @@ describe("dose-change journey in the call (UI)", () => {
     toReview();
     await act(async () => typeIn("the label says Take 2 tablets twice daily with food"));
     // Shown back to confirm: a typed correction is never trusted as-is.
-    expect(lastCompanion().getByText(/Please check what I noted from your label: “Take 2 tablets twice daily with food”/)).toBeInTheDocument();
+    expect(lastCompanion().getByText("You wrote “Take 2 tablets twice daily with food”. Is that exactly what’s printed on your label?")).toBeInTheDocument();
     await act(async () => typeIn("send the request")); // not while the wording is unconfirmed
     expect(service.received).toHaveLength(0);
     expect(sessionStore.getSnapshot().doseCheck!.reading).toBe("Take 2 tablets twice daily with food"); // and not taken as wording
@@ -227,7 +226,7 @@ describe("dose-change journey in the call (UI)", () => {
     toReview();
     await act(async () => typeIn("don’t send"));
     expect(service.received).toHaveLength(0);
-    expect(lastCompanion().getByText(/^Nothing was shared\./)).toBeInTheDocument();
+    expect(lastCompanion().getByText(/^No problem — nothing has been shared\./)).toBeInTheDocument();
     expect(lastCompanion().getByText(/These instructions differ/)).toBeInTheDocument();
   });
 
@@ -243,7 +242,7 @@ describe("dose-change journey in the call (UI)", () => {
     expect(failed.getByText(/The request could not be delivered\. No one has been notified\. Your summary is still available\./)).toBeInTheDocument();
     expect(failed.getByText("Unresolved")).toBeInTheDocument();
     expect(failed.getByText("View fictional pharmacy contact").nextElementSibling).toHaveTextContent("BrightCare Pharmacy: 0000 0123");
-    expect(failed.getByText("To try again, say or type “send again”.")).toBeInTheDocument();
+    expect(failed.getByText(/If you’d like me to try again, just say “send the request”\. Or we can leave it for now\.$/)).toBeInTheDocument();
     expect(screen.getByText(SAY_SEND)).toBeInTheDocument(); // the summary stays
     await act(async () => typeIn("try again"));
     expect(service.received.map((p) => p.requestId)).toEqual([service.received[0].requestId, service.received[0].requestId]);
@@ -273,17 +272,110 @@ describe("dose-change journey in the call (UI)", () => {
     // The misread wording is shown back to check, not trusted; "change the wording" (or "no") asks again.
     expect(lastCompanion().getByText(/I think I read: “Take 7 tablet twice daily with meals” Is that what it says\?/)).toBeInTheDocument();
     typeIn("change the wording");
-    expect(lastCompanion().getByText(/What does the label on your box say\?/)).toBeInTheDocument();
+    expect(lastCompanion().getByText("Sorry, I didn’t get that right. What does the label say? You can read it to me again, or type it.")).toBeInTheDocument();
     typeIn("Take 1 tablet twice daily with meals");
     // The corrected wording is shown back for confirmation, not trusted as typed.
-    expect(lastCompanion().getByText(/Please check what I noted from your label: “Take 1 tablet twice daily with meals”/)).toBeInTheDocument();
+    expect(lastCompanion().getByText("You wrote “Take 1 tablet twice daily with meals”. Is that exactly what’s printed on your label?")).toBeInTheDocument();
     typeIn("yes");
-    expect(lastCompanion().getByText(/^Thank you\. The confirmed label wording matches the record/)).toBeInTheDocument();
+    expect(lastCompanion().getByText(/^Thank you\. The wording you confirmed matches your record/)).toBeInTheDocument();
     expect(lastSections().getByText("As you typed it")).toBeInTheDocument();
     expect(lastSections().queryByText("Different")).toBeNull();
     // A match offers no callback.
     typeIn("pharmacist");
     expect(sessionStore.getSnapshot().doseCheck?.offer).toBe(false);
+  });
+
+  it("reading the box the way people do: hesitation is set aside, nothing is added, and only her yes confirms", () => {
+    sessionStore.setForTest(conflictSession());
+    render(<CompanionExperience />);
+    typeIn("no"); // not what the camera read
+    expect(lastCompanion().getByText("Sorry, I didn’t get that right. What does the label say? You can read it to me again, or type it.")).toBeInTheDocument();
+    typeIn("It says… two? I think two.");
+    // Her own word, not "two tablets": no unit she didn't say. Gently, because she sounded unsure.
+    expect(lastCompanion().getByText("No rush. You wrote “two”. Is that exactly what’s printed on your label?")).toBeInTheDocument();
+    expect(sessionStore.getSnapshot().doseCheck?.labelText).toBeNull(); // not confirmed by being said
+    typeIn("Yes.");
+    const d = sessionStore.getSnapshot().doseCheck!;
+    expect(d.labelText).toBe("two");
+    expect(d.step).toBe("compared");
+    // What wasn't said stays unclear — never filled in from the record.
+    expect(lastSections().getByText("Not clear on both")).toBeInTheDocument();
+  });
+
+  it("a correction mid-sentence keeps the corrected words; 'I can't read it' never becomes wording", () => {
+    sessionStore.setForTest(conflictSession());
+    render(<CompanionExperience />);
+    typeIn("no");
+    typeIn("two... no, one tablet, twice daily with meals");
+    expect(lastCompanion().getByText("You wrote “one tablet, twice daily with meals”. Is that exactly what’s printed on your label?")).toBeInTheDocument();
+    typeIn("no");
+    typeIn("I can't read it, the print is too small");
+    const d = sessionStore.getSnapshot().doseCheck!;
+    expect(d.step).toBe("compared");
+    expect(d.labelText).toBeNull();
+    expect(d.comparison?.outcome).toBe("insufficient");
+  });
+
+  describe("with the AI on: the wording is picked out by meaning, but only her own words are ever used", () => {
+    const withAi = (answer: unknown) =>
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          if (url === "/api/companion/understand" && (!init || init.method === "GET")) {
+            return new Response(JSON.stringify({ ok: true, data: { enabled: true }, requestId: "r" }));
+          }
+          if (url === "/api/companion/label-wording") return new Response(JSON.stringify({ ok: true, data: answer, requestId: "r" }));
+          return new Response(JSON.stringify({ ok: true, data: { action: null, outcome: "none" }, requestId: "r" }));
+        }),
+      );
+    const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 0))));
+
+    it("a rambling reading is said back as the wording she meant", async () => {
+      withAi({ outcome: "wording", wording: "one tablet twice a day" });
+      sessionStore.setForTest(conflictSession());
+      render(<CompanionExperience />);
+      await settle();
+      typeIn("no");
+      typeIn("so the box, hmm, it's one tablet I would say twice a day");
+      await settle();
+      expect(vi.mocked(fetch).mock.calls.some(([u]) => u === "/api/companion/label-wording")).toBe(true);
+      expect(lastCompanion().getByText("You wrote “one tablet twice a day”. Is that exactly what’s printed on your label?")).toBeInTheDocument();
+      expect(screen.getByText("so the box, hmm, it's one tablet I would say twice a day")).toBeInTheDocument(); // her own words, as she said them
+    });
+
+    it("words she never said are refused: the app's own clean-up is used instead", async () => {
+      withAi({ outcome: "wording", wording: "one tablet twice a day with meals" }); // "with meals" was never said
+      sessionStore.setForTest(conflictSession());
+      render(<CompanionExperience />);
+      await settle();
+      typeIn("no");
+      typeIn("um, one tablet twice a day");
+      await settle();
+      expect(sessionStore.getSnapshot().doseCheck?.reading).toBe("one tablet twice a day");
+    });
+
+    it("plain wording is said back at once, without asking the AI", async () => {
+      withAi({ outcome: "wording", wording: "x" });
+      sessionStore.setForTest(conflictSession());
+      render(<CompanionExperience />);
+      await settle();
+      typeIn("no");
+      typeIn("Take 1 tablet twice daily with meals");
+      expect(vi.mocked(fetch).mock.calls.some(([u]) => u === "/api/companion/label-wording")).toBe(false);
+      expect(sessionStore.getSnapshot().doseCheck?.reading).toBe("Take 1 tablet twice daily with meals");
+    });
+
+    it("no wording at all goes to the meaning-match, never into the label", async () => {
+      withAi({ outcome: "no-wording" });
+      sessionStore.setForTest(conflictSession());
+      render(<CompanionExperience />);
+      await settle();
+      typeIn("no");
+      typeIn("my pills are the little pink ones");
+      await settle();
+      expect(sessionStore.getSnapshot().doseCheck?.reading).toBeNull();
+      expect(vi.mocked(fetch).mock.calls.some(([u]) => u === "/api/companion/intent")).toBe(true);
+    });
   });
 
   it("works in Chinese too", () => {
@@ -339,12 +431,12 @@ describe("dose-change journey in the call (UI)", () => {
     expect(review.getByText(SAY_SEND)).toBeInTheDocument();
   });
 
-  it("the dose check never opens a panel: three call controls, no review region, no buttons in messages", () => {
+  it("the dose check never opens a panel: only the call controls, no review region, no buttons in messages", () => {
     toReview();
     expect(document.querySelector("[data-pinned]")).toBeNull();
     expect(screen.queryByRole("region", { name: /check before sharing/i })).toBeNull();
-    const controls = screen.getAllByRole("button").filter((b) => (b as HTMLButtonElement).type !== "submit"); // the typed input's submit aside
-    expect(controls.map((b) => b.textContent?.trim())).toEqual(["Get help", "Mute", "End call"]);
+    const controls = screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") || b.textContent?.trim());
+    expect(controls).toEqual(["Help", "Send message", "Mute microphone", "End call"]);
   });
 
   it("after a reload mid-call, the start screen is the ordinary one: no notice about the earlier call (owner decision)", () => {

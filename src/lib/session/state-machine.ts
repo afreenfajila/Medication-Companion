@@ -1,4 +1,5 @@
 import { t as translate, type CopyKey } from "@/lib/content/translations";
+import { isVerbatimSubset, cleanLabelWording } from "@/lib/dose-check/label-wording";
 import type { LabelAnalysis } from "@/lib/api/schemas";
 import { resolveExplanation } from "@/lib/content/explanation";
 import { metforminRecord, metforminRecordVersion, patient, recordMedicines, recordSource } from "@/lib/content/seed-record";
@@ -65,6 +66,8 @@ export type DoseCheck = {
   reading: string | null;
   /** Where the current wording came from, shown beside it. */
   labelSource: LabelSource | null;
+  /** She sounded unsure while reading it ("I think two?"): the read-back is gentler. Never a confirmation either way. */
+  readingUnsure?: boolean;
   /** Bumped whenever the label wording changes; a confirmation applies to one revision only. */
   labelRevision: number;
   /** What the person confirmed their box says. Kept apart from the record's own wording. */
@@ -121,7 +124,11 @@ export type DoseAction =
   | { kind: "dont-send" }
   | { kind: "review-summary" };
 
-export type CameraMode = "preview" | "fallback";
+/**
+ * After consent: "ready" offers Take photo and Upload (in the companion's message); "preview" is
+ * the in-app camera, opened only from Take photo; "fallback" is no camera (declined, or failed).
+ */
+export type CameraMode = "ready" | "preview" | "fallback";
 export type CameraIssue = "denied" | "unavailable";
 
 export type Session = {
@@ -139,12 +146,6 @@ export type Session = {
   contextualActions: ContextualActionId[];
   /** True once `Show medicine` was chosen inside the active call. */
   labelRouteSelected: boolean;
-  /**
-   * On the camera-permission step: "choose" asks camera, photo or typing (H2);
-   * "camera" is the existing camera-consent question. Consent is only ever asked
-   * after the person picked "Use camera".
-   */
-  showMethod: "choose" | "camera";
   cameraMode: CameraMode | null;
   /** Why the live camera is not in use (drives the fallback wording). */
   cameraIssue: CameraIssue | null;
@@ -211,10 +212,22 @@ export type SessionEvent =
   | { type: "SET_STUDY_CONDITION"; condition: StudyCondition | null }
   | { type: "CALL_START" }
   /** `via`: typed (exactly what she wrote) or voice (speech recognition). Defaults to voice. */
-  | { type: "USER_MESSAGE"; text: string; via?: "typed" | "voice" }
+  | {
+      type: "USER_MESSAGE";
+      text: string;
+      via?: "typed" | "voice";
+      /** On the "what does your box say?" step: the label wording picked out of `text` by meaning.
+       *  Used only if it is her own words, in order (checked here too); otherwise `text` is cleaned. */
+      labelWording?: string;
+    }
   | { type: "SELECT_ROUTE"; route: ContextualActionId }
   /** "Use camera" on the show-medicine choice: next comes the camera-consent question. */
-  | { type: "CHOOSE_CAMERA" }
+  /** Take photo (or "take a photo"): opens the in-app camera, after consent. */
+  | { type: "OPEN_CAMERA" }
+  /** Cancel in the camera: back to Take photo / Upload. */
+  | { type: "CLOSE_CAMERA" }
+  /** "Show the label" after saying no to the camera: the consent question again. */
+  | { type: "SHOW_LABEL_AGAIN" }
   | { type: "CAMERA_CONSENT"; granted: boolean }
   | { type: "CAMERA_FAILED"; issue: CameraIssue }
   | { type: "SUBMIT_LABEL"; input: LabelInput }
@@ -291,7 +304,6 @@ export function createInitialSession(): Session {
     assistantKey: "callGreeting",
     contextualActions: [],
     labelRouteSelected: false,
-    showMethod: "choose",
     cameraMode: null,
     cameraIssue: null,
     pendingLabel: null,
@@ -479,7 +491,7 @@ function applyRoute(
   };
   if (route === "show-medicine") {
     return withAudit(
-      { ...s, state: "camera-permission", labelRouteSelected: true, showMethod: "choose", contextualActions: [] },
+      { ...s, state: "camera-permission", labelRouteSelected: true, contextualActions: [] },
       ctx,
       audit,
     );
@@ -526,11 +538,16 @@ function newDoseCheck(): DoseCheck {
  * New wording on screen: a new revision, waiting for confirmation. The earlier
  * confirmation and the comparison built on it no longer apply (site-contract §8).
  */
-function withReading(d: DoseCheck, text: string, source: LabelSource): DoseCheck {
+function withReading(d: DoseCheck, text: string, source: LabelSource, picked?: string): DoseCheck {
+  // Her words as she said them, with filler, hedges, repeats and corrected parts removed — never a
+  // word added (label-wording.ts). A camera reading is the fixture's wording, untouched.
+  const cleaned = source === "fixture" ? { wording: text, unsure: false } : cleanLabelWording(text);
+  const wording = picked && isVerbatimSubset(picked, text) ? picked : cleaned.wording;
   return {
     ...d,
     step: "label",
-    reading: text.trim().slice(0, 200),
+    reading: wording.trim().slice(0, 200),
+    readingUnsure: cleaned.unsure,
     labelSource: source,
     labelRevision: d.labelRevision + 1,
     labelText: null,
@@ -983,9 +1000,16 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       // label wording to confirm, not her own medical question. Questions and anything
       // about herself ("I took two by mistake") still go to safety.
       const readingLabel =
-        s.state === "explain" && isMatchConfirmed(s) && s.doseCheck?.step === "label" && looksLikeLabelWording(text);
+        s.state === "explain" &&
+        isMatchConfirmed(s) &&
+        s.doseCheck?.step === "label" &&
+        // Judged on the wording itself: "half a tablet at bedtime? maybe" is a hesitant reading, not a question.
+        looksLikeLabelWording(event.labelWording ?? cleanLabelWording(text).wording);
       if (readingLabel && s.doseCheck) {
-        const read: Session = { ...heard, doseCheck: withReading(s.doseCheck, text, event.via === "typed" ? "typed" : "speech-transcript") };
+        const read: Session = {
+          ...heard,
+          doseCheck: withReading(s.doseCheck, text, event.via === "typed" ? "typed" : "speech-transcript", event.labelWording),
+        };
         return s.doseCheck.labelRevision > 0 ? withAudit(read, ctx, labelCorrected(s.doseCheck.labelRevision + 1)) : read;
       }
 
@@ -1011,7 +1035,10 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         // reading to confirm, never a confirmed label on their own.
         if (s.doseCheck) {
           if (s.doseCheck.step !== "label") return s;
-          const read: Session = { ...heard, doseCheck: withReading(s.doseCheck, text, event.via === "typed" ? "typed" : "speech-transcript") };
+          const read: Session = {
+            ...heard,
+            doseCheck: withReading(s.doseCheck, text, event.via === "typed" ? "typed" : "speech-transcript", event.labelWording),
+          };
           return s.doseCheck.labelRevision > 0 ? withAudit(read, ctx, labelCorrected(s.doseCheck.labelRevision + 1)) : read;
         }
         if (routed.intent === "dose-change") {
@@ -1132,30 +1159,41 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
       return applyRoute(s, ctx, event.route, "button");
     }
 
-    case "CHOOSE_CAMERA": {
-      if (s.state !== "camera-permission" || s.showMethod !== "choose") return s;
-      return { ...s, showMethod: "camera" };
+    case "OPEN_CAMERA": {
+      if (s.state !== "camera-guidance" || s.cameraMode !== "ready") return s;
+      return { ...s, cameraMode: "preview", cameraIssue: null };
+    }
+
+    case "CLOSE_CAMERA": {
+      if (s.state !== "camera-guidance" || s.cameraMode !== "preview") return s;
+      return { ...s, cameraMode: "ready" };
+    }
+
+    case "SHOW_LABEL_AGAIN": {
+      // Only after a "no" to the camera and photos: asked again, never assumed.
+      if (s.state !== "camera-guidance" || s.cameraMode !== "fallback" || s.cameraIssue) return s;
+      return { ...s, state: "camera-permission", cameraMode: null };
     }
 
     case "CAMERA_CONSENT": {
-      // CAMERA_PERMISSION is only reachable via SELECT_ROUTE("show-medicine"), and the
-      // consent question only after the person picked "Use camera".
-      if (s.state !== "camera-permission" || !s.labelRouteSelected || s.showMethod !== "camera") return s;
+      // CAMERA_PERMISSION is only reachable via SELECT_ROUTE("show-medicine"). One question covers
+      // the camera and a photo; a yes only offers Take photo and Upload — the camera opens on a tap.
+      if (s.state !== "camera-permission" || !s.labelRouteSelected) return s;
       if (event.granted) {
         return withAudit(
-          { ...s, state: "camera-guidance", cameraMode: "preview", cameraIssue: null },
+          { ...s, state: "camera-guidance", cameraMode: "ready", cameraIssue: null },
           ctx,
           {
             eventType: "camera-consent-granted",
-            summary: "Camera consent given (local preview only)",
+            summary: "Camera and photo consent given (local preview only)",
             details: { consent: true },
           },
         );
       }
-      // Denial is never a dead end: photo, record-list and typed fallbacks open.
+      // Denial is never a dead end: saying the name and strength still works.
       return withAudit({ ...s, state: "camera-guidance", cameraMode: "fallback", cameraIssue: null }, ctx, {
         eventType: "camera-consent-declined",
-        summary: "Camera declined; photo, record-list and typed fallbacks offered",
+        summary: "Camera and photo declined; saying the name offered",
         route: "local-fallback",
       });
     }
@@ -1177,11 +1215,12 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
 
     case "SUBMIT_LABEL": {
       const input = event.input;
-      // From the camera step, anything. From the show-medicine choice, only what
-      // needs no camera: a chosen photo or typed details (a camera still can't get
-      // here without consent).
-      const noCamera = input.mode === "typed" || (input.mode === "image" && input.source === "upload");
-      if (s.state !== "camera-guidance" && !(s.state === "camera-permission" && noCamera)) return s;
+      // A photo (camera or upload) only after the consent yes; a "no" to photos stays a no.
+      // The name and strength, said or typed, are welcome at either step.
+      const image = input.mode === "image";
+      const declined = s.cameraMode === "fallback" && !s.cameraIssue;
+      if (s.state !== "camera-guidance" && !(s.state === "camera-permission" && input.mode === "typed")) return s;
+      if (image && s.state === "camera-guidance" && declined) return s;
       return withAudit({ ...s, state: "analyzing", pendingLabel: input }, ctx, {
         eventType: "label-submitted",
         summary: "Label submitted for checking",
@@ -1362,7 +1401,6 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         return {
           ...denied,
           state: "camera-permission",
-          showMethod: "choose",
           labelRouteSelected: true,
           candidate: null,
           matchStatus: null,
@@ -1478,7 +1516,8 @@ export function reduceSession(s: Session, event: SessionEvent, ctx: ReduceContex
         state: "camera-guidance",
         safetyReason: null,
         helpFlow: null,
-        cameraMode: s.cameraMode ?? "fallback",
+        // Consent already given: Take photo and Upload again (the camera opens only on a tap).
+        cameraMode: s.cameraMode === "ready" || s.cameraMode === "preview" ? "ready" : "fallback",
         candidate: null,
         matchStatus: null,
       };

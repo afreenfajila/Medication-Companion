@@ -6,7 +6,7 @@ import { sessionStore } from "@/lib/session/session-store";
 import { BrowserVoiceProvider } from "@/lib/voice/browser-voice";
 import { setVoiceProvider } from "@/lib/voice/use-voice";
 import { createFakeSpeech } from "./fake-speech";
-import { chooseCamera, chooseShowMedicine, run, startCall, toConfirmMatch } from "./helpers";
+import { chooseShowMedicine, run, startCall, toConfirmMatch } from "./helpers";
 
 /**
  * Owner reports from live testing:
@@ -17,8 +17,8 @@ import { chooseCamera, chooseShowMedicine, run, startCall, toConfirmMatch } from
 
 const flush = () => act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
 const type = (text: string) => {
-  fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
-  fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+  fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: text } });
+  fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
 };
 const chat = () => [...document.querySelectorAll("[data-transcript] [data-speaker]")].map((el) => `${el.getAttribute("data-speaker")}: ${el.textContent?.replace(/^(Mei Ling says:|Companion says:)/, "")}`);
 
@@ -50,7 +50,7 @@ describe("a pharmacist callback: asked in words, checked, then sent by an explic
   it("the question is a line in the chat, with no card or buttons", () => {
     atHelpScreen();
     render(<CompanionExperience />);
-    fireEvent.click(screen.getByRole("button", { name: "Ask a pharmacist to call me" }));
+    type("ask a pharmacist to call me");
     expect(chat().at(-1)).toBe(`companion: ${t("en", "callbackConfirm")}`);
     expect(screen.queryByRole("button", { name: /yes, send the request|not now/i })).toBeNull();
     expect(document.querySelector("[data-pinned]")).toBeNull();
@@ -59,7 +59,7 @@ describe("a pharmacist callback: asked in words, checked, then sent by an explic
   it("'yes' opens the review: exactly what is sent; a plain yes doesn't send, an explicit 'send' does", async () => {
     atHelpScreen();
     render(<CompanionExperience />);
-    fireEvent.click(screen.getByRole("button", { name: "Ask a pharmacist to call me" }));
+    type("ask a pharmacist to call me");
     type("yes please");
     await flush();
     expect(posts.filter((p) => p.url === "/api/help/request")).toHaveLength(0); // nothing sent by "yes"
@@ -98,7 +98,7 @@ describe("a pharmacist callback: asked in words, checked, then sent by an explic
   it("'don't send' (said or tapped) closes the review with nothing sent", async () => {
     atHelpScreen();
     render(<CompanionExperience />);
-    fireEvent.click(screen.getByRole("button", { name: "Ask a pharmacist to call me" }));
+    type("ask a pharmacist to call me");
     type("yes");
     type("don't send it");
     await flush();
@@ -128,7 +128,7 @@ describe("the chat captures the whole conversation", () => {
   });
 
   it("a step's own line goes into the chat once she answers — in its place, and never twice", () => {
-    sessionStore.setForTest(run([startCall, { type: "USER_MESSAGE", text: "What is this for?", via: "typed" }, chooseShowMedicine, chooseCamera]));
+    sessionStore.setForTest(run([startCall, { type: "USER_MESSAGE", text: "What is this for?", via: "typed" }, chooseShowMedicine]));
     render(<CompanionExperience />);
     const question = t("en", "cameraPermissionHeading");
     expect(screen.getAllByText(new RegExp(question.slice(0, 20)))).toHaveLength(1); // in its panel only, for now
@@ -141,7 +141,7 @@ describe("the chat captures the whole conversation", () => {
   });
 
   it("words a step doesn't take are still shown (nothing she says disappears)", () => {
-    sessionStore.setForTest(run([startCall, { type: "USER_MESSAGE", text: "What is this for?", via: "typed" }, chooseShowMedicine, chooseCamera]));
+    sessionStore.setForTest(run([startCall, { type: "USER_MESSAGE", text: "What is this for?", via: "typed" }, chooseShowMedicine]));
     render(<CompanionExperience />);
     type("the weather is lovely today");
     expect(chat()).toContain("user: the weather is lovely today");

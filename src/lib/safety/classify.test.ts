@@ -108,14 +108,24 @@ describe("escalation view", () => {
     },
   );
 
-  it.each(["service-failure", "unsupported-medical-question", "help-requested"] as const)(
-    "%s keeps its original copy",
-    (reason) => {
-      const view = buildEscalation(reason, true);
-      expect(view.headingKey).toBe("safetyHeading");
-      expect(view.bodyKey).toBe("safetyBody");
-    },
-  );
+  it.each(["service-failure", "unsupported-medical-question"] as const)("%s keeps its original copy", (reason) => {
+    const view = buildEscalation(reason, true);
+    expect(view.headingKey).toBe("safetyHeading");
+    expect(view.bodyKey).toBe("safetyBody");
+    expect(view.noInstructionsKey).toBe("reasonNoInstructions");
+  });
+
+  it("asking for a person is met as a request, not as 'not sure enough' (owner decision, 13 October 2026)", () => {
+    const view = buildEscalation("help-requested", true);
+    expect(view).toMatchObject({ headingKey: "helpRequestedHeading", bodyKey: "helpRequestedBody", reasonKey: null, noInstructionsKey: null, askKey: "safetyAsk" });
+  });
+
+  it("the closing question names only the ways on that exist", () => {
+    expect(buildEscalation("unreadable-label", true, true).askKey).toBe("safetyAskRetry");
+    expect(buildEscalation("unreadable-label", true, false).askKey).toBe("safetyAsk");
+    expect(buildEscalation("label-differs", true).askKey).toBe("safetyAsk");
+    expect(buildEscalation("urgent-risk", true).askKey).toBeNull();
+  });
 
   it("urgent escalation is flagged and offers no actions until amendment I is done", () => {
     const view = buildEscalation("urgent-risk", true);

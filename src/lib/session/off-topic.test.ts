@@ -75,7 +75,7 @@ describe("spine redirection inside routeMessage", () => {
     expect(r.assistantKey).toBe("offTopicCapability");
     const copy = t("en", "offTopicCapability");
     expect(copy).toMatch(/can’t do that myself/i);
-    expect(copy).toMatch(/Get help/);
+    expect(copy).toMatch(/“help”/); // said, or the Help pill
   });
 
   it("SAFETY ALWAYS WINS: safety-classified input never receives a friendly redirect", () => {

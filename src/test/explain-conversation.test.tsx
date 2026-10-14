@@ -152,8 +152,8 @@ describe("asking for a pharmacist callback before any medicine is checked", () =
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: true, data: { enabled: false }, requestId: "r" }))));
     sessionStore.setForTest(run([{ type: "CALL_START" }]));
     render(<CompanionExperience />);
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "Can you help me to draft a message to pharmacies for callback?" } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: "Can you help me to draft a message to pharmacies for callback?" } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
     expect(screen.getByText(t("en", "callbackConfirm"))).toBeInTheDocument();
     expect(sessionStore.getSnapshot().helpFlow?.stage).toBe("confirm");
     expect(vi.mocked(fetch).mock.calls.some(([u]) => u === "/api/help/request")).toBe(false);
@@ -265,8 +265,8 @@ describe("in the call", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const type = (text: string) => {
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: text } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
   };
 
   it("'what should the next dosage be?' gets a real answer in the transcript, and the explanation doesn't move", () => {
@@ -310,8 +310,8 @@ describe("when the fixed phrases don't match: Claude works out the meaning", () 
     return calls;
   }
   const type = (text: string) => {
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: text } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: text } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
   };
   const atStep1 = () => run([{ type: "EXPLAIN_STEP", direction: "next" }], toExplain());
   async function settle() {

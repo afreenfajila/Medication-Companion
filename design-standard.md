@@ -77,9 +77,19 @@ Small utilities may include:
 Use one continuous call. Each step is a message in that conversation
 (amended 13 October 2026): the label check, the comparison, the callback
 summary and its outcome are companion messages with short headings and
-dividers, not panels, sheets or pop-ups. A contextual panel remains only
-where a tap is needed: the opening route choice, camera permission and
-guidance, and the safety pathway.
+dividers, not panels, sheets or pop-ups. Getting a person (the safety
+pathway) is a message too, ending with a question that names only the
+options that exist here (another photo, a pharmacist, family), answered
+in words. Showing the medicine is one consent question in the
+conversation (camera or a photo; “I’ll only look at the medicine name,
+and the photo won’t be kept”; “Is that okay with you?”), answered in
+words — “okay”, “sure”, “no problem” are a yes here (amended 14 October 2026). Only after a clear yes do two small
+buttons appear inside that companion message: “Take photo” (opens the
+in-app camera) and “Upload” (the phone's picker, which can't open from
+speech). With the camera off or missing, “Upload” alone. They go once a
+photo is sent or the conversation moves on; “show the label” brings them
+back. The open camera has its own capture, flip and close. The name and
+strength can always be said or typed instead.
 
 Do not create separate pages or mandatory Next buttons for
 routine conversational turns.
@@ -366,30 +376,38 @@ An active call contains (amended 12 October 2026 at the owner's direction,
 docs/decisions.md "Active-call controls"):
 
 1. Compact header: identity and the demo-record label
-   (“BrightCare Pharmacy record (fictional)”). The record's full
+   (“ⓘ BrightCare Pharmacy record · fictional”, one line of plain muted text, amended 14 October 2026). The record's full
    source and date sit in the record's own messages, so the header
    never reads as a pharmacist having checked what is being said
    (amended 13 October 2026).
 2. The companion orb (compact) and one short, accurate status line
    (“Listening…”, “Speaking…”). Interruption is advertised only
    while the mic really is open during playback.
-3. The conversation transcript, in order, every turn readable,
-   newest brought into view only while the person is at the bottom.
-   Consecutive messages from one speaker share a label. A small
-   “Latest message” control appears between the transcript and the
-   controls, never over the text, only when scrolled up.
-4. At most one contextual panel, only where a tap is needed (opening
-   route choice, camera, safety). The dose check, the callback review
-   and the outcome are messages in the transcript, with no buttons
-   (amended 13 October 2026).
-5. A compact text box only when typing is needed (muted, no speech
-   input, a paused mic) or asked for (Get help → Type instead).
-6. Exactly three persistent controls: Get help, Mute/Unmute, End call.
+3. The conversation transcript, in order, every turn readable. A new
+   message is always brought into view (there is no “Latest message”
+   control); live words and status follow only while the person is at
+   the bottom. Consecutive messages from one speaker share a label.
+4. One panel, only while the in-app camera is open (capture, flip,
+   close). Everything else, including showing the medicine, the dose
+   check, the callback review, the outcome and getting a person, is a
+   message in the transcript (amended 13–14 October 2026). The only
+   buttons inside a message are “Take photo” / “Upload”, after consent.
+5. One control row (amended 14 October 2026, owner brief “voice/text
+   only”): the message pill (56px, fully rounded; “Type a message…”;
+   a 48px send arrow inside, disabled until text; Enter sends), the mic
+   (56px round, light fill; muted = slashed mic on a light teal tint,
+   never solid navy; `aria-pressed`), and End call (56px round, solid
+   red, hang-up icon) — 12px apart, one row at every width, no
+   dividers. End call is the row's only solid control.
+6. Help in the header, top right: an outline pill (“?” + “Help”, 40px
+   tall in a 48px target), the same as saying “help”.
 
-Repeat, typing, the interrupt-by-voice setting and About are one tap
-away in the Get help sheet; Repeat, Try again and Tap to talk also
-appear by themselves when recovery needs them. The transcript is not
-collapsed behind an "Earlier in this call" control.
+Every other action is said or typed, the same words either way:
+“repeat”, “stop interrupting me” / “let me interrupt”, “listen again”
+(a paused or muted mic, also the mic button), “show pharmacy contact”,
+“try again”, “send the request”. The disclosure stays in small muted
+text under the control row. About is on the start screen. The
+transcript is not collapsed behind an "Earlier in this call" control.
 
 Reviewer scenario controls belong outside this structure.
 
@@ -619,8 +637,7 @@ Row labels (amended 13 October 2026, shown in small uppercase):
 A new summary (and each updated version) is brought into view at its
 first line, not its last. Live words, status changes and playback do
 not move the view while it is being read. Her own scrolling always
-wins; her next turn brings the conversation on. “Latest message” stays
-outside the messages.
+wins; her next turn brings the conversation on.
 
 ### Actions (amended 13 October 2026)
 
@@ -765,6 +782,22 @@ No actionable dose recommendation appears.
 - No decorative delay.
 - Preserve existing approved safety information.
 - Do not invent new clinical rules during visual implementation.
+- In the call (amended 13 October 2026): a companion message with the
+  danger treatment (red border and tint, the only red in the call),
+  announced at once (role="alert"), kept in the history. Crisis
+  numbers stay as text. A plain yes or no does not move past it.
+
+### Getting a person (amended 13 October 2026)
+
+One companion message, as short paragraphs: what happened, that no
+instructions will be shown until it is sure, and a question naming only
+the real options (“Would you like to try another photo, have a pharmacist
+call you, or let your family know? Or we can just carry on talking.”).
+“Yes” or “not sure” is asked which, gently; “no thanks” carries on;
+“a pharmacist”, “tell my son” start that request, which still asks and
+is reviewed before anything is sent. Asking for a person is met as a
+request (“Of course — let’s get you some help.”), not as “not sure
+enough”.
 
 “Gentle” must not mean vague or difficult to act on.
 

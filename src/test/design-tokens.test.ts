@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { contrastRatio } from "@/lib/utils/contrast";
 
 // Reads the REAL tokens from globals.css so a palette change that breaks contrast fails here.
-const css = readFileSync("src/styles/globals.css", "utf8");
+// Windows checkouts (core.autocrlf) turn "\n" into "\r\n"; the checks below match on "\n".
+const css = readFileSync("src/styles/globals.css", "utf8").replace(/\r\n/g, "\n");
 const token = (name: string): string => {
   const m = css.match(new RegExp(`--color-${name}:\\s*(#[0-9a-fA-F]{6})`));
   if (!m) throw new Error(`token ${name} not found`);

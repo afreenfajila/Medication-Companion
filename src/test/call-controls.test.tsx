@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,12 +10,13 @@ import { BrowserVoiceProvider } from "@/lib/voice/browser-voice";
 import { setVoiceAdaptersForTest, setVoiceProvider } from "@/lib/voice/use-voice";
 import { FakeCapture, FakeDetector, FakeSpeechAdapter, FakeTranscription, flush, frame } from "./fake-audio";
 import { createFakeSpeech } from "./fake-speech";
-import { chooseCamera, chooseShowMedicine, grantCamera, resolve, run, startCall, submitDemo } from "./helpers";
+import { chooseShowMedicine, grantCamera, resolve, run, startCall, submitDemo } from "./helpers";
 
 /**
- * The active call, as a calm phone call: three persistent controls (Get help,
- * Mute, End call); everything else contextual, automatic, or one tap away in
- * the Get help sheet; the whole transcript readable.
+ * The active call, as an AI voice call (owner decision, 14 October 2026): Help in the header,
+ * one control row (message pill + send arrow, mic, End call), and every other action said or
+ * typed. The only other buttons are Take photo / Upload inside a companion message after a
+ * consent yes, and the open camera's own controls. The whole transcript stays readable.
  */
 
 function install(opts?: Parameters<typeof createFakeSpeech>[0]) {
@@ -42,10 +43,15 @@ function startHealthyCall(fake: ReturnType<typeof createFakeSpeech>) {
   act(() => fake.utterances.at(-1)?.onend?.());
   tick();
 }
-const buttonNames = () => screen.getAllByRole("button").map((b) => b.textContent?.trim());
-const muteButton = () => screen.getByRole("button", { name: /^(mute|unmute)$/i });
-const openHelp = () => fireEvent.click(screen.getByRole("button", { name: /^get help$/i }));
-const sheet = () => within(screen.getByRole("dialog"));
+/** Every button on screen, by accessible name (icon buttons have no visible words). */
+const buttonNames = () => screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") || b.textContent?.trim());
+const CALL_CONTROLS = ["Help", "Send message", "Mute microphone", "End call"];
+const muteButton = () => screen.getByRole("button", { name: /^(mute|unmute) microphone$/i });
+const helpPill = () => screen.getByRole("button", { name: /^help$/i });
+const type = (words: string) => {
+  fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: words } });
+  fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
+};
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -59,44 +65,50 @@ afterEach(() => {
 });
 
 describe("persistent call controls", () => {
-  it("a normal call shows exactly three controls: Get help, Mute, End call — no links, no text box", () => {
+  it("a normal call shows only Help, the message pill (with its send arrow), the mic and End call", () => {
     const fake = install();
     render(<CompanionExperience />);
     startHealthyCall(fake);
     expect(fake.recognitions[0].started).toBe(true); // a healthy, listening call
-    expect(buttonNames()).toEqual(["Get help", "Mute", "End call"]);
-    expect(screen.queryAllByRole("link")).toHaveLength(0); // About is in the Get help sheet during a call
-    expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.queryByRole("button", { name: /show medicine|repeat|type instead|interrupt|show choices|earlier/i })).toBeNull();
-    // The disclosure words stay on screen.
+    expect(buttonNames()).toEqual(CALL_CONTROLS);
+    expect(screen.queryAllByRole("link")).toHaveLength(0); // About is on the start screen
+    expect(screen.getAllByRole("textbox")).toHaveLength(1); // the pill: always there, typing works like speech
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled(); // until something is typed
+    expect(screen.queryByText("Say it, or type it here")).toBeNull();
+    expect(screen.queryByRole("button", { name: /show medicine|repeat|type instead|interrupt|latest message|get help/i })).toBeNull();
+    // The disclosure words stay on screen, under the controls.
     expect(screen.getByText("AI guide · Not a pharmacist or doctor")).toBeInTheDocument();
   });
 
-  it("Mute's accessible name is its visible word (Mute ↔ Unmute, no aria-pressed); each change is announced politely", () => {
+  it("the mic: 'Mute microphone' ↔ 'Unmute microphone' with aria-pressed; each change is announced politely", () => {
     const fake = install();
     render(<CompanionExperience />);
     startHealthyCall(fake);
     const status = () => screen.getAllByRole("status").find((el) => el.getAttribute("aria-live") === "polite" && !el.closest("[data-transcript]"))!;
-    expect(muteButton()).toHaveAccessibleName("Mute");
-    expect(muteButton()).not.toHaveAttribute("aria-pressed");
+    expect(muteButton()).toHaveAccessibleName("Mute microphone");
+    expect(muteButton()).toHaveAttribute("aria-pressed", "false");
+    expect(muteButton().querySelector(".lucide-mic")).not.toBeNull();
 
     fireEvent.click(muteButton());
-    expect(muteButton()).toHaveAccessibleName("Unmute");
-    expect(muteButton()).toHaveTextContent("Unmute"); // name = visible label
-    expect(muteButton()).not.toHaveAttribute("aria-pressed");
-    expect(status()).toHaveTextContent(/^Muted\. Type below, or tap Unmute\./);
+    expect(muteButton()).toHaveAccessibleName("Unmute microphone");
+    expect(muteButton()).toHaveAttribute("aria-pressed", "true");
+    expect(muteButton().querySelector(".lucide-mic-off")).not.toBeNull(); // slashed mic
+    expect(muteButton().className).toMatch(/bg-teal-100/); // a light tint, never solid navy
+    expect(muteButton().className).not.toMatch(/bg-navy-900/);
+    expect(status()).toHaveTextContent(/^Muted\. Type below, or tap the microphone to unmute\./);
 
     fireEvent.click(muteButton());
-    expect(muteButton()).toHaveAccessibleName("Mute");
+    expect(muteButton()).toHaveAccessibleName("Mute microphone");
     expect(status()).toHaveTextContent("Unmuted. I can hear you again."); // said once…
     tick(); // …until the mic opens and the status moves on
     expect(status()).toHaveTextContent(/^Listening…$/);
-    fireEvent.click(muteButton()); // and back to muted, to check typing below
-    expect(screen.getByLabelText(/type it here/i)).toBeInTheDocument();
+    fireEvent.click(muteButton());
     // Captions keep working while muted: a typed question still gets its visible reply.
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "What is this for?" } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    type("What is this for?");
     expect(screen.getByText(/Let’s check this together/)).toBeInTheDocument();
+    // And typing can unmute too.
+    type("turn the mic back on");
+    expect(muteButton()).toHaveAccessibleName("Mute microphone");
   });
 
   it("muted, no audio reaches transcription, no voice turn is committed, and talking does not interrupt", async () => {
@@ -137,7 +149,8 @@ describe("persistent call controls", () => {
     expect(detector.stops).toBeGreaterThan(0);
     expect(transcription.disconnects).toBeGreaterThan(0);
     expect(speech.disconnects).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /^(get help|mute|end call)$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^(mute microphone|end call)$/i })).toBeNull();
+    expect(screen.queryByLabelText(/type a message/i)).toBeNull();
   });
 
   it("End call aborts pending model work for the call", async () => {
@@ -158,8 +171,8 @@ describe("persistent call controls", () => {
     render(<CompanionExperience />); // no speech input: typing is open
     fireEvent.click(callButton());
     await act(async () => flush());
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "i dont know what to do" } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: "i dont know what to do" } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
     await act(async () => flush());
     expect(understandSignal?.aborted).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: /^end call$/i }));
@@ -170,10 +183,10 @@ describe("persistent call controls", () => {
     const onEnd = vi.fn();
     render(
       <CallFooter
-        labels={{ group: "Call", help: "Get help", mute: "Mute", unmute: "Unmute", end: "End call" }}
+        labels={{ group: "Call", message: "Type a message", placeholder: "Type a message…", send: "Send message", mic: "Mute microphone", end: "End call" }}
+        onSend={() => undefined}
         muted={false}
-        onHelp={() => undefined}
-        onToggleMute={() => undefined}
+        onMic={() => undefined}
         onEnd={onEnd}
       />,
     );
@@ -183,52 +196,57 @@ describe("persistent call controls", () => {
     expect(onEnd).toHaveBeenCalledTimes(1);
   });
 
-  it("End call is not colour alone: it has its own icon and the word 'End'", () => {
+  it("End call is not colour alone: hang-up icon and an accessible name; it is the row's only solid control", () => {
     install();
     render(<CompanionExperience />);
     fireEvent.click(callButton());
     const end = screen.getByRole("button", { name: /^end call$/i });
     expect(end.querySelector(".lucide-phone-off")).not.toBeNull();
-    expect(end).toHaveTextContent("End call");
+    expect(end.className).toMatch(/bg-danger-800 text-white/);
+    const row = screen.getByRole("navigation", { name: "Medication Companion" });
+    const solid = [...row.querySelectorAll("button")].filter((b) => /\bbg-(navy-900|danger-800)\b/.test(b.className));
+    expect(solid).toEqual([end]);
   });
 });
 
 describe("contextual controls appear only when they apply", () => {
-  it("Show medicine is absent at the start of a call and appears once the companion asks to see it", () => {
+  it("no Show medicine button: the companion asks in words, and a yes asks for consent — still no buttons", () => {
     const fake = install();
     render(<CompanionExperience />);
     startHealthyCall(fake);
-    expect(screen.queryByRole("button", { name: /show medicine/i })).toBeNull();
     act(() => fake.recognitions.at(-1)!.say("What is this for?", true));
-    expect(screen.getByText(/Let’s check this together/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /show medicine/i })).toBeInTheDocument();
-    // Still the only contextual action, and never a row of suggestions.
-    expect(buttonNames()).toEqual(["Show medicine", "Get help", "Mute", "End call"]);
+    expect(screen.getByText(/Would you like to show me the medicine label\?/)).toBeInTheDocument();
+    expect(buttonNames()).toEqual(CALL_CONTROLS);
+    type("yes");
+    expect(sessionStore.getSnapshot().state).toBe("camera-permission");
+    expect(screen.getByText(t("en", "cameraPurpose"))).toBeInTheDocument(); // what to say: "yes" or "no"
+    expect(buttonNames()).toEqual(CALL_CONTROLS);
   });
 
-  it("the text box is absent in a healthy call and opens from Get help → Type instead (and closes again)", () => {
+  it("the message pill: the send arrow is disabled until text is typed; Enter sends through the same path as speech", () => {
     const fake = install();
     render(<CompanionExperience />);
     startHealthyCall(fake);
-    expect(screen.queryByRole("textbox")).toBeNull();
-    openHelp();
-    fireEvent.click(sheet().getByRole("button", { name: /type instead/i }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    const box = screen.getByLabelText(/type it here/i);
-    tick(1);
-    expect(document.activeElement).toBe(box); // ready to type
-    expect(screen.getAllByRole("textbox")).toHaveLength(1); // one compact composer
-    fireEvent.click(screen.getByRole("button", { name: /close typing/i }));
-    expect(screen.queryByRole("textbox")).toBeNull();
+    const box = screen.getByLabelText(/type a message/i);
+    expect(box).toHaveAttribute("placeholder", "Type a message…");
+    expect(box.className).toMatch(/text-\[17px\]/); // ≥16 px
+    const arrow = screen.getByRole("button", { name: "Send message" });
+    expect(arrow).toBeDisabled();
+    fireEvent.change(box, { target: { value: "What is this for?" } });
+    expect(arrow).toBeEnabled();
+    fireEvent.submit(box.closest("form")!); // Enter submits the form
+    expect(screen.getByText(/Let’s check this together/)).toBeInTheDocument();
+    expect(box).toHaveValue("");
   });
 
-  it("Tap to talk appears only without local speech detection (push-to-talk), never otherwise", async () => {
+  it("push-to-talk (no local speech detection): the mic button talks and sends; otherwise it mutes", async () => {
     install();
     installRealtime({ vad: true });
     const { unmount } = render(<CompanionExperience />);
     fireEvent.click(callButton());
     await act(async () => flush());
     expect(screen.queryByRole("button", { name: /tap to (talk|send)/i })).toBeNull();
+    expect(muteButton()).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^end call$/i }));
     unmount();
 
@@ -236,52 +254,52 @@ describe("contextual controls appear only when they apply", () => {
     render(<CompanionExperience />);
     fireEvent.click(callButton());
     await act(async () => flush());
-    expect(screen.getByRole("button", { name: /tap to talk/i })).toBeInTheDocument();
-    fireEvent.click(muteButton());
-    expect(screen.queryByRole("button", { name: /tap to (talk|send)/i })).toBeNull(); // not while muted
+    expect(screen.getByRole("button", { name: /tap to talk/i })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("Repeat appears only after the voice failed mid-line (or from Get help), not in a healthy call", async () => {
+  it("after the voice failed mid-line, the status says to say 'repeat'; saying or typing it re-says the line slowly", async () => {
     install();
     const { speech } = installRealtime();
     render(<CompanionExperience />);
     fireEvent.click(callButton());
     await act(async () => flush());
     act(() => speech.started());
-    expect(screen.queryByRole("button", { name: /repeat/i })).toBeNull();
     act(() => speech.breakMidLine());
-    expect(screen.getByRole("button", { name: /repeat/i })).toBeInTheDocument();
-    tick(1000); // listening again: Repeat stays offered until the companion speaks again
-    fireEvent.click(screen.getByRole("button", { name: /repeat/i }));
-    expect(speech.requests.at(-1)).toMatchObject({ slow: true });
-    act(() => speech.started());
+    expect(screen.getByText(/say or type “repeat” to hear them again/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /repeat/i })).toBeNull();
+    tick(1000);
+    type("repeat");
+    expect(speech.requests.at(-1)).toMatchObject({ slow: true });
   });
 
-  it("Try again appears only after listening paused, and resumes it", () => {
+  it("after listening paused, the mic button turns it back on (and typing 'listen again' does too)", () => {
     const fake = install();
     render(<CompanionExperience />);
     startHealthyCall(fake);
-    expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
     act(() => fake.recognitions.at(-1)!.fail("network"));
-    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/type it here/i)).toBeInTheDocument(); // typing offered meanwhile
+    expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
+    const mic = screen.getByRole("button", { name: "Turn microphone back on" });
     const before = fake.recognitions.length;
-    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+    fireEvent.click(mic);
     tick();
     expect(fake.recognitions.length).toBeGreaterThan(before);
-    expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
+    expect(muteButton()).toHaveAccessibleName("Mute microphone");
+
+    act(() => fake.recognitions.at(-1)!.fail("network"));
+    const again = fake.recognitions.length;
+    type("listen again");
+    tick();
+    expect(fake.recognitions.length).toBeGreaterThan(again);
   });
 });
 
-describe("the Get help sheet", () => {
+describe("Help, and what used to be in its sheet", () => {
   function toCallbackReview() {
     const s = run([
       { type: "SET_DOSE_SCENARIO", scenario: "conflict-sent" },
       startCall,
       { type: "USER_MESSAGE", text: "My doctor changed my medicine, but this box still says the old amount. How many should I take now?", via: "typed" },
       chooseShowMedicine,
-      chooseCamera,
       grantCamera,
       submitDemo(),
       resolve,
@@ -296,55 +314,58 @@ describe("the Get help sheet", () => {
   }
   const reviewIntro = "I’ve prepared a short summary for the pharmacist.";
 
-  it("opening and closing it sends nothing and changes nothing — not even a reviewed callback's approval", () => {
+  it("Help is the same as saying 'help': it opens getting a person, and sends nothing — not even a reviewed summary", () => {
     const fetchFn = vi.fn(async () => Promise.reject(new Error("offline")));
     vi.stubGlobal("fetch", fetchFn);
     toCallbackReview();
     expect(screen.getByText(reviewIntro)).toBeInTheDocument();
-    const before = sessionStore.getSnapshot();
     const calls = fetchFn.mock.calls.length;
-
-    const opener = screen.getByRole("button", { name: /^get help$/i });
-    opener.focus();
-    fireEvent.click(opener);
-    expect(screen.getByRole("dialog", { name: "Get help" })).toBeInTheDocument();
-    expect(sessionStore.getSnapshot()).toBe(before); // the very same session object: nothing dispatched
+    fireEvent.click(helpPill());
+    expect(sessionStore.getSnapshot().state).toBe("safety");
+    expect(sessionStore.getSnapshot().doseCheck?.callback?.status).not.toBe("submitting");
+    expect(sessionStore.getSnapshot().doseCheck?.callback?.status).not.toBe("submitted");
     expect(fetchFn.mock.calls.length).toBe(calls);
-
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(document.activeElement).toBe(opener); // focus comes back to where it was
-    expect(sessionStore.getSnapshot()).toBe(before);
-    expect(sessionStore.getSnapshot().doseCheck?.callback?.status).toBe("reviewing");
+    expect(screen.queryByRole("dialog")).toBeNull(); // no sheet
   });
 
-  it("holds the moved actions: a person, Repeat, Type instead, the interrupt setting and About", async () => {
+  it("the moved actions are words: 'repeat', and the interrupt setting", async () => {
     install();
-    installRealtime(); // full duplex: the interrupt setting applies
+    const { speech } = installRealtime(); // full duplex: the interrupt setting applies
     render(<CompanionExperience />);
     fireEvent.click(callButton());
     await act(async () => flush());
-    openHelp();
-    expect(sheet().getByRole("button", { name: "Get help from a person" })).toBeInTheDocument();
-    expect(sheet().getByRole("button", { name: /repeat slowly/i })).toBeInTheDocument();
-    expect(sheet().getByRole("button", { name: /type instead/i })).toBeInTheDocument();
-    expect(sheet().getByRole("link", { name: "About this prototype" })).toHaveAttribute("href", "/about");
-    // The words carry the state, so no aria-pressed on top of a changing label.
-    const toggle = sheet().getByRole("button", { name: /interrupt by voice: on/i });
-    expect(toggle).not.toHaveAttribute("aria-pressed");
-    fireEvent.click(toggle);
-    expect(sheet().getByRole("button", { name: /interrupt by voice: off/i })).not.toHaveAttribute("aria-pressed");
+    act(() => speech.started());
+    act(() => speech.ended());
+    tick(1000);
+    type("please stop interrupting");
+    act(() => speech.started()); // its words show as its voice starts
+    expect(screen.getByText(t("en", "voiceInterruptOff"))).toBeInTheDocument();
+    act(() => speech.ended());
+    type("let me interrupt");
+    act(() => speech.started());
+    expect(screen.getByText(t("en", "voiceInterruptOn"))).toBeInTheDocument();
+    act(() => speech.ended());
+    type("say that again");
+    expect(speech.requests.at(-1)).toMatchObject({ slow: true });
   });
 
-  it("'Get help from a person' opens the existing guarded help step (pharmacist, clinic… each confirmed first)", () => {
+  it("the Help pill opens the existing guarded help step (pharmacist, family… each confirmed first)", () => {
     const fake = install();
     render(<CompanionExperience />);
     startHealthyCall(fake);
-    openHelp();
-    fireEvent.click(sheet().getByRole("button", { name: "Get help from a person" }));
+    expect(helpPill().querySelector(".lucide-circle-help")).not.toBeNull(); // "?" icon + the word
+    expect(helpPill()).toHaveTextContent("Help");
+    fireEvent.click(helpPill());
     expect(sessionStore.getSnapshot().state).toBe("safety");
     expect(sessionStore.getSnapshot().helpFlow).toBeNull(); // nothing requested yet
-    expect(screen.getByRole("button", { name: /pharmacist/i })).toBeInTheDocument();
+    // Asked in the conversation, answered in words: "pharmacist, or family?"
+    expect(screen.getByText(t("en", "helpRequestedHeading"))).toBeInTheDocument();
+    expect(screen.getByText(t("en", "safetyAsk"))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /pharmacist/i })).toBeNull();
+    fireEvent.click(helpPill()); // already there: said again, nothing new requested
+    expect(sessionStore.getSnapshot().helpFlow).toBeNull();
+    type("help");
+    expect(sessionStore.getSnapshot().state).toBe("safety");
   });
 
   it("no Send button anywhere: the review says how to send, and only there", () => {
@@ -361,7 +382,7 @@ describe("the Get help sheet", () => {
     // The summary is a message in the conversation, not a panel with its own buttons.
     expect(document.querySelector("[data-pinned]")).toBeNull();
     expect(document.querySelector("[data-transcript] button")).toBeNull();
-    expect(buttonNames().filter((n) => n !== "Send")).toEqual(["Get help", "Mute", "End call"]); // "Send" is the typed input's submit
+    expect(buttonNames()).toEqual(CALL_CONTROLS);
   });
 });
 
@@ -392,7 +413,7 @@ describe("the transcript", () => {
     }
   });
 
-  it("a person re-reading earlier turns is not pulled down; 'Latest message' appears and takes them back", () => {
+  it("no 'Latest message' button: a new message always comes into view, even after scrolling up", () => {
     const fake = install();
     render(<CompanionExperience />);
     startHealthyCall(fake);
@@ -404,73 +425,61 @@ describe("the transcript", () => {
     Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 500 });
     scroller.scrollTop = 200;
     fireEvent.scroll(scroller);
-    expect(screen.getByRole("button", { name: "Latest message" })).toBeInTheDocument();
-
-    act(() => fake.recognitions.at(-1)!.say("What is this for?", true));
-    expect(scrollIntoView).not.toHaveBeenCalled(); // their place is kept
-
-    // The control sits outside the messages, never over the text.
-    expect(screen.getByRole("button", { name: "Latest message" }).closest("[data-transcript]")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Latest message" }));
-    expect(scroller.scrollTop).toBe(2000); // taken to the end
     expect(screen.queryByRole("button", { name: "Latest message" })).toBeNull();
-    // Back at the bottom, the conversation follows new turns again.
-    act(() => fake.utterances.at(-1)?.onend?.());
-    tick();
-    act(() => fake.recognitions.at(-1)!.say("What is it for?", true));
-    expect(scrollIntoView).toHaveBeenCalled();
+    act(() => fake.recognitions.at(-1)!.say("What is this for?", true));
+    expect(scrollIntoView).toHaveBeenCalled(); // taken to the newest message
     // @ts-expect-error restore jsdom's missing method
     delete Element.prototype.scrollIntoView;
   });
 
-  it("keyboard order follows the screen: contextual action, text box, then Get help, Mute, End call", () => {
+  it("keyboard order follows the screen: Help, Take photo, Upload, the message box, send, mic, End call", () => {
     const fake = install();
     render(<CompanionExperience />);
     startHealthyCall(fake);
     act(() => fake.recognitions.at(-1)!.say("What is this for?", true));
-    fireEvent.click(muteButton()); // typing opens
-    const order = [...document.querySelectorAll<HTMLElement>("button, input, a[href]")]
-      .filter((el) => !el.closest("dialog:not([open])"))
-      .map((el) => el.getAttribute("aria-label") || el.textContent?.trim() || (el as HTMLInputElement).placeholder);
-    expect(order).toEqual(["Show medicine", "Type your answer or question", "Send", "Get help", "Unmute", "End call"]);
+    type("yes"); // show the label
+    type("yes"); // consent: Take photo and Upload appear in the companion's message
+    const order = [...document.querySelectorAll<HTMLElement>("button, input:not([type=file]), a[href]")].map(
+      (el) => el.getAttribute("aria-label") || el.textContent?.trim() || (el as HTMLInputElement).placeholder,
+    );
+    expect(order).toEqual(["Help", "Take photo", "Upload", "Type a message", "Send message", "Mute microphone", "End call"]);
   });
 });
 
 describe("labels fit narrow screens", () => {
-  it("call-control labels are short in English and Simplified Chinese, and may wrap rather than clip", () => {
+  it("one row at any width: the pill shrinks, the 56 px round buttons don't; Help is a short word", () => {
     for (const language of ["en", "zh-Hans"] as const) {
-      for (const key of ["getHelp", "mute", "unmute", "endCall"] as const) {
-        const label = t(language, key);
-        // ≈ what fits a third of a 320 px screen at 16 px: no truncation needed.
-        expect([...label].length, `${language} ${key}`).toBeLessThanOrEqual(language === "en" ? 9 : 4);
-      }
+      expect([...t(language, "help")].length, `${language} help`).toBeLessThanOrEqual(language === "en" ? 6 : 3);
     }
     render(
       <CallFooter
-        labels={{ group: "Call", help: t("zh-Hans", "getHelp"), mute: t("zh-Hans", "mute"), unmute: t("zh-Hans", "unmute"), end: t("zh-Hans", "endCall") }}
+        labels={{ group: "Call", message: t("zh-Hans", "typeLabel"), placeholder: t("zh-Hans", "typePlaceholder"), send: t("zh-Hans", "send"), mic: t("zh-Hans", "mute"), end: t("zh-Hans", "endCall") }}
+        onSend={() => undefined}
         muted
-        onHelp={() => undefined}
-        onToggleMute={() => undefined}
+        onMic={() => undefined}
         onEnd={() => undefined}
       />,
     );
-    for (const button of screen.getAllByRole("button")) {
-      expect(button.className).toMatch(/min-h-14/); // 56 px tall targets
-      expect(button.className).toMatch(/break-words/);
-      expect(button.className).not.toMatch(/truncate|whitespace-nowrap|overflow-hidden/);
+    const nav = screen.getByRole("navigation");
+    expect(nav.className).toMatch(/\bflex\b/);
+    expect(nav.className).not.toMatch(/grid|flex-wrap/); // never a grid, never two rows
+    expect(nav.className).toMatch(/gap-3/); // 12 px between controls
+    expect(nav.querySelector("form")!.className).toMatch(/h-14 min-w-0 flex-1 .*rounded-pill/);
+    for (const name of [t("zh-Hans", "mute"), t("zh-Hans", "endCall")]) {
+      const b = screen.getByRole("button", { name });
+      expect(b.className).toMatch(/h-14 w-14 shrink-0 .*rounded-full/);
     }
-    expect(screen.getByRole("navigation").className).toMatch(/gap-3/); // 12 px between controls
+    expect(screen.getByRole("button", { name: t("zh-Hans", "send") }).className).toMatch(/h-10 w-10/); // 40 px circle inside the pill
   });
 });
 
 describe("the call stays one call", () => {
-  it("a voice turn heard while the help sheet is open still lands in the same transcript", () => {
+  it("a voice turn heard right after tapping Help lands in the same transcript", () => {
     const fake = install();
     render(<CompanionExperience />);
     startHealthyCall(fake);
-    openHelp();
     act(() => fake.recognitions.at(-1)!.say("What is this for?", true));
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    fireEvent.click(helpPill());
     expect(screen.getByText("What is this for?")).toBeInTheDocument();
     act(() => dispatch({ type: "END_CALL" }));
   });
@@ -491,11 +500,9 @@ describe("free-tier voice: one sticky notice, no mid-call voice switching", () =
     expect(screen.getAllByText(notice)).toHaveLength(1); // announced once, shown once
     act(() => fake.utterances.at(-1)?.onend?.());
     tick();
-    expect(buttonNames()).toEqual(["Get help", "Mute", "End call"]); // the notice adds no control
-    fireEvent.click(screen.getByRole("button", { name: /^get help$/i }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /type instead/i }));
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "What is this for?" } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    expect(buttonNames()).toEqual(CALL_CONTROLS); // the notice adds no control
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: "What is this for?" } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
     expect(screen.getAllByText(notice)).toHaveLength(1); // still there after the next turn
     expect(document.querySelector("[data-voice-notice]")).toHaveTextContent(notice);
     expect(fake.utterances.at(-1)?.text).toMatch(/Let’s check this together/); // the same browser voice
@@ -521,10 +528,8 @@ describe("free-tier voice: one sticky notice, no mid-call voice switching", () =
     act(() => speech.started());
     act(() => speech.ended());
     tick(1000);
-    fireEvent.click(screen.getByRole("button", { name: /^get help$/i }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /type instead/i }));
-    fireEvent.change(screen.getByLabelText(/type it here/i), { target: { value: "What is this for?" } });
-    fireEvent.submit(screen.getByLabelText(/type it here/i).closest("form")!);
+    fireEvent.change(screen.getByLabelText(/type a message/i), { target: { value: "What is this for?" } });
+    fireEvent.submit(screen.getByLabelText(/type a message/i).closest("form")!);
     const reply = speech.requests.at(-1)!.text;
     act(() => speech.failBeforeAudio("quota-exceeded"));
     expect(screen.getByText(reply)).toBeInTheDocument(); // the voice is gone, so the words show at once: visible text = what was to be spoken
@@ -535,8 +540,11 @@ describe("free-tier voice: one sticky notice, no mid-call voice switching", () =
 });
 
 describe("scroll areas", () => {
-  it("the transcript and a step's panel scroll without a visible scrollbar (CSS hides it; scrolling still works)", () => {
-    sessionStore.setForTest(run([startCall, { type: "USER_MESSAGE", text: "What is this for?", via: "typed" }, chooseShowMedicine]));
+  it("the transcript and the open camera scroll without a visible scrollbar (CSS hides it; scrolling still works)", () => {
+    vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia: vi.fn(() => new Promise(() => {})) } });
+    sessionStore.setForTest(
+      run([startCall, { type: "USER_MESSAGE", text: "What is this for?", via: "typed" }, chooseShowMedicine, grantCamera, { type: "OPEN_CAMERA" }]),
+    );
     render(<CompanionExperience />);
     const transcriptScroller = document.querySelector("main")!.parentElement!;
     expect(transcriptScroller).toHaveClass("no-scrollbar", "overflow-y-auto");

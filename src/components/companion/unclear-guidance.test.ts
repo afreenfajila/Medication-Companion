@@ -15,6 +15,17 @@ describe("unclearGuidanceKey", () => {
     expect(at("complete")).toBe("unclearComplete");
   });
 
+  it("showing the label names what is on screen: Take photo / Upload, Upload alone, or just the name", () => {
+    const cam = (cameraMode: "ready" | "fallback", cameraIssue: "denied" | null = null) =>
+      unclearGuidanceKey({ state: "camera-guidance", explainStep: 0, cameraMode, cameraIssue });
+    expect(cam("ready")).toBe("unclearCameraReady");
+    expect(cam("fallback", "denied")).toBe("unclearCameraUpload");
+    expect(cam("fallback")).toBe("unclearCameraFallback");
+    for (const key of ["unclearCameraReady", "unclearCameraUpload", "unclearCameraFallback"] as const) {
+      for (const lang of ["en", "zh-Hans"] as const) expect(t(lang, key)).not.toMatch(/tablet|twice daily|blood sugar|500|片|血糖/i);
+    }
+  });
+
   it("distinguishes mid-explanation from the final chunk", () => {
     expect(at("explain", 0)).toBe("unclearExplain");
     // Beside the instruction, the open question is the label check.
@@ -45,16 +56,16 @@ describe("unclearGuidanceKey", () => {
       ["complete", 0],
     ];
     for (const key of [...states.map(([state, step]) => at(state, step)), "unclearRecordConflict" as const]) {
-      // Acknowledges first: "didn't quite catch that", or in the explanation the warmer "didn't follow that".
-      expect(t("en", key), key).toMatch(/^(I didn’t quite catch that|Sorry, I didn’t follow that)/i);
-      expect(t("zh-Hans", key), key).toMatch(/^(我没太听清楚|抱歉，我没听明白)/);
+      // Acknowledges first: "Sorry, I missed that", or in the explanation the warmer "didn't follow that".
+      expect(t("en", key), key).toMatch(/^(I didn’t quite catch that|Sorry, I missed that|Sorry, I didn’t follow that)/i);
+      expect(t("zh-Hans", key), key).toMatch(/^(我没太听清楚|抱歉，我没听清|抱歉，我没听明白)/);
     }
   });
 
   it("the confirm re-prompt stays neutral — it never nudges toward confirming", () => {
     const line = t("en", at("confirm-match"));
-    expect(line).toMatch(/“yes”/);
-    expect(line).toMatch(/“no”/);
+    expect(line).toMatch(/\byes\b/);
+    expect(line).toMatch(/\bno\b/);
     expect(line).toMatch(/not sure/i);
   });
 

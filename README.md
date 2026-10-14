@@ -225,7 +225,7 @@ The primary call does not use:
 | Part | Permitted contribution | Boundary |
 |---|---|---|
 | Label identity extraction | Read visible identity fields | Does not decide clinical correctness |
-| Label instruction extraction, if implemented | Read visible wording verbatim | Does not interpret or recommend a dose |
+| Label wording as read aloud (`/api/companion/label-wording`) | On the "what does your box say?" step, pick the label wording out of how she said it ("It says… two? I think two." → "two"), dropping filler, hesitation, repeats and the part she corrected | Her own words only, in her order: any added, changed or reordered word is refused on the server and again in the reducer, and the app's own clean-up is used. Plain wording never waits for it. The result is only a reading: said back, and used only after her own "yes". Safety wording never goes to it |
 | Conversation understanding | Understand ordinary requests | Cannot bypass deterministic gates |
 | Meaning match (`/api/companion/intent`) | When fixed phrases miss: pick the on-screen action meant (in any order), say the words were unclear (the companion asks them to repeat), or write a short natural reply | Never offered a "yes" to a gate (medicine, label wording, consent, sending); a reply must pass the AI-reply guard (no numbers, doses, advice or match claims; their language; ends with a question) on the server and again in the browser; stale answers dropped |
 | Speech input (OpenAI Realtime transcription) | Turn the person's speech into words | Words only: never answers, confirms, or sees the record; interim text is display-only |
@@ -475,10 +475,12 @@ Expected limitations include:
 - Echo cancellation is the browser's: a loud speaker near the mic may still start a candidate,
   but the VAD and the raised threshold during playback must agree before anything is interrupted.
 - The meaning match adds 2–6 s when the fixed phrases miss (measured with the configured model).
-- The active call has three persistent controls (Get help, Mute, End call). Repeat, typing,
-  the interrupt setting and About are in the Get help sheet, so they are one tap further
-  away than before. In the open conversation only one suggestion button is shown (Show
-  medicine, or family help); schedule and "carry on" are asked in words.
+- The active call is voice/text only: Help in the header, then one row with the message
+  pill (always there), the mic and End call. Repeat, the interrupt setting, "listen again",
+  "show pharmacy contact", showing the medicine and family help are said or typed; the
+  companion's line names the words. The only other buttons are Take photo / Upload inside
+  the companion's message after a consent yes, and the open camera's controls. A bare "ok"
+  never confirms or consents: the companion asks for a yes or no.
 - Mute stops turns and barge-in in the app; the browser's microphone stays open (its
   indicator stays on) until the call ends, but no audio is sent for transcription.
 - Narrow widths (320–430 px), 200% zoom and the help sheet's focus trap have only been
